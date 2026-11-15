@@ -174,7 +174,12 @@ export async function fertigstellen(id: string): Promise<string> {
   return data;
 }
 
-/** Rechnung stornieren — Nummer bleibt, Stunden/Material/Regieberichte sind wieder frei */
+/** Fertige Rechnung zurück in den Entwurf — Nummer bleibt, das alte PDF bleibt im Archiv */
+export async function rechnungAendern(id: string): Promise<void> {
+  const { error } = await supabase.rpc("rechnung_aendern", { p_id: id });
+  if (error) throw fehler("Ändern nicht möglich", error);
+}
+
 /** Rechnung stornieren — gibt die ID der neuen Stornorechnung zurück */
 export async function stornieren(id: string): Promise<string> {
   const { data, error } = await supabase.rpc("beleg_stornieren", { p_id: id });

@@ -214,7 +214,7 @@ export function PositionenEditor({
                     <>
                       <td className="py-1.5 pr-2">
                         {bearbeitbar ? (
-                          <Input value={p.bezeichnung} onChange={(e) => aendern(p.id, { bezeichnung: e.target.value })} className="h-9" />
+                          <Input value={p.bezeichnung} onChange={(e) => aendern(p.id, { bezeichnung: e.target.value })} className="h-9" aria-label={`Bezeichnung ${nummern[i]}`} />
                         ) : (
                           <p className="py-1 font-medium">{p.bezeichnung}</p>
                         )}
@@ -239,7 +239,7 @@ export function PositionenEditor({
                       </td>
                       <td className="py-1.5 pr-2">
                         {bearbeitbar
-                          ? <Input value={p.menge} onChange={(e) => aendern(p.id, { menge: e.target.value })} inputMode="decimal" className="zahl h-9 text-right" />
+                          ? <Input value={p.menge} onChange={(e) => aendern(p.id, { menge: e.target.value })} inputMode="decimal" className="zahl h-9 text-right" aria-label={`Menge ${nummern[i]}`} />
                           : <p className="zahl py-1 text-right">{zahl(mengeVon(p))}</p>}
                       </td>
                       <td className="py-1.5 pr-2">

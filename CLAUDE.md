@@ -50,8 +50,8 @@ npm run check        # Absturz-Wächter
 npm test             # vitest (Parser)
 ```
 
-Regeln in der Datenbank prüfen (378 Prüfungen: nicht freigeschaltet, Monteur,
-Chef, Festschreiben, Offene Posten, Stornorechnung, Korrektur, Eingangsrechnungen
+Regeln in der Datenbank prüfen (388 Prüfungen: nicht freigeschaltet, Monteur,
+Chef, Festschreiben und „Rechnung ändern“, Offene Posten, Stornorechnung, Korrektur, Eingangsrechnungen
 mit Freigabe und Positionen, Teil-/Schlussrechnung, Anlagen und Prüfprotokolle,
 Bestellungen, Regiebericht, Material, Konten, Rechnungsarchiv, Abwesenheiten,
 Zeitkonto, Einsätze, Buchhaltung, Fuhrpark und Teams, Lieferscheine, Rabatte, Buchen nur „In Arbeit“, Kategorien/Altrechnungen,
@@ -76,6 +76,13 @@ Test-Unterschrift und das abgelegte PDF:
 APP_URL=http://127.0.0.1:8093 MONTEUR_PW=… CHEF_PW=… node tests/durchlauf.mjs   # CHROME=… für einen eigenen Chromium, BROWSER=webkit wie am iPhone
 DEMO_CHEF_PASSWORT=… node tests/durchlauf-aufraeumen.mjs
 ```
+
+Dasselbe mit viel Material (`tests/durchlauf-material.mjs`, 30 Prüfungen, gleiche
+Aufrufe): Max fasst 4 Artikel aus dem Bus aus (Stück, 12,5 m, fester VK,
+Artikel- und Betriebsaufschlag), gibt 5 zurück, bucht 3,5 h; der Chef am PC
+bucht 2 h für Lisa, schreibt die Rechnung (jede Zeile und Summe auf den Cent
+nachgerechnet), stellt fertig, „Rechnung ändern“ → erneut fertig (Nummer
+bleibt, alte Fassung im Archiv), Lagerbestand des Busses stimmt. Aufräumen wie oben.
 
 Demo zurücksetzen — Dateien im Speicher, Stamm, Artikel, Verlauf und
 Unterschriftsbilder in der richtigen Reihenfolge (die Konten bleiben):

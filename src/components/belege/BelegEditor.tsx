@@ -51,7 +51,7 @@ import { PositionDialog } from "./PositionDialog";
 import { PositionenEditor } from "./PositionenEditor";
 import {
   belegKopieren, belegLoeschen, belegSpeichern, fertigstellen, inRechnungUmwandeln, teilrechnungAnlegen, abzuegeLaden, projektAktivieren, projektLoeschen,
-  projektNurFuerBeleg, projektZurueckAufAngebot, StandVeraltet, statusSetzen, stornieren,
+  projektNurFuerBeleg, projektZurueckAufAngebot, rechnungAendern, StandVeraltet, statusSetzen, stornieren,
 } from "./speichern";
 import { sicherungLesen, sicherungLoeschen, sicherungSchreiben, sicherungsSchluessel, type Sicherung } from "./sicherung";
 import { SpracheDialog, type SprachUebernahme } from "./SpracheDialog";
@@ -91,14 +91,16 @@ const fokus = (selektor: string) => window.setTimeout(() => {
   feld?.select();
 }, 50);
 
-type Frage = "fertig" | "storno" | "entsperren" | null;
+type Frage = "fertig" | "storno" | "entsperren" | "aendern" | null;
 type Dialog = "arbeitszeit" | "leistung" | "artikel" | "sprache" | "import" | "teil" | "aufschlaege" | "ki" | "katalog" | "vorlage" | "vorlageSpeichern" | null;
 type Icon = ComponentType<{ className?: string }>;
 
 /**
  * Angebot oder Rechnung bearbeiten und abwickeln. Ein neuer Beleg entsteht
  * erst beim ersten Speichern (Angebot ohne Projekt → Projekt wird angelegt).
- * Fertige Rechnungen sind nur noch zum Lesen, Bezahlen und Stornieren da.
+ * Fertige Rechnungen sind zum Lesen, Bezahlen und Stornieren da — „Rechnung
+ * ändern“ macht sie wieder zum Entwurf (Nummer bleibt), solange nichts darauf
+ * aufbaut (Zahlung, Mahnung, Kanzlei).
  */
 export function BelegEditor({
   id, daten, startKopf, autoSprache = false, autoImport = false, autoKi = false, startVorlage,
@@ -457,6 +459,12 @@ export function BelegEditor({
     await neuHolen();
     if (zurueck) toast.success("Wieder offen — das Projekt steht wieder auf „Angebot“.");
   });
+  const aendernAusfuehren = () => ausfuehren("aendern", async () => {
+    setFrage(null);
+    await rechnungAendern(id);
+    await neuHolen();
+    toast.success(`Rechnung ${beleg?.nummer ?? ""} ist wieder ein Entwurf — ändern, dann erneut fertigstellen und die neue Fassung schicken.`, { duration: 8000 });
+  });
   const stornoAusfuehren = () => ausfuehren("storno", async () => {
     setFrage(null);
     const rechnungNr = beleg?.nummer ?? null;
@@ -812,13 +820,16 @@ export function BelegEditor({
         {!neu && !istStorno && <MenuePunkt icon={Copy} onClick={() => kopieren(false)}>Kopieren (neuer Entwurf)</MenuePunkt>}
         {istAngebot && anzahl > 0 && <MenuePunkt icon={LayoutTemplate} onClick={() => setDialog("vorlageSpeichern")}>Als Vorlage speichern</MenuePunkt>}
         <MenuePunkt icon={Download} onClick={pdf}>{pc ? "PDF ansehen" : "PDF teilen / laden"}</MenuePunkt>
+        {!istAngebot && status === "offen" && (
+          <MenuePunkt icon={LockOpen} onClick={() => setFrage("aendern")}>Rechnung ändern</MenuePunkt>
+        )}
         {!istAngebot && (status === "offen" || status === "bezahlt") && (
           <>
             <DropdownMenuSeparator />
             <MenuePunkt icon={Ban} onClick={() => setFrage("storno")} gefahr>Stornieren</MenuePunkt>
           </>
         )}
-        {(entwurf || istAngebot) && (
+        {((entwurf && !beleg?.nummer) || istAngebot) && (
           <>
             <DropdownMenuSeparator />
             <MenuePunkt icon={Trash2} onClick={neu ? verwerfen : loeschenFragen} gefahr>{neu ? "Verwerfen" : entwurf ? "Entwurf löschen" : "Angebot löschen"}</MenuePunkt>
@@ -913,7 +924,7 @@ export function BelegEditor({
         ]
         : [{ text: "PDF", icon: FileText, onClick: pdf }, { text: "Wieder offen", icon: Undo2, onClick: wiederOffen }]
     : status === "offen"
-      ? [{ text: pc ? "PDF" : "PDF teilen", icon: FileText, onClick: pdf, primaer: true }]
+      ? [{ text: pc ? "PDF" : "PDF teilen", icon: FileText, onClick: pdf, primaer: true }, { text: "Ändern", icon: LockOpen, onClick: () => setFrage("aendern") }]
       : status === "storniert"
         ? [
           { text: korrekturBeleg ? "Korrektur öffnen" : "Korrektur anlegen", icon: RotateCcw, onClick: korrekturOeffnen, primaer: true },
@@ -1055,6 +1066,11 @@ export function BelegEditor({
       <div className={cn(mitSeite && "grid grid-cols-[minmax(0,1fr)_minmax(26rem,34rem)] items-start gap-6")}>
       <div className="min-w-0 space-y-5">
       {statusKarte}
+      {entwurf && !istAngebot && beleg?.nummer && (
+        <p className={cn("rounded-lg px-4 py-3 text-sm font-medium", TON_KLASSE.gelb)}>
+          Rechnung {beleg.nummer} wird geändert — danach „Fertigstellen“ und die neue Fassung an den Kunden schicken.
+        </p>
+      )}
       {istAngebot && beleg && !entwurf && firma && (
         <AngebotVersand beleg={beleg} positionen={positionen} katalog={katalog} pdfErzeugen={() => entwurfPdf(firma)} />
       )}
@@ -1274,7 +1290,9 @@ export function BelegEditor({
                 <p>
                   {istAngebot
                     ? "Das Angebot bekommt die nächste Angebotsnummer. Danach als PDF schicken — ändern geht weiterhin."
-                    : "Die Rechnung bekommt die nächste Rechnungsnummer und ist danach festgeschrieben. Ändern geht dann nur noch über Storno."}
+                    : beleg?.nummer
+                      ? `Die Rechnung behält ihre Nummer ${beleg.nummer}. Danach die neue Fassung an den Kunden schicken — die alte bleibt im Archiv.`
+                      : "Die Rechnung bekommt die nächste Rechnungsnummer. Ändern geht danach mit „Rechnung ändern“, bis sie bezahlt, gemahnt oder an die Kanzlei übergeben ist."}
                 </p>
                 <p className="font-medium text-foreground">
                   <span className="zahl">{euro(ohneUst ? s.netto : s.brutto)}</span> {ohneUst ? "netto" : "brutto"} · {anzahl} {anzahl === 1 ? "Position" : "Positionen"} · an {kopf.empf_name}
@@ -1312,6 +1330,23 @@ export function BelegEditor({
           <AlertDialogFooter className="gap-2">
             <AlertDialogCancel className="h-11">Abbrechen</AlertDialogCancel>
             <Button variant="destructive" className="h-11" onClick={stornoAusfuehren}>Stornieren</Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={frage === "aendern"} onOpenChange={(o) => { if (!o) setFrage(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Rechnung {beleg?.nummer} ändern?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Sie wird wieder ein Entwurf und behält ihre Nummer. Das bisherige PDF bleibt im Archiv. Danach erneut
+              fertigstellen und dem Kunden die neue Fassung schicken. Geht nur, solange nichts bezahlt, gemahnt oder
+              an die Kanzlei übergeben ist — sonst stornieren.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2">
+            <AlertDialogCancel className="h-11">Abbrechen</AlertDialogCancel>
+            <Button className="h-11" onClick={aendernAusfuehren}>Ändern</Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

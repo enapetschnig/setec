@@ -191,6 +191,27 @@ ok(!eR, "Chef legt einen Rechnungsentwurf an" + (eR ? abgelehnt(eR) : ""));
   ok(!!eFaellig, "Fälligkeit der fertigen Rechnung ist fest" + abgelehnt(eFaellig));
   const { data: weg } = await chef.from("belege").delete().eq("id", re.id).select();
   ok(!weg?.length, "fertige Rechnung kann nicht gelöscht werden");
+  // Rechnung ändern: zurück in den Entwurf nur über rechnung_aendern(), Nummer bleibt
+  const { error: eDirekt } = await chef.from("belege").update({ status: "entwurf" }).eq("id", re.id);
+  ok(!!eDirekt, "fertige Rechnung geht nicht direkt zurück in den Entwurf" + abgelehnt(eDirekt));
+  const { error: eMAend } = await monteur.rpc("rechnung_aendern", { p_id: re.id });
+  ok(!!eMAend, "Monteur kann keine Rechnung ändern" + abgelehnt(eMAend));
+  const { error: eAend } = await chef.rpc("rechnung_aendern", { p_id: re.id });
+  const { data: offenWieder } = await chef.from("belege").select("status, nummer, archiv_stand").eq("id", re.id).single();
+  ok(!eAend && offenWieder?.status === "entwurf" && offenWieder.nummer === nr && offenWieder.archiv_stand === 1,
+    `„Rechnung ändern“: Entwurf, Nummer ${offenWieder?.nummer} bleibt` + (eAend ? abgelehnt(eAend) : ""));
+  const { data: wegEntwurf } = await chef.from("belege").delete().eq("id", re.id).select();
+  ok(!wegEntwurf?.length, "Entwurf mit Nummer lässt sich nicht löschen (keine Lücke)");
+  const { error: eNr } = await chef.from("belege").update({ nummer: "RE-1999-999" }).eq("id", re.id);
+  ok(!!eNr, "die Nummer bleibt auch im Entwurf" + abgelehnt(eNr));
+  const { error: eStand } = await chef.from("belege").update({ archiv_stand: 7 }).eq("id", re.id);
+  ok(!!eStand, "Archivstand nur über „Rechnung ändern“" + abgelehnt(eStand));
+  const { error: ePosAend } = await chef.from("beleg_positionen").update({ bezeichnung: "Arbeitszeit Monteur" }).eq("beleg_id", re.id);
+  ok(!ePosAend, "im Entwurf sind die Positionen wieder änderbar" + (ePosAend ? abgelehnt(ePosAend) : ""));
+  const { data: nr2 } = await chef.rpc("beleg_fertigstellen", { p_id: re.id });
+  ok(nr2 === nr, `erneut fertig — gleiche Nummer ${nr2}`);
+  const { error: eAltFassung } = await chef.storage.from("beleg-archiv").upload(`${re.id}.pdf`, new Blob(["x"]), { contentType: "application/pdf" });
+  ok(!!eAltFassung, "ins Archiv nur die aktuelle Fassung (…-1.pdf)" + abgelehnt(eAltFassung));
   // Offene Posten: Teilzahlung lässt offen, der Rest macht bezahlt, Löschen macht wieder offen
   const heuteIso = new Date().toISOString().slice(0, 10);
   const { error: eZm } = await monteur.from("zahlungen").insert({ beleg_id: re.id, betrag: 1, datum: heuteIso });
@@ -200,6 +221,8 @@ ok(!eR, "Chef legt einen Rechnungsentwurf an" + (eR ? abgelehnt(eR) : ""));
   const { error: eZ1 } = await chef.from("zahlungen").insert({ beleg_id: re.id, betrag: 100, datum: heuteIso });
   const { data: nach1 } = await chef.from("belege").select("status").eq("id", re.id).single();
   ok(!eZ1 && nach1?.status === "offen", "Teilzahlung: Rechnung bleibt offen" + (eZ1 ? abgelehnt(eZ1) : ""));
+  const { error: eAendZ } = await chef.rpc("rechnung_aendern", { p_id: re.id });
+  ok(/Zahlung/.test(eAendZ?.message ?? ""), "mit Zahlung kein „Rechnung ändern“ mehr" + abgelehnt(eAendZ));
   const { data: z2, error: eZ2 } = await chef.from("zahlungen").insert({ beleg_id: re.id, betrag: 332, datum: heuteIso }).select("id").single();
   const { data: nach2 } = await chef.from("belege").select("status, bezahlt_am").eq("id", re.id).single();
   ok(!eZ2 && nach2?.status === "bezahlt" && nach2.bezahlt_am === heuteIso, "Rest bezahlt: Rechnung ist bezahlt" + (eZ2 ? abgelehnt(eZ2) : ""));

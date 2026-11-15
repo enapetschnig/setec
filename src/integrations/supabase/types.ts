@@ -862,6 +862,7 @@ export type Database = {
           abgezogen_in: string | null
           altbestand: boolean
           angebot_id: string | null
+          archiv_stand: number
           betreff: string | null
           bezahlt_am: string | null
           brutto: number
@@ -903,6 +904,7 @@ export type Database = {
           abgezogen_in?: string | null
           altbestand?: boolean
           angebot_id?: string | null
+          archiv_stand?: number
           betreff?: string | null
           bezahlt_am?: string | null
           brutto?: number
@@ -944,6 +946,7 @@ export type Database = {
           abgezogen_in?: string | null
           altbestand?: boolean
           angebot_id?: string | null
+          archiv_stand?: number
           betreff?: string | null
           bezahlt_am?: string | null
           brutto?: number
@@ -3638,6 +3641,7 @@ export type Database = {
         Args: { p_lieferant: string; p_max?: number }
         Returns: number
       }
+      rechnung_aendern: { Args: { p_id: string }; Returns: undefined }
       regie_unterschrieben: { Args: { p_id: string }; Returns: boolean }
       regie_zeiten_zuordnen: {
         Args: { p_dazu?: string[]; p_regie: string; p_weg?: string[] }

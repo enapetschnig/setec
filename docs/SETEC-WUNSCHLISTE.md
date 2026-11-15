@@ -84,3 +84,21 @@ WebKit (`BROWSER=webkit`), 378 Datenbank-Regeln, Einladung am Android-Emulator.
 Demo-Hinweis auf der Anmeldeseite entfernt (Christoph, 13.11.). Fragen an Stefan dazu: Darf der
 Monteur den Förderstatus ändern und EK-Preise sehen? Gruppen der Startseite,
 Rechte für „Büro“.
+
+## Prüfung 15.11.2026 — jeder Wunsch in der echten App
+
+Alle 33 Punkte aus „Wishlist ePower App.docx“ und die zwei Punkte aus der
+Besprechung vom 11.11. (Diktieren; Rechnung nach dem Speichern ändern bis zur
+Kanzlei) Punkt für Punkt durchgeklickt — Chef am PC, Max am Handy, Speicherungen
+in der Datenbank nachgesehen: 35/35.
+
+- **Neu: „Rechnung ändern“** (fehlte noch): fertige Rechnung → wieder Entwurf
+  mit derselben Nummer → ändern → erneut fertigstellen; das alte PDF bleibt im
+  Archiv. Gesperrt, sobald bezahlt, gemahnt oder an die Kanzlei übergeben.
+- Durchlauf mit viel Material (`tests/durchlauf-material.mjs`) auf Android- und
+  iPhone-Technik: 30/30 — Mengen nach Rückgabe, VK-Regeln, Stundensätze je
+  Mitarbeiter, Summen auf den Cent, Lagerbestand.
+- Einladung und Installation: 65 Prüfungen auf iPhone 15/SE, iPad, Pixel 7,
+  PC Chrome, Firefox, Mac Safari, In-App-Browser (WhatsApp, Instagram), Samsung.
+- Name: auf keiner Seite, in keinem PDF und im Manifest ein alter Name —
+  überall „SETEC GmbH“. Offen: Bankverbindung ist noch „Demo Bank“.

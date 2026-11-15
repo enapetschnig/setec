@@ -562,7 +562,14 @@ Bewusst einfach, kein eigenes Kalkulationsblatt:
   die stornierte Rechnung in einen neuen Entwurf (`korrektur_von`, je Rechnung
   höchstens einer — Index `belege_korrektur_von_einmal`) und hängt die Quellen
   dort an. Ihr PDF nennt „Ersetzt Rechnung RE-…“.
-- Löschen: Rechnungen nur als Entwurf. Angebote in jedem Status — außer eine
+- **Rechnung ändern** (`rechnung_aendern`, Migration `20261115100000`): eine
+  fertige, offene Rechnung wird wieder Entwurf und behält ihre Nummer —
+  solange keine Zahlung, keine Mahnung, keine Übergabe an die Kanzlei und kein
+  Abzug in einer Schlussrechnung darauf aufbaut (sonst Storno). Erneut
+  fertigstellen rechnet neu, die Nummer bleibt. Das verschickte PDF bleibt im
+  Archiv, jede neue Fassung kommt daneben (`<id>-1.pdf`, `belege.archiv_stand`);
+  der PDF-Knopf zeigt die aktuelle. Wunsch aus der Besprechung vom 11.11.2026.
+- Löschen: Rechnungen nur als Entwurf ohne Nummer (nach „Rechnung ändern“ nie). Angebote in jedem Status — außer eine
   Rechnung bezieht sich darauf (`angebot_verrechnet`), sonst verlöre sie den
   Bezug (Policy `belege_nicht_loeschen`).
 - Liste: Summe je Belegart (Rechnungen offen/bezahlt, Angebote

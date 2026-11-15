@@ -57,7 +57,13 @@ if (pfade.length) {
 sql("-f", "tests/durchlauf-aufraeumen.sql");
 console.log(`✓ ${projekte.length} Testprojekt(e) samt Buchungen weg: ${projekte.map((p) => `${p.nummer} ${p.name}`).join(", ") || "–"}`);
 if (belege.length) {
-  const { data: weg, error: eA } = await db.storage.from("beleg-archiv").remove(belege.map((b) => `${b.id}.pdf`));
+  // je Fassung eine Datei: <id>.pdf, nach „Rechnung ändern“ auch <id>-1.pdf …
+  const pdfs = [];
+  for (const b of belege) {
+    const { data } = await db.storage.from("beleg-archiv").list("", { search: b.id });
+    pdfs.push(...(data ?? []).map((f) => f.name));
+  }
+  const { data: weg, error: eA } = await db.storage.from("beleg-archiv").remove(pdfs.length ? pdfs : belege.map((b) => `${b.id}.pdf`));
   if (eA) throw eA;
   console.log(`✓ ${weg.length} abgelegte(s) PDF(s) gelöscht`);
 }
