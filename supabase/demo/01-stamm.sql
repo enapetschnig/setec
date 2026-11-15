@@ -73,10 +73,7 @@ begin
   delete from teams;
   delete from rabatte;
   delete from fahrzeuge;
-  -- der eingespielte Datanorm-Katalog (scripts/datanorm-einspielen.ts) bleibt
-  delete from artikel where quelle is distinct from 'datanorm';
-  update artikel set aktiv = true, vk_preis = null, kategorie = null, aufschlag = null
-   where quelle = 'datanorm' and (not aktiv or vk_preis is not null or kategorie is not null or aufschlag is not null);
+  delete from artikel;
   -- Bilder/Datenblätter (Dateien sind weg) und weitere Lieferanten am Katalog
   delete from artikel_dateien;
   delete from artikel_lieferanten;

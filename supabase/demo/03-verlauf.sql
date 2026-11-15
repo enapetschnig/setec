@@ -144,7 +144,7 @@ begin
     ('rueckgabe', 'p1','2026-10-22','max', 'haupt','1055-04', 8),
     ('rueckgabe', 'p2','2026-10-22','max', 'haupt','NYM-J 3X1,5 RE GR', 12)
   ) v(art, prj, tag, wer, ort, nr, menge)
-  join artikel a on a.hersteller_nr = v.nr;
+  join artikel a on a.quelle = 'demo' and a.hersteller_nr = v.nr;
 
   -- Direkt gekauft (ohne Lager, ohne Artikelstamm)
   insert into material_buchungen (art, artikel_id, bezeichnung, einheit, menge, lagerort_id, projekt_id,
@@ -167,7 +167,7 @@ begin
                                   ek_preis, vorgang, notiz, user_id, created_at)
   select 'ausfassung', a.id, null, null, v.menge, l_bus1, p5, rb1, a.ek_preis, rb1, null, v_max,
          timestamptz '2026-10-06 11:05 Europe/Vienna'
-  from (values ('80242001', 1), ('2273-203', 3)) v(nr, menge) join artikel a on a.hersteller_nr = v.nr;
+  from (values ('80242001', 1), ('2273-203', 3)) v(nr, menge) join artikel a on a.quelle = 'demo' and a.hersteller_nr = v.nr;
   update regieberichte set status = 'unterschrieben', unterschrift_name = 'Josef Kern',
          unterschrift_pfad = p5 || '/unterschriften/' || rb1 || '.png',
          unterschrieben_am = timestamptz '2026-10-06 11:10 Europe/Vienna'
@@ -187,7 +187,7 @@ begin
          a.ek_preis, rb2, null, v_max, timestamptz '2026-10-21 13:35 Europe/Vienna'
   from (values ('LED BULKHEAD 11W 840 WT', 2, 'haupt'), ('80242001', 2, 'haupt'),
                ('NYM-J 3X1,5 RE GR', 15, 'bus1'), ('221-413', 6, 'bus1')) v(nr, menge, ort)
-  join artikel a on a.hersteller_nr = v.nr;
+  join artikel a on a.quelle = 'demo' and a.hersteller_nr = v.nr;
   update regieberichte set status = 'unterschrieben', unterschrift_name = 'Josef Kern',
          unterschrift_pfad = p5 || '/unterschriften/' || rb2 || '.png',
          unterschrieben_am = timestamptz '2026-10-21 13:40 Europe/Vienna'
@@ -204,7 +204,7 @@ begin
                                   ek_preis, vorgang, notiz, user_id, created_at)
   select 'ausfassung', a.id, null, null, 2, l_haupt, p5, rb3, a.ek_preis, rb3, null, v_max,
          timestamptz '2026-10-23 08:55 Europe/Vienna'
-  from artikel a where a.hersteller_nr = 'VALUE CLA60 10W/827 230V FR E27';
+  from artikel a where a.quelle = 'demo' and a.hersteller_nr = 'VALUE CLA60 10W/827 230V FR E27';
 
   -- ── RE-2026-001: Regiebericht RB-2026-001, bezahlt ───────────────────────
   insert into belege (typ, status, projekt_id, kunde_id, empf_name, empf_zusatz, empf_strasse, empf_plz, empf_ort, empf_uid, empf_email,

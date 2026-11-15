@@ -841,8 +841,9 @@ Migration `20261113114000_projekte_foerderung_planung_saetze.sql`, Bausteine in 
   einzelnen fremden Zeilen bleibt Datanorm. Bild, PDF oder Excel statt einer
   Artikelliste → ein verständlicher Satz. EANs werden einheitlich gespeichert,
   eine EAN, die schon ein anderer Artikel hat, meldet der Import.
-- Die Demo hat ~72.000 echte Sonepar-Artikel aus der Datanorm
-  (`scripts/datanorm-einspielen.ts`, `quelle = 'datanorm'`).
+- Die Demo hat nur die 158 Demo-Artikel (`quelle = 'demo'`); der
+  Sonepar-Datanorm-Katalog ist entfernt, SETEC spielt seine eigene
+  Artikelliste über den Import ein.
 
 ### Artikel und Lager (`components/material/artikel*`, Seite `/artikel/:id`)
 

@@ -102,3 +102,7 @@ in der Datenbank nachgesehen: 35/35.
   PC Chrome, Firefox, Mac Safari, In-App-Browser (WhatsApp, Instagram), Samsung.
 - Name: auf keiner Seite, in keinem PDF und im Manifest ein alter Name —
   überall „SETEC GmbH“. Offen: Bankverbindung ist noch „Demo Bank“.
+- **Sonepar-Artikelliste entfernt** (Wunsch 15.11.): die ~72.000
+  Datanorm-Artikel sind weg, SETEC schickt eine eigene Artikelliste — einspielen
+  über Artikel → Importieren (Datanorm 4/5 oder CSV). Es bleiben die 158
+  Demo-Artikel, an denen die Demo-Projekte hängen, und Stefans eigene Artikel.

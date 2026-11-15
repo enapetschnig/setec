@@ -103,9 +103,10 @@ erzeugt), `03-verlauf.sql`, `04-artikel.sql` (Lagerplätze, zweite Lieferanten, 
 dann `DEMO_CHEF_PASSWORT=… node supabase/demo/eingangsrechnungen.mjs` (erzeugt je
 Demo-Eingangsrechnung ohne Datei ein PDF mit Positionen und „DEMO-BELEG“ im Fuß).
 Demo-Artikel: 158 Sonepar-Artikel aus `artikel-sonepar.json` (Artikelnummer, EAN,
-Listenpreis samt Kupferzuschlag) plus ~72.000 aus der Sonepar-Datanorm
-(`quelle = 'datanorm'`, übersteht das Zurücksetzen; neu einspielen mit
-`scripts/datanorm-einspielen.ts <Ordner>`, nur die Marken eines Elektrobetriebs).
+Listenpreis samt Kupferzuschlag, `quelle = 'demo'`). Die ~72.000 Artikel aus der
+Sonepar-Datanorm sind seit 15.11.2026 entfernt — SETEC liefert eine eigene
+Artikelliste, die über „Artikel → Importieren“ kommt (Datanorm/CSV). Quelle und
+alte Verweise: `~/Developer/_baukasten/sicherungen/mayr/2026-11-15-datanorm-entfernt/`.
 EK = Liste − Rabatt aus der Tabelle `rabatte` (je Lieferant, Hersteller,
 Rabattgruppe; Demo: Sonepar 32 %, Hager 36 %, AI25 40 %), angewandt in Häppchen
 per `rabatte_anwenden` — echte Netto-Konditionen nie ins Repo (öffentlich).
