@@ -2597,6 +2597,7 @@ export type Database = {
           rolle: string
           telefon: string | null
           urlaub_tage: number
+          versteckt: boolean
           vorname: string
           wochenstunden: number
         }
@@ -2615,6 +2616,7 @@ export type Database = {
           rolle?: string
           telefon?: string | null
           urlaub_tage?: number
+          versteckt?: boolean
           vorname?: string
           wochenstunden?: number
         }
@@ -2633,6 +2635,7 @@ export type Database = {
           rolle?: string
           telefon?: string | null
           urlaub_tage?: number
+          versteckt?: boolean
           vorname?: string
           wochenstunden?: number
         }
