@@ -49,7 +49,7 @@ export function useNeuAktionen(): NeuAktion[] {
   return ALLE.filter((a) => istChef || !a.nurChef);
 }
 
-const EREIGNIS = "mayr:neu";
+const EREIGNIS = "setec:neu";
 
 /** Startet eine Neu-Aktion von überall; ohne Art öffnet sich die Auswahl. */
 export function neuStarten(art?: NeuArt) {

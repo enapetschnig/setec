@@ -1,6 +1,7 @@
-# Elektriker-Demo (Repo „mayr“)
+# SETEC GmbH (Repo „setec“, bis 16.11.2026 Elektriker-Demo „mayr“)
 
-App für **einen Elektrobetrieb** — erster Kunde **SETEC GmbH** (Stefan Sattler,
+**Echte App der SETEC GmbH seit 16.11.2026** — keine Demo mehr, echte Daten.
+App für **einen Elektrobetrieb** — Kunde **SETEC GmbH** (Stefan Sattler,
 Elektrik + Photovoltaik, Kindberg-Mürzhofen; Wunschliste und Stand:
 `docs/SETEC-WUNSCHLISTE.md`): Chef (Büro, Angebote, Rechnungen) und
 Monteure (Stunden, Material, Regieberichte, Fotos). Alles hängt am Projekt
@@ -9,9 +10,11 @@ Elektriker — am Handy auf der Baustelle bedienbar, Angebot vor Ort per Sprache
 
 | | |
 |---|---|
-| Supabase | `xcsbbaiwzdivmaodltxm` (Projekt „mayr“, ePower-Org, eu-central-1) |
-| Vercel | Projekt `mayr`, Auto-Deploy von `main` |
-| Betrieb | „SETEC GmbH“ — Demo-Daten (Bank noch Demo), in Einstellungen änderbar |
+| Supabase | `xcsbbaiwzdivmaodltxm` (Projekt „setec“, ePower-Org, eu-central-1) |
+| Vercel | Projekt `setec`, Auto-Deploy von `main` — https://setec-gmbh.vercel.app (alt: mayr.vercel.app bleibt, dort liegen installierte Apps und Anlagen-QR-Codes); eigene Domain verbindet Christoph — dann `site_url`/`uri_allow_list` in Supabase-Auth nachziehen |
+| GitHub | `enapetschnig/setec` (öffentlich; alte Adresse `mayr` leitet um) |
+| Betrieb | „SETEC GmbH“ — Bank noch Demo, in Einstellungen änderbar |
+| Konten | Stefan Sattler `s.sattler@setec-gmbh.at` (Chef, Erstpasswort `SETEC_STEFAN_ERSTPASSWORT`, muss beim ersten Anmelden ändern) · ePower Support, Benutzer `epower` (Chef, `SETEC_EPOWER_PASSWORT`) — beides in `~/.config/hw/zugangsdaten.env`. Mitarbeiter lädt Stefan selbst ein (`<name>@setec.handwerkapp.at`). Die Demo-Konten chef/max/lisa … sind gelöscht. |
 
 Die frühere Drei-Firmen-App ist abgelöst; sie
 steht im Git-Verlauf bis Commit `769f917`, die Datensicherung unter
@@ -50,6 +53,8 @@ npm run check        # Absturz-Wächter
 npm test             # vitest (Parser)
 ```
 
+**Achtung Echtbetrieb:** Die folgenden Tests legen echte Daten und Nummern in SETECs Datenbank an — nur noch nach Absprache, Durchklick-Tests brauchen dafür Testkonten (früher max/chef).
+
 Regeln in der Datenbank prüfen (388 Prüfungen: nicht freigeschaltet, Monteur,
 Chef, Festschreiben und „Rechnung ändern“, Offene Posten, Stornorechnung, Korrektur, Eingangsrechnungen
 mit Freigabe und Positionen, Teil-/Schlussrechnung, Anlagen und Prüfprotokolle,
@@ -84,7 +89,7 @@ bucht 2 h für Lisa, schreibt die Rechnung (jede Zeile und Summe auf den Cent
 nachgerechnet), stellt fertig, „Rechnung ändern“ → erneut fertig (Nummer
 bleibt, alte Fassung im Archiv), Lagerbestand des Busses stimmt. Aufräumen wie oben.
 
-Demo zurücksetzen — Dateien im Speicher, Stamm, Artikel, Verlauf und
+Demo zurücksetzen — **gesperrt seit 16.11.2026** (löscht SETECs echte Daten; das Skript bricht ab, außer `ECHTE_DATEN_LOESCHEN="ja, alles von SETEC"`). Früher: Dateien im Speicher, Stamm, Artikel, Verlauf und
 Unterschriftsbilder in der richtigen Reihenfolge (die Konten bleiben):
 
 ```bash
@@ -110,8 +115,7 @@ alte Verweise: `~/Developer/_baukasten/sicherungen/mayr/2026-11-15-datanorm-entf
 EK = Liste − Rabatt aus der Tabelle `rabatte` (je Lieferant, Hersteller,
 Rabattgruppe; Demo: Sonepar 32 %, Hager 36 %, AI25 40 %), angewandt in Häppchen
 per `rabatte_anwenden` — echte Netto-Konditionen nie ins Repo (öffentlich).
-Demo-Konten: chef (= Stefan Sattler)/max/lisa (Passwort `chef123`/`max123`/`lisa123`) plus tom, eva,
-lukas, sarah, jonas (Passwort `demo123`, anlegen mit `SUPABASE_SERVICE_KEY=… node scripts/demo-konten.mjs`). Unterschriften
+Die früheren Demo-Konten (chef/max/lisa, tom … mit bekannten Passwörtern) sind seit 16.11.2026 gelöscht bzw. umgestellt (siehe Tabelle oben). Unterschriften
 im Speicher lassen sich nicht löschen (Policy `unterschriften_bleiben`) — alte
 bleiben nach dem Zurücksetzen als verwaiste Dateien liegen, wenige KB.
 
@@ -147,13 +151,13 @@ Zeitmarken-Abschrift (whisper-1) und Ablauf eine Zeitleiste und Claude die einze
 Ablage `aenderungswuensche` (Migration `20261111100000_aenderungswuensche.sql`),
 Abschrift im Hintergrund per Edge Function `sprache-zu-text` (Secret `OPENAI_API_KEY`).
 Ein Trigger schickt jeden Wunsch per pg_net ans ePower-Cockpit
-(`cockpit_verbindung`, Zeile mit Geheimnis nur in der DB, App-Schlüssel `mayr`); Bilder
+(`cockpit_verbindung`, Zeile mit Geheimnis nur in der DB, App-Schlüssel `setec`, Kunde SETEC GmbH Nr. 935 im CRM); Bilder
 holt das Cockpit über `wunsch-datei` (ohne JWT, Secret `COCKPIT_SECRET`). Der
 Änderungswunsch-Roboter (`_baukasten/werkzeuge/roboter`, YOLO an) setzt um, pusht nach
 `main` und schreibt Status/Antwort zurück; Liste unter `/wuensche`. Neuer Stand →
 unten links „Jetzt aktualisieren“ (`UpdateHinweis.tsx`, PWA im Modus `prompt`,
 `/version.json` mit der Build-Kennung). Testwünsche mit `ZZTEST` beginnen lassen
-(kein Telegram) und sofort in mayr **und** in `crm.app_wuensche` löschen.
+(kein Telegram) und sofort in der App **und** in `crm.app_wuensche` löschen.
 Hier arbeitet der Zweig `elektriker` und wird nach `main` gepusht — vor eigener Arbeit
 `git pull origin main`, der Roboter pusht ebenfalls nach `main`.
 

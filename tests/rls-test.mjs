@@ -18,7 +18,7 @@ const env = Object.fromEntries(fs.readFileSync(".env", "utf8").split("\n").filte
 const PW_DATEI = "tests/.rlstest-passwort";
 if (!fs.existsSync(PW_DATEI)) fs.writeFileSync(PW_DATEI, crypto.randomBytes(18).toString("base64url"), { mode: 0o600 });
 const PW = fs.readFileSync(PW_DATEI, "utf8").trim();
-const mail = (k) => `rlstest-${k}@mayr-test.at`;
+const mail = (k) => `rlstest-${k}@setec-test.at`;
 const neuerClient = () => createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_KEY, { auth: { persistSession: false } });
 
 let fehlgeschlagen = 0;

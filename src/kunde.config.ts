@@ -31,7 +31,7 @@ export interface KundeConfig {
 }
 
 export const KUNDE: KundeConfig = {
-  slug: "mayr",
+  slug: "setec",
 
   firma: "SETEC GmbH",
   kurzname: "SETEC",
@@ -51,7 +51,7 @@ export const KUNDE: KundeConfig = {
     uid: "ATU75443156",
   },
 
-  loginDomain: "elektro.handwerkapp.at",
+  loginDomain: "setec.handwerkapp.at",
 
   logo: "/logo.png",
   logoQuerHell: "/logo-quer-hell.png",

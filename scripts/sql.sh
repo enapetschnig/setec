@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SQL gegen das mayr-Projekt (xcsbbaiwzdivmaodltxm) über den Pooler.
+# SQL gegen das SETEC-Projekt (xcsbbaiwzdivmaodltxm) über den Pooler.
 #
 #   scripts/sql.sh "select 1"          eine Anweisung
 #   scripts/sql.sh -f datei.sql        eine Datei — sie darf nur EINE Anweisung

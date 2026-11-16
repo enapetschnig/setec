@@ -1,12 +1,12 @@
 -- Räumt weg, was tests/rls-test.mjs anlegt: Testdaten, die Testkonten
--- rlstest-…@mayr-test.at und die verbrauchten Nummern. Als postgres ausführen
+-- rlstest-…@setec-test.at und die verbrauchten Nummern. Als postgres ausführen
 -- (sql.sh -f oder Supabase-MCP). Dateien im Storage löscht der Test selbst.
 --
 -- Die Schutz-Trigger (festgeschriebene Rechnungen, unterschriebene
 -- Regieberichte) werden dafür kurz abgeschaltet — alles in einer Transaktion.
 do $$
 declare
-  v_user uuid[] := array(select id from auth.users where email like 'rlstest-%@mayr-test.at');
+  v_user uuid[] := array(select id from auth.users where email like 'rlstest-%@setec-test.at');
   v_projekte uuid[] := array(select id from public.projekte where name like 'RLS-Test%');
 begin
   alter table public.zeiten disable trigger user;

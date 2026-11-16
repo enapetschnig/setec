@@ -16,7 +16,7 @@ export type Sicherung = {
   positionen: EditorPosition[];
 };
 
-const VORSILBE = "mayr.belegsicherung.";
+const VORSILBE = "setec.belegsicherung.";
 
 export const sicherungsSchluessel = (id: string, neu: boolean, typ: BelegTyp) => VORSILBE + (neu ? `neu.${typ}` : id);
 

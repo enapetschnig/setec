@@ -25,8 +25,8 @@ describe("Sicherung im Gerät", () => {
   beforeEach(() => speicher.clear());
 
   it("neue Belege je Art, vorhandene je ID", () => {
-    expect(sicherungsSchluessel("abc", true, "angebot")).toBe("mayr.belegsicherung.neu.angebot");
-    expect(sicherungsSchluessel("abc", false, "angebot")).toBe("mayr.belegsicherung.abc");
+    expect(sicherungsSchluessel("abc", true, "angebot")).toBe("setec.belegsicherung.neu.angebot");
+    expect(sicherungsSchluessel("abc", false, "angebot")).toBe("setec.belegsicherung.abc");
   });
 
   it("schreibt, liest und löscht", () => {
@@ -39,17 +39,17 @@ describe("Sicherung im Gerät", () => {
   });
 
   it("Kaputtes zählt nicht", () => {
-    speicher.set("mayr.belegsicherung.x", "{kein json");
-    speicher.set("mayr.belegsicherung.y", JSON.stringify({ zeit: "x" }));
-    expect(sicherungLesen("mayr.belegsicherung.x")).toBeNull();
-    expect(sicherungLesen("mayr.belegsicherung.y")).toBeNull();
+    speicher.set("setec.belegsicherung.x", "{kein json");
+    speicher.set("setec.belegsicherung.y", JSON.stringify({ zeit: "x" }));
+    expect(sicherungLesen("setec.belegsicherung.x")).toBeNull();
+    expect(sicherungLesen("setec.belegsicherung.y")).toBeNull();
   });
 
   it("Abmelden löscht alle Sicherungen, sonst nichts", () => {
     sicherungSchreiben(sicherungsSchluessel("a", false, "angebot"), sicherung());
     sicherungSchreiben(sicherungsSchluessel("b", true, "rechnung"), sicherung());
-    speicher.set("mayr.installhinweis", "x");
+    speicher.set("setec.installhinweis", "x");
     alleSicherungenLoeschen();
-    expect([...speicher.keys()]).toEqual(["mayr.installhinweis"]);
+    expect([...speicher.keys()]).toEqual(["setec.installhinweis"]);
   });
 });

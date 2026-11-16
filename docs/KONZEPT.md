@@ -711,7 +711,7 @@ sichtbar sind am Handy 5, am PC 9 Punkte, der Rest hinter „Alle N anzeigen“.
 Menü nach dem Vorbild Lengauer Stockner (`components/rahmen/`), alle Ziele in
 `lib/navigation.ts` (Gruppen haupt/baustelle/buero/system, `selten`, `stichworte`):
 - **Seitenleiste** (`Seitenleiste.tsx`): SETEC-Schwarz, 240 px, ab 1024 px einklappbar auf
-  56 px (gemerkt in `localStorage` `mayr.seitenleiste`); Tablet 768–1023 px immer
+  56 px (gemerkt in `localStorage` `setec.seitenleiste`); Tablet 768–1023 px immer
   schmal. Oben Querlogo, „Suchen … Strg K“ und das goldene „+ Neu“.
   Gruppe ohne Etikett (Start, Projekte, Kontakte, Angebote, Rechnungen, Plantafel), dann
   beim Chef BÜRO vor BAUSTELLE (am Laptop sieht er Eingangsrechnungen & Co. ohne
@@ -735,7 +735,7 @@ Menü nach dem Vorbild Lengauer Stockner (`components/rahmen/`), alle Ziele in
 - **App-Hülle**: Seitenkopf (`PageHeader`) bricht um, wenn Titel und Knöpfe nicht in
   eine Zeile passen (iPhone SE) — die Knöpfe rutschen darunter statt aus dem Bild.
   Funkloch: gelbe Pille „Kein Netz“ (`rahmen/OfflineHinweis.tsx`); Profil und Betrieb
-  sind am Gerät gemerkt (`mayr.sitzung`, beim Abmelden gelöscht), damit die App ohne
+  sind am Gerät gemerkt (`setec.sitzung`, beim Abmelden gelöscht), damit die App ohne
   Netz normal öffnet statt „Wartet auf Freischaltung“; ohne gemerktes Profil „Keine
   Verbindung — Nochmal versuchen“. Jede `toast.error`-Meldung läuft durch
   `lib/fehlerDeutsch.ts` („Failed to fetch“/„Load failed“ → „Keine Verbindung …“) und

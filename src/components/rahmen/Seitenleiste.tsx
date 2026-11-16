@@ -197,7 +197,7 @@ function useZugeklappt() {
 }
 
 /** Der Einklapp-Zustand bleibt auf diesem Gerät gemerkt */
-const LEISTE_SCHLUESSEL = "mayr.seitenleiste";
+const LEISTE_SCHLUESSEL = "setec.seitenleiste";
 export function gemerktOffen(): boolean {
   try { return localStorage.getItem(LEISTE_SCHLUESSEL) !== "zu"; } catch { return true; }
 }

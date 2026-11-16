@@ -4,9 +4,9 @@
  * und hält ihre Anmeldung getrennt: im Rahmen z. B. als Monteur, daneben am
  * PC weiter als Chef. `window.name` bleibt auch nach Neuladen im Rahmen erhalten.
  */
-export const HANDY_RAHMEN = "mayr-handyansicht";
+export const HANDY_RAHMEN = "setec-handyansicht";
 
 /** Eigener Speicherplatz für die Anmeldung im Rahmen */
-export const HANDY_ANMELDUNG = "mayr-handyansicht-auth";
+export const HANDY_ANMELDUNG = "setec-handyansicht-auth";
 
 export const imHandyRahmen = () => typeof window !== "undefined" && window.name === HANDY_RAHMEN;

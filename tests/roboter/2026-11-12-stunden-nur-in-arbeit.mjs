@@ -42,7 +42,7 @@ let browser;
 try {
   browser = await chromium.launch(process.env.CHROME ? { executablePath: process.env.CHROME } : {});
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: "de-AT", timezoneId: "Europe/Vienna" });
-  await ctx.addInitScript(() => localStorage.setItem("mayr.installhinweis", "x"));
+  await ctx.addInitScript(() => localStorage.setItem("setec.installhinweis", "x"));
   const page = await ctx.newPage();
   page.on("pageerror", (e) => fehler.push(e.message));
   await page.goto(`${APP_URL}/auth`);

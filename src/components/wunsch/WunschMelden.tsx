@@ -35,7 +35,7 @@ const mmss = (n: number) => `${Math.floor(n / 60)}:${String(n % 60).padStart(2, 
 const groesse = (b: number) => (b < 1024 * 1024 ? `${Math.max(1, Math.round(b / 1024))} KB` : `${(b / 1024 / 1024).toFixed(1)} MB`);
 
 // Der Knopf im Seitenkopf sagt nur „melden“ — Bild, Dialog und Aufnahme hält WunschMelden (einmal in App.tsx)
-const MELDEN = "mayr:melden";
+const MELDEN = "setec:melden";
 let arbeitet = false;
 const hoerer = new Set<() => void>();
 const setArbeitet = (a: boolean) => { arbeitet = a; hoerer.forEach((h) => h()); };

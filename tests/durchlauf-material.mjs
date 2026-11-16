@@ -70,7 +70,7 @@ const fehler = [];
 async function sitzung(benutzer, passwort, pc = false) {
   const geraet = pc ? { viewport: { width: 1366, height: 768 } } : IPHONE ? devices["iPhone 15"] : { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true };
   const ctx = await (pc ? pcBrowser : handyBrowser).newContext({ ...geraet, locale: "de-AT", timezoneId: "Europe/Vienna", acceptDownloads: true });
-  await ctx.addInitScript(() => localStorage.setItem("mayr.installhinweis", "x"));
+  await ctx.addInitScript(() => localStorage.setItem("setec.installhinweis", "x"));
   const page = await ctx.newPage();
   page.on("pageerror", (e) => fehler.push(`[${benutzer}] ${e.message}`));
   page.on("console", (m) => { if (m.type() === "error") fehler.push(`[${benutzer}] console: ${m.text()}`); });

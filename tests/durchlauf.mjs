@@ -53,7 +53,7 @@ const fehler = [];
 async function sitzung(benutzer, passwort) {
   const geraet = IPHONE ? devices["iPhone 15"] : { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 };
   const ctx = await browser.newContext({ ...geraet, locale: "de-AT", timezoneId: "Europe/Vienna" });
-  await ctx.addInitScript(() => localStorage.setItem("mayr.installhinweis", "x"));
+  await ctx.addInitScript(() => localStorage.setItem("setec.installhinweis", "x"));
   const page = await ctx.newPage();
   page.on("pageerror", (e) => fehler.push(`[${benutzer}] ${e.message}`));
   page.on("console", (m) => { if (m.type() === "error") fehler.push(`[${benutzer}] console: ${m.text()}`); });

@@ -26,7 +26,7 @@ type Gruppe = { titel: string; treffer: Treffer[] };
 /** Sonderzeichen, die in PostgREST-or()-Filtern stören, entfernen */
 const sauber = (s: string) => s.replace(/[%,()*\\.]/g, " ").trim();
 
-const EREIGNIS = "mayr:suche";
+const EREIGNIS = "setec:suche";
 export function sucheOeffnen() {
   window.dispatchEvent(new Event(EREIGNIS));
 }

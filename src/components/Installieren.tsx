@@ -13,7 +13,7 @@ import { imHandyRahmen } from "@/lib/handyansicht";
 import { KUNDE } from "@/kunde.config";
 
 /** Merker je Gerät: Wurde der Hinweis hier schon gezeigt? */
-const GEZEIGT = "mayr.installhinweis";
+const GEZEIGT = "setec.installhinweis";
 
 /**
  * Anleitung passend zu Gerät und Browser — im Hinweis nach dem Anmelden, in

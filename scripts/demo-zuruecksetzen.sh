@@ -8,6 +8,11 @@
 #   DEMO_CHEF_PASSWORT=… scripts/demo-zuruecksetzen.sh
 set -euo pipefail
 D=$(cd "$(dirname "$0")/.." && pwd)
+# Seit 16.11.2026 ist das die echte App der SETEC GmbH — kein Zurücksetzen mehr.
+if [ "${ECHTE_DATEN_LOESCHEN:-}" != "ja, alles von SETEC" ]; then
+  echo "Abgebrochen: Die Datenbank gehört seit 16.11.2026 der SETEC GmbH (echte Daten, keine Demo)." >&2
+  exit 1
+fi
 : "${DEMO_CHEF_PASSWORT:?DEMO_CHEF_PASSWORT fehlt (Passwort des Demo-Chefs)}"
 
 node "$D/scripts/demo-dateien-loeschen.mjs"

@@ -51,15 +51,15 @@ describe("anleitungFuer", () => {
     expect(anleitungFuer("pc-firefox", false).schritte[0]).toMatch(/kann die App nicht installieren/);
   });
   it("Chrome-Link behält die Einladung", () => {
-    expect(chromeLink("https://mayr.handwerkapp.at/einladung/abcDEF123_-xyzabcdefghij"))
-      .toBe("intent://mayr.handwerkapp.at/einladung/abcDEF123_-xyzabcdefghij#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=https%3A%2F%2Fmayr.handwerkapp.at%2Feinladung%2FabcDEF123_-xyzabcdefghij;end");
+    expect(chromeLink("https://setec.handwerkapp.at/einladung/abcDEF123_-xyzabcdefghij"))
+      .toBe("intent://setec.handwerkapp.at/einladung/abcDEF123_-xyzabcdefghij#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=https%3A%2F%2Fsetec.handwerkapp.at%2Feinladung%2FabcDEF123_-xyzabcdefghij;end");
   });
 });
 
 describe("einladung", () => {
-  const link = einladungsAdresse("https://mayr.handwerkapp.at/", "AbC_-123456789012345678");
+  const link = einladungsAdresse("https://setec.handwerkapp.at/", "AbC_-123456789012345678");
   it("Adresse und Token", () => {
-    expect(link).toBe("https://mayr.handwerkapp.at/einladung/AbC_-123456789012345678");
+    expect(link).toBe("https://setec.handwerkapp.at/einladung/AbC_-123456789012345678");
     expect(tokenAusPfad("/einladung/AbC_-123456789012345678")).toBe("AbC_-123456789012345678");
     expect(tokenAusPfad("/einladung/<script>")).toBeNull();
   });

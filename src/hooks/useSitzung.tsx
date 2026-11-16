@@ -31,7 +31,7 @@ const gleich = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(
   damit normal, statt „Wartet auf Freischaltung“ zu zeigen. Rechte prüft
   ohnehin die Datenbank. Beim Abmelden gelöscht.
 */
-const MERK = "mayr.sitzung";
+const MERK = "setec.sitzung";
 type Gemerkt = { id: string; profil: Profil; firma: Firma | null };
 function gemerkt(id: string): Gemerkt | null {
   try {
