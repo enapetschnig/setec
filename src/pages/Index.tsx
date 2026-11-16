@@ -71,11 +71,15 @@ const START_GRUPPEN: { titel: string; gruppen: NavEintrag["gruppe"][] }[] = [
   { titel: "Sonstiges", gruppen: ["system"] },
 ];
 
-/** Monteur am Handy: was er auf der Baustelle braucht, das Häufigste oben */
+/**
+ * Monteur am Handy: was er auf der Baustelle braucht, das Häufigste oben.
+ * Projekte wählt er beim Buchen, Aufgaben stehen oben nur, wenn ihm eine
+ * zugeteilt ist; Änderungen meldet er über den Knopf im Seitenkopf.
+ */
 const START_MONTEUR: { titel: string; pfade: string[] }[] = [
   { titel: "Täglich", pfade: ["/zeiten", "/scan", "/regie"] },
-  { titel: "Baustelle", pfade: ["/projekte", "/aufgaben", "/lieferscheine"] },
-  { titel: "Sonstiges", pfade: ["/einstellungen", "/wuensche"] },
+  { titel: "Baustelle", pfade: ["/lieferscheine"] },
+  { titel: "Sonstiges", pfade: ["/einstellungen"] },
 ];
 
 /**

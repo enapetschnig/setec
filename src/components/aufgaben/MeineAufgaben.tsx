@@ -10,20 +10,24 @@ import { useSitzung } from "@/hooks/useSitzung";
 import { sortieren, zaehlen } from "@/lib/aufgaben";
 import { isoTag } from "@/lib/format";
 
-/** Startseite: meine offenen Aufgaben zum Abhaken — die dringendsten oben */
+/**
+ * Startseite: meine offenen Aufgaben zum Abhaken — die dringendsten oben.
+ * Monteure sehen die Karte nur, wenn ihnen etwas zugeteilt ist, und legen
+ * selbst keine an.
+ */
 export function MeineAufgaben() {
-  const { profil } = useSitzung();
+  const { profil, istChef } = useSitzung();
   const { data: meine = [], isLoading } = useMeineAufgaben(profil?.id);
   const [gewaehlt, setGewaehlt] = useState<AufgabeMitInfo | null>(null);
   const [neu, setNeu] = useState(false);
   const heute = isoTag();
   const z = zaehlen(meine, heute);
-  if (isLoading) return null;
+  if (isLoading || (!istChef && meine.length === 0)) return null;
 
   return (
     <Karte titel={`Meine Aufgaben${z.offen ? ` · ${z.offen}` : ""}${z.ueberfaellig ? ` (${z.ueberfaellig} überfällig)` : ""}`}
-      alle={meine.length > 0 ? { to: "/aufgaben", text: "Alle" } : undefined}
-      aktion={meine.length === 0 ? (
+      alle={istChef && meine.length > 0 ? { to: "/aufgaben", text: "Alle" } : undefined}
+      aktion={istChef && meine.length === 0 ? (
         <Button variant="ghost" size="sm" className="-my-2 h-11 gap-1 text-primary" onClick={() => setNeu(true)}><Plus className="h-4 w-4" /> Aufgabe</Button>
       ) : undefined}
       ohnePolster>

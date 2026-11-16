@@ -733,7 +733,8 @@ Ende nach 19, über 10 h, Überschneidung, Lücke über 1 h. Auch als CSV.
 ### Startseite und Menü
 
 Monteur am Handy: nur Täglich (Stunden, Scannen, Regieberichte), Baustelle
-(Projekte, Aufgaben, Lieferscheine), Sonstiges (Mein Konto, Änderungswünsche)
+(Lieferscheine), Sonstiges (Mein Konto); „Meine Aufgaben“ nur, wenn ihm eine
+zugeteilt ist, ohne „+ Aufgabe“; Projekte, Aufgaben, Änderungswünsche sind `nurChef`
 — `START_MONTEUR` in `pages/Index.tsx`. Kontakte, Plantafel, Lager, Fuhrpark,
 Anlagen, Dokumente, Artikel sind `nurChef` im Menü. Das Büro hat eigene Punkte
 „Artikel & Leistungen“ (ein Katalog, Reiter) und „Mitarbeiter & Zugänge“.
