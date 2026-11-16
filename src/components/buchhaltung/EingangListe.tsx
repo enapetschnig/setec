@@ -28,7 +28,8 @@ export function EingangListe({ zeitraum, onKategorien }: { zeitraum: Zeitraum; o
       return {
         id: r.id, datum: r.datum, nummer: r.nummer, name: r.lieferant, unter: null,
         netto: Number(r.netto), ust: Number(r.ust), brutto: Number(r.brutto), offen: erledigt ? 0 : Number(r.brutto),
-        status: !erledigt && r.faellig_am && r.faellig_am < heute ? BELEG_STATUS.ueberfaellig : FREIGABE_STATUS[a],
+        status: !erledigt && !r.lastschrift && r.faellig_am && r.faellig_am < heute ? BELEG_STATUS.ueberfaellig
+          : a === "ueberwiesen" && r.lastschrift ? { ton: "gruen", text: "Abgebucht" } : FREIGABE_STATUS[a],
         erledigt,
         kategorie_id: r.kategorie_id,
         vorschlag: r.kategorie_id ? null : eingangVorschlag(r.lieferant, r.eingang_positionen.map((p) => p.bezeichnung), jeLieferant, kategorien),

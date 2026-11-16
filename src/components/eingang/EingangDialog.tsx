@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Camera, ExternalLink, FileText, Loader2, Plus, RotateCcw, Sparkles, ThumbsDown, ThumbsUp, Trash2, X } from "lucide-react";
 import FormularDialog from "@/components/FormularDialog";
@@ -23,16 +23,17 @@ import { ibanPruefen } from "@/lib/sepa";
 import { BELEG_STATUS, FREIGABE_STATUS } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import {
-  BUCKET, dateiAdresse, eingangDateiHochladen, eingangLoeschen, eingangSpeichern, freigabeSetzen, type EingangMitAnteilen, type Hochgeladen,
+  BUCKET, dateiAdresse, eingangDateiHochladen, eingangLoeschen, eingangSpeichern, freigabeSetzen, lastschriftUebertragen, useLastschriftJeLieferant, type EingangMitAnteilen, type Hochgeladen,
 } from "./eingangDaten";
 import {
-  ablauf, anteileAusPositionen, aufteilungFehler, bruttoAusNetto, KATEGORIEN, nettoAusBrutto, positionenAbweichung, zuZahlen, type AnteilEntwurf, type PositionEntwurf,
+  abbuchungAm, ablauf, anteileAusPositionen, lastschriftBetrag, aufteilungFehler, bruttoAusNetto, KATEGORIEN, nettoAusBrutto, positionenAbweichung, zuZahlen, type AnteilEntwurf, type PositionEntwurf,
 } from "./eingangLogik";
 import { EingangPositionen } from "./EingangPositionen";
 import { LieferscheinAbgleich } from "./LieferscheinAbgleich";
 import { supabase } from "@/integrations/supabase/client";
 import { KATEGORIE_ARTEN, useKategorien, useLetzteEingangKategorien } from "@/components/buchhaltung/buchhaltungDaten";
 import { eingangVorschlag, letzteKategorien } from "@/components/buchhaltung/buchhaltungLogik";
+import { lieferantSchluessel } from "@/components/kontakte/kontaktLogik";
 import { KategorieWahl } from "@/components/buchhaltung/KategorieTeile";
 
 const UST_SAETZE = ["20", "13", "10", "0"];
@@ -41,6 +42,8 @@ type Kopf = {
   lieferant: string; nummer: string; datum: string; faellig_am: string; netto: string; brutto: string; ust_satz: string;
   kategorie: string; kategorie_id: string | null; betrieb: boolean; bezahlt: boolean; bezahlt_am: string; notiz: string; reverse_charge: boolean;
   iban: string; skonto_prozent: string; skonto_bis: string; ls_nummern: string;
+  /** Händler hat ein SEPA-Mandat und bucht selbst ab (am Tag X jeden Monats) */
+  lastschrift: boolean; lastschrift_tag: string;
 };
 
 const kopfAus = (r: EingangMitAnteilen | null, heute: string): Kopf => ({
@@ -62,6 +65,8 @@ const kopfAus = (r: EingangMitAnteilen | null, heute: string): Kopf => ({
   skonto_prozent: r?.skonto_prozent != null ? zahlFeld(r.skonto_prozent) : "",
   skonto_bis: r?.skonto_bis ?? "",
   ls_nummern: (r?.lieferschein_nummern ?? []).join(", "),
+  lastschrift: r?.lastschrift ?? false,
+  lastschrift_tag: r?.lastschrift_tag != null ? String(r.lastschrift_tag) : "",
 });
 
 const positionenAus = (r: EingangMitAnteilen | null): PositionEntwurf[] =>
@@ -110,6 +115,9 @@ export function EingangDialog({
   const [loeschFrage, setLoeschFrage] = useState(false);
   const [basis, setBasis] = useState("");
   const dateiFeld = useRef<HTMLInputElement>(null);
+  /** Lastschrift von Hand gesetzt → nicht mehr aus dem Händler vorbelegen */
+  const lastschriftGesetzt = useRef(false);
+  const { data: lastschriftJe } = useLastschriftJeLieferant(open && !rechnung);
 
   useBeimOeffnen(open ? rechnung?.id ?? `neu-${projektVorgabe ?? ""}` : null, () => {
     const kopf = kopfAus(rechnung, heute);
@@ -127,7 +135,17 @@ export function EingangDialog({
     setAblehnen(null);
     setBasis(JSON.stringify([kopf, a, p]));
     setLoeschFrage(false);
+    lastschriftGesetzt.current = false;
   });
+
+  // Neue Rechnung: SEPA-Mandat wie bei der letzten Rechnung desselben Händlers
+  useEffect(() => {
+    if (!open || rechnung || lastschriftGesetzt.current || !lastschriftJe) return;
+    const v = lastschriftJe.get(lieferantSchluessel(k.lieferant));
+    const lastschrift = v?.lastschrift ?? false;
+    const tag = v?.lastschrift && v.tag ? String(v.tag) : "";
+    setK((alt) => (alt.lastschrift === lastschrift && alt.lastschrift_tag === tag ? alt : { ...alt, lastschrift, lastschrift_tag: tag }));
+  }, [open, rechnung, k.lieferant, lastschriftJe]);
 
   const netto = dezimalLesen(k.netto) ?? 0;
   const satz = dezimalLesen(k.ust_satz) ?? 0;
@@ -198,6 +216,8 @@ export function EingangDialog({
     if (!ibanOk) { toast.error("Die IBAN stimmt nicht — bitte prüfen."); return null; }
     const skonto = dezimalLesen(k.skonto_prozent);
     if (skonto != null && (skonto < 0 || skonto >= 100)) { toast.error("Skonto zwischen 0 und 100 %."); return null; }
+    const lsTag = k.lastschrift && k.lastschrift_tag.trim() ? Number(k.lastschrift_tag.trim()) : null;
+    if (lsTag != null && !(Number.isInteger(lsTag) && lsTag >= 1 && lsTag <= 31)) { toast.error("Abbuchungstag: eine Zahl von 1 bis 31."); return null; }
     // leere, unberührte Zeile (z. B. Vorgabe aus dem Projekt) bekommt den ganzen Betrag
     const liste = anteile.map((a) => (!a.rechnung_id && a.projekt_id && !a.betrag.trim() && anteile.length === 1 ? { ...a, betrag: fmt(netto) } : a));
     const fehler = aufteilungFehler(netto, liste, dezimalLesen);
@@ -224,8 +244,21 @@ export function EingangDialog({
         iban: ibanPruefen(ibanText),
         skonto_prozent: skonto || null,
         skonto_bis: skonto ? k.skonto_bis || null : null,
+        lastschrift: k.lastschrift,
+        lastschrift_tag: lsTag,
         lieferschein_nummern: k.ls_nummern.split(/[,;\s]+/).map((x) => x.trim()).filter(Boolean),
       }, liste, rechnung?.eingang_anteile ?? [], hochgeladen ?? datei, rechnung?.datei_pfad ?? null, positionen, neueId);
+      // Mandat gilt für den Händler: von Hand geändert → auch seine anderen offenen Rechnungen
+      if (lastschriftGesetzt.current || (rechnung && (rechnung.lastschrift !== k.lastschrift || (rechnung.lastschrift_tag ?? null) !== lsTag))) {
+        try {
+          const andere = await lastschriftUebertragen(lieferant, k.lastschrift, lsTag, id);
+          if (andere) {
+            toast.info(`${k.lastschrift ? "Lastschrift" : "Überweisung"} auch für ${andere} weitere offene ${andere === 1 ? "Rechnung" : "Rechnungen"} von ${lieferant}`);
+          }
+        } catch (e) {
+          toast.warning("Andere Rechnungen des Händlers nicht umgestellt", { description: (e as Error).message });
+        }
+      }
       await neuLaden("eingang", "buchhaltung");
       return id;
     } catch (e) {
@@ -254,7 +287,7 @@ export function EingangDialog({
     try {
       await freigabeSetzen(id, wert, grund);
       await neuLaden("eingang", "buchhaltung");
-      toast.success(wert === "freigegeben" ? "Zur Überweisung freigegeben" : wert === "abgelehnt" ? "Abgelehnt" : "Wieder zu prüfen");
+      toast.success(wert === "freigegeben" ? (k.lastschrift ? "Freigegeben — der Händler bucht per Lastschrift ab" : "Zur Überweisung freigegeben") : wert === "abgelehnt" ? "Abgelehnt" : "Wieder zu prüfen");
       onOpenChange(false);
     } catch (e) {
       toast.error("Nicht geändert", { description: fehlerText(e as { message?: string; code?: string }) });
@@ -379,17 +412,18 @@ export function EingangDialog({
       {rechnung && status && (
         <section className="space-y-2 rounded-lg border bg-card p-3">
           <div className="flex flex-wrap items-center gap-2">
-            <StatusPille eintrag={FREIGABE_STATUS[status]} />
+            <StatusPille eintrag={status === "ueberwiesen" && rechnung.lastschrift ? { ton: "gruen", text: "Abgebucht" } : FREIGABE_STATUS[status]} />
             <span className="text-sm text-muted-foreground">
               {status === "pruefen" && "Stimmen Menge und Preis? Dann freigeben."}
               {status === "freigegeben" && (() => { const z = zuZahlen(rechnung, heute); return z.skonto ? `${euro(z.betrag)} überweisen — mit Skonto bis ${z.bis?.split("-").reverse().join(".")}` : `${euro(z.betrag)} überweisen`; })()}
+              {status === "lastschrift" && (() => { const z = lastschriftBetrag(rechnung); return `Händler bucht ${euro(z.betrag)} ab${z.skonto ? " (abzüglich Skonto)" : ""}${z.am ? ` — voraussichtlich am ${z.am.split("-").reverse().join(".")}` : ""}. Keine Überweisung nötig.`; })()}
               {status === "ueberwiesen" && `am ${rechnung.bezahlt_am?.split("-").reverse().join(".")}`}
               {status === "abgelehnt" && (rechnung.abgelehnt_grund || "ohne Grund")}
             </span>
           </div>
           {status !== "ueberwiesen" && ablehnen === null && (
             <div className="flex flex-wrap gap-2">
-              {status !== "freigegeben" && (
+              {status !== "freigegeben" && status !== "lastschrift" && (
                 <Button className="h-11 gap-1.5" disabled={speichert} onClick={() => void freigabe("freigegeben")}>
                   <ThumbsUp className="h-4 w-4" /> {geaendert ? "Speichern und freigeben" : "Freigeben"}
                 </Button>
@@ -530,6 +564,29 @@ export function EingangDialog({
       </div>
       {!ibanOk && <p className="-mt-1 px-1 text-sm text-destructive">Die IBAN stimmt nicht (Prüfziffer).</p>}
 
+      <div className="space-y-2 rounded-lg border bg-card p-3">
+        <div className="flex items-center justify-between gap-3">
+          <Label htmlFor="e-lastschrift" className="cursor-pointer">
+            <span className="block text-sm font-medium">Händler bucht per Lastschrift ab</span>
+            <span className="block text-xs font-normal text-muted-foreground">SEPA-Mandat — keine Überweisung, kommt nicht in die Überweisungsliste</span>
+          </Label>
+          <Switch id="e-lastschrift" checked={k.lastschrift}
+            onCheckedChange={(v) => { lastschriftGesetzt.current = true; setz({ lastschrift: v }); }} />
+        </div>
+        {k.lastschrift && (
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <Label htmlFor="e-lastschrift-tag" className="font-normal">Abbuchung am</Label>
+            <Input id="e-lastschrift-tag" className="zahl h-11 w-20 text-right" inputMode="numeric" placeholder="z. B. 25" value={k.lastschrift_tag}
+              onChange={(e) => { lastschriftGesetzt.current = true; setz({ lastschrift_tag: e.target.value.replace(/\D/g, "").slice(0, 2) }); }} />
+            <span>. jeden Monats</span>
+            {(() => {
+              const am = abbuchungAm({ datum: k.datum, lastschrift_tag: Number(k.lastschrift_tag) || null });
+              return am ? <span className="text-xs text-muted-foreground">— diese Rechnung voraussichtlich am {am.split("-").reverse().join(".")}</span> : null;
+            })()}
+          </div>
+        )}
+      </div>
+
       <div className="flex items-center justify-between gap-3 rounded-lg border bg-card p-3">
         <Label htmlFor="e-rc" className="cursor-pointer">
           <span className="block text-sm font-medium">Reverse Charge</span>
@@ -547,7 +604,7 @@ export function EingangDialog({
         </Label>
         <div className="flex items-center gap-2">
           {k.bezahlt && <Input type="date" aria-label="Bezahlt am" className="h-11 w-40" value={k.bezahlt_am} onChange={(e) => setz({ bezahlt_am: e.target.value })} />}
-          <Switch id="e-bezahlt" checked={k.bezahlt} onCheckedChange={(v) => setz({ bezahlt: v })} disabled={!!rechnung && status !== "freigegeben" && status !== "ueberwiesen"} />
+          <Switch id="e-bezahlt" checked={k.bezahlt} onCheckedChange={(v) => setz({ bezahlt: v })} disabled={!!rechnung && status !== "freigegeben" && status !== "lastschrift" && status !== "ueberwiesen"} />
         </div>
       </div>
 

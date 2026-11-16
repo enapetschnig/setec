@@ -44,8 +44,10 @@ export function zuordnung(r: Pick<Eingangsrechnung, "netto" | "betrieb">, anteil
 }
 
 /** Zahlstatus: bezahlt, überfällig (nach dem Fälligkeitstag) oder offen */
-export function zahlung(r: Pick<Eingangsrechnung, "bezahlt_am" | "faellig_am">, heute: string): "bezahlt" | "ueberfaellig" | "offen" {
+export function zahlung(r: Pick<Eingangsrechnung, "bezahlt_am" | "faellig_am"> & { lastschrift?: boolean | null }, heute: string): "bezahlt" | "ueberfaellig" | "offen" {
   if (r.bezahlt_am) return "bezahlt";
+  // Lastschrift: der Händler bucht selbst ab — nichts, was wir versäumen können
+  if (r.lastschrift) return "offen";
   if (r.faellig_am && r.faellig_am < heute) return "ueberfaellig";
   return "offen";
 }
@@ -93,13 +95,49 @@ export function aufteilungFehler(netto: number, anteile: AnteilEntwurf[], lesen:
 
 // ── Ablauf: prüfen → freigeben → überweisen ──────────────────────────────
 
-export type Ablauf = "pruefen" | "freigegeben" | "ueberwiesen" | "abgelehnt";
+export type Ablauf = "pruefen" | "freigegeben" | "lastschrift" | "ueberwiesen" | "abgelehnt";
 
-export function ablauf(r: Pick<Eingangsrechnung, "freigabe" | "bezahlt_am">): Ablauf {
+/**
+ * Freigegeben heißt „Zu überweisen“ — außer der Händler hat ein SEPA-Mandat
+ * (`lastschrift`): dann bucht er selbst ab, die Rechnung wartet unter „Lastschrift“.
+ */
+export function ablauf(r: Pick<Eingangsrechnung, "freigabe" | "bezahlt_am"> & { lastschrift?: boolean | null }): Ablauf {
   if (r.bezahlt_am) return "ueberwiesen";
   if (r.freigabe === "abgelehnt") return "abgelehnt";
-  if (r.freigabe === "freigegeben") return "freigegeben";
+  if (r.freigabe === "freigegeben") return r.lastschrift ? "lastschrift" : "freigegeben";
   return "pruefen";
+}
+
+/**
+ * Voraussichtlicher Abbuchungstag einer Lastschrift: der erste Tag X ab dem
+ * Rechnungsdatum (Monatsende, wenn der Monat kürzer ist). Ohne Tag: null.
+ */
+export function abbuchungAm(r: Pick<Eingangsrechnung, "datum"> & { lastschrift_tag?: number | null }): string | null {
+  const tag = Number(r.lastschrift_tag ?? 0);
+  if (!tag || !r.datum) return null;
+  const [j, m, t] = r.datum.split("-").map(Number);
+  const imMonat = (jahr: number, monat: number) => {
+    const letzter = new Date(Date.UTC(jahr, monat, 0)).getUTCDate();
+    return { jahr, monat, tag: Math.min(tag, letzter) };
+  };
+  let z = imMonat(j, m);
+  if (z.tag < t) z = m === 12 ? imMonat(j + 1, 1) : imMonat(j, m + 1);
+  return `${z.jahr}-${String(z.monat).padStart(2, "0")}-${String(z.tag).padStart(2, "0")}`;
+}
+
+/**
+ * Was der Händler per Lastschrift abbucht: brutto abzüglich Skonto (er bucht
+ * laut Mandat immer unter Abzug des Skontos ab — das Skonto-Datum zählt hier nicht).
+ */
+export function lastschriftBetrag(r: Pick<Eingangsrechnung, "brutto" | "skonto_prozent" | "datum"> & { lastschrift_tag?: number | null }) {
+  const am = abbuchungAm(r);
+  const brutto = Number(r.brutto);
+  const p = Number(r.skonto_prozent ?? 0);
+  if (p > 0) {
+    const betrag = runden2(brutto * (1 - p / 100));
+    return { betrag, skonto: runden2(brutto - betrag), am };
+  }
+  return { betrag: runden2(brutto), skonto: 0, am };
 }
 
 /**

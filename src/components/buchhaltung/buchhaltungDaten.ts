@@ -68,7 +68,7 @@ export type AusgangZeile = {
 
 export type EingangZeile = {
   id: string; lieferant: string; nummer: string | null; datum: string; faellig_am: string | null; bezahlt_am: string | null;
-  netto: number; ust: number; brutto: number; kategorie: string; kategorie_id: string | null; datei_pfad: string | null; freigabe: string;
+  netto: number; ust: number; brutto: number; kategorie: string; kategorie_id: string | null; datei_pfad: string | null; freigabe: string; lastschrift: boolean;
   eingang_positionen: { bezeichnung: string }[];
 };
 
@@ -92,7 +92,7 @@ export function useEingangZeitraum(von: string, bis: string) {
     queryKey: ["buchhaltung", "eingang", von, bis],
     queryFn: async () => {
       const { data, error } = await supabase.from("eingangsrechnungen")
-        .select("id, lieferant, nummer, datum, faellig_am, bezahlt_am, netto, ust, brutto, kategorie, kategorie_id, datei_pfad, freigabe, eingang_positionen(bezeichnung)")
+        .select("id, lieferant, nummer, datum, faellig_am, bezahlt_am, netto, ust, brutto, kategorie, kategorie_id, datei_pfad, freigabe, lastschrift, eingang_positionen(bezeichnung)")
         .gte("datum", von).lte("datum", bis)
         .order("datum", { ascending: false }).order("lieferant");
       if (error) throw error;

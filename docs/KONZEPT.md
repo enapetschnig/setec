@@ -207,6 +207,12 @@ Rechnungen von Großhändlern und Subunternehmern, nur der Chef
   (Karte, bar) gilt als geprüft. Seite `/eingang`: Zu prüfen → Zu überweisen
   (Häkchen, Skonto bis zum Skonto-Tag, `sepa.ts` erzeugt pain.001 fürs
   Banking) → Überwiesen.
+- **Lastschrift** (SEPA-Mandat beim Händler, `lastschrift`/`lastschrift_tag`,
+  Migration `20261116190000`): freigegeben → Reiter „Lastschrift“ statt „Zu
+  überweisen“, Betrag immer abzüglich Skonto, Abbuchung ca. am Tag X ab
+  Rechnungsdatum (`abbuchungAm`), „Als abgebucht markieren“ setzt `bezahlt_am`.
+  Nie überfällig. Gilt je Händler: Umschalten überträgt auf seine offenen
+  Rechnungen, neue Rechnungen werden wie seine letzte vorbelegt.
 - **Positionen** (`eingang_positionen`): die Zeilen der Rechnung, je Zeile ein
   Projekt; „Aufteilung aus den Positionen übernehmen“ macht daraus die
   Anteile (`anteileAusPositionen`, in Cent). „Mit KI ausfüllen“ liest Kopf,

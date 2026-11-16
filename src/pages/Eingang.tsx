@@ -9,23 +9,26 @@ import { Input } from "@/components/ui/input";
 import { useIstPc } from "@/components/AppLayout";
 import { EingangDialog } from "@/components/eingang/EingangDialog";
 import { ueberwiesen, useEingangsrechnungen, type EingangMitAnteilen } from "@/components/eingang/eingangDaten";
-import { ablauf, kategorieText, zahlung, zuordnung, zuZahlen } from "@/components/eingang/eingangLogik";
+import { ablauf, kategorieText, lastschriftBetrag, zahlung, zuordnung, zuZahlen } from "@/components/eingang/eingangLogik";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useKunden, useNeuLaden } from "@/hooks/useDaten";
 import { useSitzung } from "@/hooks/useSitzung";
 import { ibanPruefen, sepaXml } from "@/lib/sepa";
 import { passtSuche } from "@/components/regie/regieLogik";
 import { datum, euro, isoTag } from "@/lib/format";
-import { EINGANG_STATUS, FREIGABE_STATUS } from "@/lib/types";
+import { EINGANG_STATUS, FREIGABE_STATUS, type StatusEintrag } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useKategorien } from "@/components/buchhaltung/buchhaltungDaten";
 
-type Filter = "alle" | "pruefen" | "freigegeben" | "ueberwiesen" | "abgelehnt" | "zuzuordnen";
+const ABGEBUCHT: StatusEintrag = { ton: "gruen", text: "Abgebucht" };
+
+type Filter = "alle" | "pruefen" | "freigegeben" | "lastschrift" | "ueberwiesen" | "abgelehnt" | "zuzuordnen";
 
 /** Der Ablauf von links nach rechts: prüfen → freigeben → überweisen */
 const FILTER: { wert: Filter; text: string }[] = [
   { wert: "pruefen", text: "Zu prüfen" },
   { wert: "freigegeben", text: "Zu überweisen" },
+  { wert: "lastschrift", text: "Lastschrift" },
   { wert: "ueberwiesen", text: "Überwiesen" },
   { wert: "abgelehnt", text: "Abgelehnt" },
   { wert: "zuzuordnen", text: "Zuzuordnen" },
@@ -36,6 +39,7 @@ const LEER_TEXT: Record<Filter, string> = {
   alle: "Noch keine Eingangsrechnung. Rechnung vom Großhändler fotografieren, „Mit KI ausfüllen“, Projekt wählen — fertig.",
   pruefen: "Nichts zu prüfen.",
   freigegeben: "Nichts zu überweisen.",
+  lastschrift: "Keine offene Lastschrift. Bucht ein Händler selbst ab (SEPA-Mandat), in der Rechnung „Händler bucht per Lastschrift ab“ einschalten.",
   ueberwiesen: "Noch nichts überwiesen.",
   abgelehnt: "Keine abgelehnten Rechnungen.",
   zuzuordnen: "Alles zugeordnet.",
@@ -91,7 +95,8 @@ export default function Eingang() {
 
   const liste = useMemo(() => alle.filter((r) => passt(r, filter) && passtSuche([
     r.lieferant, r.nummer, r.notiz, katName(r), ...r.eingang_anteile.flatMap((a) => [a.text, a.projekte?.nummer, a.projekte?.name]),
-  ], suche)).sort((a, b) => (filter === "freigegeben" ? (zuZahlen(a, heute).bis ?? a.faellig_am ?? "9").localeCompare(zuZahlen(b, heute).bis ?? b.faellig_am ?? "9") : 0)),
+  ], suche)).sort((a, b) => (filter === "freigegeben" ? (zuZahlen(a, heute).bis ?? a.faellig_am ?? "9").localeCompare(zuZahlen(b, heute).bis ?? b.faellig_am ?? "9")
+    : filter === "lastschrift" ? (lastschriftBetrag(a).am ?? a.datum).localeCompare(lastschriftBetrag(b).am ?? b.datum) : 0)),
   [alle, filter, suche, heute]);
 
   // Vorschläge: bisherige Lieferanten und die Lieferanten-Kontakte
@@ -103,9 +108,12 @@ export default function Eingang() {
 
   // ── Überweisen ──
   const ueberweisen = filter === "freigegeben";
-  const gewaehlt = ueberweisen ? liste.filter((r) => !abgewaehlt.has(r.id)) : [];
-  const zahlSumme = gewaehlt.reduce((s, r) => s + zuZahlen(r, heute).betrag, 0);
-  const skontoSumme = gewaehlt.reduce((s, r) => s + zuZahlen(r, heute).skonto, 0);
+  /** Lastschrift: der Händler bucht selbst ab — hier nur als abgebucht markieren */
+  const lastschrift = filter === "lastschrift";
+  const gewaehlt = ueberweisen || lastschrift ? liste.filter((r) => !abgewaehlt.has(r.id)) : [];
+  const betragVon = (r: EingangMitAnteilen) => (lastschrift ? lastschriftBetrag(r) : zuZahlen(r, heute));
+  const zahlSumme = gewaehlt.reduce((s, r) => s + betragVon(r).betrag, 0);
+  const skontoSumme = gewaehlt.reduce((s, r) => s + betragVon(r).skonto, 0);
   const ohneIban = gewaehlt.filter((r) => !ibanPruefen(r.iban));
   const eigeneIban = ibanPruefen(firma?.iban);
   const sepaLaden = () => {
@@ -129,7 +137,7 @@ export default function Eingang() {
     try {
       await ueberwiesen(gewaehlt.map((r) => r.id), heute);
       await neuLaden("eingang");
-      toast.success(`${gewaehlt.length} als überwiesen markiert`);
+      toast.success(`${gewaehlt.length} als ${lastschrift ? "abgebucht" : "überwiesen"} markiert`);
       setAbgewaehlt(new Set());
     } catch (e) {
       toast.error("Nicht markiert", { description: (e as Error).message });
@@ -199,12 +207,13 @@ export default function Eingang() {
               const zahl = zahlung(r, heute);
               const schritt = ablauf(r);
               const zz = zuZahlen(r, heute);
+              const ls = lastschriftBetrag(r);
               const projekte = r.eingang_anteile.map((a) => a.projekte ? `${a.projekte.nummer} ${a.projekte.name}` : "").filter(Boolean);
               const wohin = [...projekte, ...(r.betrieb ? ["Betrieb"] : [])].join(" · ");
               return (
                 <li key={r.id} className="flex items-center">
-                  {ueberweisen && (
-                    <Checkbox className="ml-4 h-5 w-5 shrink-0" checked={!abgewaehlt.has(r.id)} aria-label={`${r.lieferant} überweisen`}
+                  {(ueberweisen || lastschrift) && (
+                    <Checkbox className="ml-4 h-5 w-5 shrink-0" checked={!abgewaehlt.has(r.id)} aria-label={`${r.lieferant} ${lastschrift ? "abgebucht" : "überweisen"}`}
                       onCheckedChange={(c) => setAbgewaehlt((alt) => { const n = new Set(alt); if (c) n.delete(r.id); else n.add(r.id); return n; })} />
                   )}
                   <button type="button" onClick={() => setOffen(r)}
@@ -212,21 +221,24 @@ export default function Eingang() {
                     <div className="min-w-0 flex-1 space-y-0.5">
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                         <span className="truncate font-medium">{r.lieferant}</span>
-                        <StatusPille eintrag={FREIGABE_STATUS[schritt]} />
+                        <StatusPille eintrag={schritt === "ueberwiesen" && r.lastschrift ? ABGEBUCHT : FREIGABE_STATUS[schritt]} />
+                        {r.lastschrift && schritt !== "lastschrift" && schritt !== "ueberwiesen" && schritt !== "abgelehnt" && <StatusPille eintrag={FREIGABE_STATUS.lastschrift} />}
                         {z !== "zugeordnet" && <StatusPille eintrag={EINGANG_STATUS[z]} />}
                         {zahl === "ueberfaellig" && schritt !== "abgelehnt" && <StatusPille eintrag={EINGANG_STATUS.ueberfaellig} />}
                         {ueberweisen && !ibanPruefen(r.iban) && <StatusPille eintrag={{ ton: "gelb", text: "IBAN fehlt" }} />}
                       </div>
                       <p className="flex items-center gap-1 truncate text-xs text-muted-foreground">
                         {r.datei_pfad && <Paperclip className="h-3 w-3 shrink-0" aria-label="mit Beleg" />}
-                        {[r.nummer, datum(r.datum), katName(r)].filter(Boolean).join(" · ")}
+                        {(lastschrift && ls.am ? [r.nummer, `Abbuchung ca. ${datum(ls.am)}`] : [r.nummer, datum(r.datum), katName(r)]).filter(Boolean).join(" · ")}
                       </p>
                       {wohin && <p className="truncate text-xs">{wohin}</p>}
                     </div>
                     <div className="shrink-0 text-right">
-                      <p className="zahl font-semibold">{euro(ueberweisen ? zz.betrag : Number(r.brutto))}</p>
+                      <p className="zahl font-semibold">{euro(ueberweisen ? zz.betrag : lastschrift ? ls.betrag : Number(r.brutto))}</p>
                       <p className="zahl text-xs text-muted-foreground">
-                        {ueberweisen && zz.skonto ? `${euro(zz.skonto)} Skonto bis ${datum(zz.bis!)}` : `${euro(Number(r.netto))} netto`}
+                        {ueberweisen && zz.skonto ? `${euro(zz.skonto)} Skonto bis ${datum(zz.bis!)}`
+                          : lastschrift && ls.skonto ? `− ${euro(ls.skonto)} Skonto`
+                            : `${euro(Number(r.netto))} netto`}
                       </p>
                     </div>
                     <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -252,6 +264,18 @@ export default function Eingang() {
                   {markiert ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} Als überwiesen markieren
                 </Button>
               </div>
+            </section>
+          ) : lastschrift ? (
+            <section className="sticky bottom-3 space-y-2 rounded-lg border bg-card p-3 lg:static">
+              <p className="text-sm">
+                <span className="font-semibold">{gewaehlt.length} {gewaehlt.length === 1 ? "Lastschrift" : "Lastschriften"}</span> ·{" "}
+                <span className="zahl font-semibold">{euro(zahlSumme)}</span>
+                {skontoSumme > 0 && <span className="text-muted-foreground"> · abzüglich {euro(skontoSumme)} Skonto</span>}
+              </p>
+              <p className="text-xs text-muted-foreground">Der Händler bucht selbst ab — keine Überweisung nötig. Ist die Abbuchung am Konto, hier abhaken.</p>
+              <Button variant="outline" className="h-11 gap-1.5" disabled={!gewaehlt.length || markiert} onClick={() => void alsUeberwiesen()}>
+                {markiert ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} Als abgebucht markieren
+              </Button>
             </section>
           ) : (
             <p className="px-1 text-right text-xs text-muted-foreground">

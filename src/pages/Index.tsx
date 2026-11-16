@@ -176,7 +176,7 @@ export default function Index() {
   const zuUeberweisen = eingang.filter((r) => ablauf(r) === "freigegeben");
   const ueberweisenSumme = zuUeberweisen.reduce((s, r) => s + zuZahlen(r, isoTag()).betrag, 0);
   // Skonto läuft in den nächsten 3 Tagen ab (auch noch ungeprüfte)
-  const skontoBald = eingang.filter((r) => !r.bezahlt_am && r.freigabe !== "abgelehnt" && r.skonto_bis && r.skonto_bis >= isoTag() && r.skonto_bis <= tageDazu(isoTag(), 3)).length;
+  const skontoBald = eingang.filter((r) => !r.bezahlt_am && !r.lastschrift && r.freigabe !== "abgelehnt" && r.skonto_bis && r.skonto_bis >= isoTag() && r.skonto_bis <= tageDazu(isoTag(), 3)).length;
   // Fuhrpark: Pickerl, Service, Prüfung fällig — und gemeldete Schäden
   const { data: fahrzeuge = [] } = useFahrzeuge();
   const { data: schaeden = {} } = useOffeneSchaeden();

@@ -4,6 +4,7 @@ import { dezimalLesen } from "@/lib/format";
 import { bildVerkleinern, sichererDateiname } from "@/lib/upload";
 import type { EingangAnteil, EingangPosition, Eingangsrechnung, Lieferschein } from "@/lib/types";
 import type { AnteilEntwurf, PositionEntwurf } from "./eingangLogik";
+import { lieferantSchluessel } from "@/components/kontakte/kontaktLogik";
 
 /**
  * Eingangsrechnungen: Abfragen und Speichern. Query-Keys beginnen mit
@@ -29,6 +30,44 @@ export function useEingangsrechnungen(aktiv = true) {
       return (data ?? []) as unknown as EingangMitAnteilen[];
     },
   });
+}
+
+/**
+ * SEPA-Mandat je Händler (Schlüssel wie `lieferant_schluessel`): wie bei seiner
+ * letzten Rechnung — Vorschlag für eine neue Rechnung desselben Händlers.
+ */
+export function useLastschriftJeLieferant(aktiv = true) {
+  return useQuery({
+    queryKey: ["eingang", "lastschrift"],
+    enabled: aktiv,
+    queryFn: async () => {
+      const { data, error } = await supabase.from("eingangsrechnungen").select("lieferant, lastschrift, lastschrift_tag")
+        .order("datum", { ascending: false }).order("created_at", { ascending: false });
+      if (error) throw error;
+      const je = new Map<string, { lastschrift: boolean; tag: number | null }>();
+      (data ?? []).forEach((r) => {
+        const s = lieferantSchluessel(r.lieferant);
+        if (s && !je.has(s)) je.set(s, { lastschrift: !!r.lastschrift, tag: r.lastschrift_tag ?? null });
+      });
+      return je;
+    },
+  });
+}
+
+/**
+ * SEPA-Mandat gilt für den Händler: auf alle noch nicht bezahlten Rechnungen
+ * desselben Händlers übertragen. Gibt zurück, wie viele andere geändert wurden.
+ */
+export async function lastschriftUebertragen(lieferant: string, lastschrift: boolean, tag: number | null, ausser: string): Promise<number> {
+  const schluessel = lieferantSchluessel(lieferant);
+  const { data, error } = await supabase.from("eingangsrechnungen").select("id, lieferant, lastschrift, lastschrift_tag").is("bezahlt_am", null);
+  if (error) throw error;
+  const ids = (data ?? []).filter((r) => r.id !== ausser && lieferantSchluessel(r.lieferant) === schluessel
+    && (r.lastschrift !== lastschrift || (r.lastschrift_tag ?? null) !== tag)).map((r) => r.id);
+  if (!ids.length) return 0;
+  const { error: e } = await supabase.from("eingangsrechnungen").update({ lastschrift, lastschrift_tag: tag }).in("id", ids);
+  if (e) throw e;
+  return ids.length;
 }
 
 /** Eine Eingangsrechnung samt Anteilen und Positionen (zum Öffnen aus der Buchhaltung) */
@@ -67,7 +106,7 @@ export async function dateiAdresse(pfad: string): Promise<string> {
 
 export type EingangKopf = Pick<Eingangsrechnung,
   "lieferant" | "nummer" | "datum" | "faellig_am" | "netto" | "ust_satz" | "ust" | "brutto" | "kategorie" | "kategorie_id" | "reverse_charge" | "betrieb" | "bezahlt_am" | "notiz"
-  | "iban" | "skonto_prozent" | "skonto_bis" | "lieferschein_nummern">;
+  | "iban" | "skonto_prozent" | "skonto_bis" | "lieferschein_nummern" | "lastschrift" | "lastschrift_tag">;
 
 /** Schon hochgeladene Datei (z. B. für die KI vor dem ersten Speichern) */
 export type Hochgeladen = { pfad: string; name: string; mime: string | null };

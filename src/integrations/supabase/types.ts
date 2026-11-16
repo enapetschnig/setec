@@ -1413,6 +1413,8 @@ export type Database = {
           kategorie_id: string | null
           lieferant: string
           lieferschein_nummern: string[]
+          lastschrift: boolean
+          lastschrift_tag: number | null
           netto: number
           notiz: string | null
           nummer: string | null
@@ -1444,6 +1446,8 @@ export type Database = {
           kategorie_id?: string | null
           lieferant: string
           lieferschein_nummern?: string[]
+          lastschrift?: boolean
+          lastschrift_tag?: number | null
           netto?: number
           notiz?: string | null
           nummer?: string | null
@@ -1475,6 +1479,8 @@ export type Database = {
           kategorie_id?: string | null
           lieferant?: string
           lieferschein_nummern?: string[]
+          lastschrift?: boolean
+          lastschrift_tag?: number | null
           netto?: number
           notiz?: string | null
           nummer?: string | null

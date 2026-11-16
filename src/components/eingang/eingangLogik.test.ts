@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { dezimalLesen } from "@/lib/format";
 import {
-  ablauf, abgleich, anteileAusPositionen, aufteilungFehler, positionenAbweichung, bruttoAusNetto, nettoAusBrutto, rest, textAehnlich, zahlung, zuordnung, zuZahlen,
+  abbuchungAm, ablauf, abgleich, anteileAusPositionen, lastschriftBetrag, aufteilungFehler, positionenAbweichung, bruttoAusNetto, nettoAusBrutto, rest, textAehnlich, zahlung, zuordnung, zuZahlen,
   type AnteilEntwurf,
 } from "./eingangLogik";
 
@@ -103,5 +103,32 @@ describe("Positionen gegen Netto", () => {
     expect(positionenAbweichung(100, [60, 50, null])).toBe(10);
     expect(positionenAbweichung(100, [])).toBeNull();
     expect(positionenAbweichung(100, [null])).toBeNull();
+  });
+});
+
+describe("Lastschrift (SEPA-Mandat)", () => {
+  it("kommt nach der Freigabe nicht in „Zu überweisen“", () => {
+    expect(ablauf({ freigabe: "freigegeben", bezahlt_am: null, lastschrift: true })).toBe("lastschrift");
+    expect(ablauf({ freigabe: "freigegeben", bezahlt_am: null, lastschrift: false })).toBe("freigegeben");
+    expect(ablauf({ freigabe: "offen", bezahlt_am: null, lastschrift: true })).toBe("pruefen");
+    expect(ablauf({ freigabe: "freigegeben", bezahlt_am: "2026-11-20", lastschrift: true })).toBe("ueberwiesen");
+  });
+  it("ist nie überfällig", () => {
+    expect(zahlung({ bezahlt_am: null, faellig_am: "2026-01-01", lastschrift: true }, "2026-11-16")).toBe("offen");
+  });
+  it("rechnet den Abbuchungstag ab dem Rechnungsdatum", () => {
+    expect(abbuchungAm({ datum: "2026-11-09", lastschrift_tag: 15 })).toBe("2026-11-15");
+    expect(abbuchungAm({ datum: "2026-11-20", lastschrift_tag: 15 })).toBe("2026-12-15");
+    expect(abbuchungAm({ datum: "2026-12-20", lastschrift_tag: 5 })).toBe("2027-01-05");
+    expect(abbuchungAm({ datum: "2027-02-10", lastschrift_tag: 31 })).toBe("2027-02-28");
+    expect(abbuchungAm({ datum: "2026-11-09", lastschrift_tag: null })).toBeNull();
+  });
+  it("bucht abzüglich Skonto ab", () => {
+    const r = { brutto: 1200, skonto_prozent: 3, datum: "2026-11-09", lastschrift_tag: 25 };
+    expect(lastschriftBetrag(r)).toEqual({ betrag: 1164, skonto: 36, am: "2026-11-25" });
+    // Skonto-Datum vor der Abbuchung: der Händler zieht den Skonto trotzdem ab
+    const mitDatum = { ...r, skonto_bis: "2026-11-20" };
+    expect(lastschriftBetrag(mitDatum).skonto).toBe(36);
+    expect(lastschriftBetrag({ ...r, skonto_prozent: null }).betrag).toBe(1200);
   });
 });

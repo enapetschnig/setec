@@ -160,6 +160,7 @@ export const EINGANG_STATUS: Record<string, StatusEintrag> = {
 export const FREIGABE_STATUS: Record<string, StatusEintrag> = {
   pruefen: { ton: "cyan", text: "Zu prüfen" },
   freigegeben: { ton: "blau", text: "Zu überweisen" },
+  lastschrift: { ton: "blau", text: "Lastschrift" },
   ueberwiesen: { ton: "gruen", text: "Überwiesen" },
   abgelehnt: { ton: "rot", text: "Abgelehnt" },
 };
