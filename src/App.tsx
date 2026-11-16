@@ -34,6 +34,7 @@ const ArtikelDetail = lazy(() => import("./pages/ArtikelDetail"));
 const Leistungen = lazy(() => import("./pages/Leistungen"));
 const Auswertung = lazy(() => import("./pages/Auswertung"));
 const Einstellungen = lazy(() => import("./pages/Einstellungen"));
+const MitarbeiterSeite = lazy(() => import("./pages/Einstellungen").then((m) => ({ default: m.MitarbeiterSeite })));
 const Wuensche = lazy(() => import("./pages/Wuensche"));
 const Handyansicht = lazy(() => import("./pages/Handyansicht"));
 const Eingang = lazy(() => import("./pages/Eingang"));
@@ -122,6 +123,7 @@ const App = () => (
                 <Route path="/leistungen" element={<S chef><Leistungen /></S>} />
                 <Route path="/auswertung" element={<S chef><Auswertung /></S>} />
                 <Route path="/einstellungen" element={<S><Einstellungen /></S>} />
+                <Route path="/mitarbeiter" element={<S chef><MitarbeiterSeite /></S>} />
                 <Route path="/wuensche" element={<S><Wuensche /></S>} />
                 <Route path="/handyansicht" element={<S><Handyansicht /></S>} />
               </Route>

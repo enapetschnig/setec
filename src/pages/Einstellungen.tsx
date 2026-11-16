@@ -1,6 +1,6 @@
 import { stundensaetzeLesen } from "@/lib/kalkulation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Building2, ImagePlus, KeyRound, Loader2, LogOut, Plus, Smartphone, Trash2, User, Users } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -31,11 +31,10 @@ import { name, type Firma, type Profil, type Rolle } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { KUNDE } from "@/kunde.config";
 
-type Bereich = "betrieb" | "mitarbeiter" | "konto" | "app";
+type Bereich = "betrieb" | "konto" | "app";
 
 const BEREICHE: { wert: Bereich; text: string; icon: typeof User; nurChef?: boolean }[] = [
   { wert: "betrieb", text: "Betrieb", icon: Building2, nurChef: true },
-  { wert: "mitarbeiter", text: "Mitarbeiter", icon: Users, nurChef: true },
   { wert: "konto", text: "Mein Konto", icon: User },
   { wert: "app", text: "Handy", icon: Smartphone },
 ];
@@ -57,6 +56,8 @@ export default function Einstellungen() {
   const [params, setParams] = useSearchParams();
   const erlaubt = BEREICHE.filter((b) => !b.nurChef || istChef);
   const bereich = (erlaubt.find((b) => b.wert === params.get("bereich"))?.wert ?? erlaubt[0].wert) as Bereich;
+  // Mitarbeiter sind seit 16.11.2026 ein eigener Menüpunkt — alte Links führen dorthin
+  if (params.get("bereich") === "mitarbeiter") return <Navigate to="/mitarbeiter" replace />;
 
   return (
     <Seite titel="Einstellungen" zurueckPfad="/">
@@ -71,7 +72,6 @@ export default function Einstellungen() {
       </div>
 
       {bereich === "betrieb" && <Betrieb />}
-      {bereich === "mitarbeiter" && <Mitarbeiter />}
       {bereich === "konto" && <Konto />}
       {bereich === "app" && (
         <Karte titel={`${KUNDE.kurzname} als App`}>
@@ -377,6 +377,15 @@ const zugang = (p: Profil): Zugang => (p.aktiv ? "aktiv" : p.gesperrt ? "gesperr
 const ZUGANG_REIHENFOLGE: Record<Zugang, number> = { neu: 0, aktiv: 1, gesperrt: 2 };
 
 /** Freischalten, Rolle, Farbe, Sperren, vorläufiges Passwort. Neue Mitarbeiter registrieren sich selbst. */
+/** Eigener Menüpunkt „Mitarbeiter & Zugänge“ (Chef): wer hat Zugang, Rolle, Sätze, einladen */
+export function MitarbeiterSeite() {
+  return (
+    <Seite titel="Mitarbeiter & Zugänge" zurueckPfad="/">
+      <Mitarbeiter />
+    </Seite>
+  );
+}
+
 function Mitarbeiter() {
   const { profil: ich } = useSitzung();
   const neuLaden = useNeuLaden();

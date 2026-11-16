@@ -1,6 +1,6 @@
 import { pdfText } from "@/components/regie/regieLogik";
 import type { CellHookData, RowInput } from "jspdf-autotable";
-import { ohneBetrag, positionsNummern, zwischensummen } from "@/components/belege/editor";
+import { nachlassText, ohneBetrag, positionsNummern, titelUebersicht, zwischensummen } from "@/components/belege/editor";
 import { schlussAufstellung } from "@/components/belege/teilrechnung";
 import {
   FUSS_PLATZ, RAND, briefkopf, datenBlock, empfaengerBlock, eur, fmt, fmtDatum, fmtMenge, fusszeilen,
@@ -29,6 +29,8 @@ export type PdfPosition = {
   menge: number;
   einheit: string;
   einzelpreis: number;
+  /** nur Nachlass: Prozent der Summe davor */
+  prozent?: number | null;
 };
 
 export type BelegPdfDaten = {
@@ -37,7 +39,7 @@ export type BelegPdfDaten = {
     | "typ" | "nummer" | "status" | "datum" | "leistung_von" | "leistung_bis" | "gueltig_bis" | "faellig_am"
     | "betreff" | "einleitung" | "schlusstext" | "ust_satz" | "reverse_charge" | "kv_verbindlich"
     | "empf_name" | "empf_zusatz" | "empf_strasse" | "empf_plz" | "empf_ort" | "empf_uid"
-  > & { teil_nr?: number | null };
+  > & { teil_nr?: number | null; foerderung_text?: string | null; foerderung_betrag?: number | null };
   positionen: PdfPosition[];
   firma: Firma;
   projekt?: { nummer: string; name: string; strasse?: string | null; plz?: string | null; ort?: string | null } | null;
@@ -64,8 +66,9 @@ export async function belegPdfErstellen({ beleg, positionen: allePositionen, fir
   const typText = istAngebot ? "Angebot" : storno ? "Stornorechnung" : "Rechnung";
   const schluss = !istAngebot && !storno && allePositionen.some((p) => p.art === "abzug");
   const titelText = beleg.teil_nr && !istAngebot && !storno ? `${beleg.teil_nr}. Teilrechnung` : schluss ? "Schlussrechnung" : typText;
-  // Abzüge stehen im Summenblock, nicht in der Tabelle
-  const positionen = allePositionen.filter((p) => p.art !== "abzug");
+  // Abzüge und Nachlass stehen im Summenblock, nicht in der Tabelle
+  const positionen = allePositionen.filter((p) => p.art !== "abzug" && p.art !== "nachlass");
+  const nachlass = allePositionen.find((p) => p.art === "nachlass");
   const entwurf = beleg.status === "entwurf" || !beleg.nummer;
   const rc = !!beleg.reverse_charge && !firma.kleinunternehmer;
   const klein = !!firma.kleinunternehmer;
@@ -212,10 +215,38 @@ export async function belegPdfErstellen({ beleg, positionen: allePositionen, fir
   positionenTabelle(pdf, autoTable, zeilen, abstaende, startY);
   y = (pdf as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
 
+  // ── Zusammenstellung: jeder Titel mit Summe, damit man am Ende den Überblick hat ──
+  const uebersicht = titelUebersicht(positionen.map((p, i) => ({ art: p.art, bezeichnung: p.bezeichnung, gesamt: gesamt[i] })));
+  if (uebersicht.length) {
+    y = platzPruefen(pdf, y, 16 + uebersicht.length * 6);
+    y += 7;
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(10);
+    pdf.text("Zusammenstellung", RAND, y);
+    autoTable(pdf, {
+      startY: y + 2,
+      body: uebersicht.map((u) => [u.nummer, pdfText(u.name), fmt(u.summe)]),
+      theme: "plain",
+      rowPageBreak: "avoid",
+      margin: { left: RAND, right: RAND, top: 20, bottom: FUSS_PLATZ },
+      bodyStyles: { fontSize: 9, textColor: [0, 0, 0], cellPadding: { top: 1.8, bottom: 1.8, left: 1.8, right: 1.8 }, lineWidth: { bottom: 0.15 }, lineColor: [190, 190, 190] },
+      columnStyles: { 0: { cellWidth: 13 }, 2: { halign: "right", cellWidth: 30, fontStyle: "bold" } },
+    });
+    y = (pdf as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
+  }
+
   // ── Summen ──
   const ohneUst = rc || klein;
   const ustText = `USt ${fmt(Number(beleg.ust_satz ?? 20)).replace(",00", "")} %`;
   const summen: SummenZeile[] = [];
+  // Nachlass als eigene Zeile: Summe der Positionen, abzüglich Nachlass — darunter wie gewohnt
+  if (nachlass) {
+    const n = runden2(Number(nachlass.menge) * Number(nachlass.einzelpreis));
+    summen.push(
+      { text: "Summe Positionen netto", betrag: runden2(gesamt.reduce((a, b) => a + b, 0)) },
+      { text: `abzüglich ${nachlassText(nachlass)}`, betrag: n },
+    );
+  }
   if (schluss && abzuege.length) {
     const a = schlussAufstellung(s, abzuege);
     if (ohneUst) summen.push({ text: "Gesamtleistung netto", betrag: a.gesamtNetto });
@@ -231,6 +262,7 @@ export async function belegPdfErstellen({ beleg, positionen: allePositionen, fir
     else summen.push({ text: "Restbetrag netto", betrag: s.netto, linie: true }, { text: ustText, betrag: s.ust }, { text: "Zu zahlen", betrag: s.brutto, fett: true, linie: true });
   } else if (ohneUst) summen.push({ text: rc ? "Gesamtbetrag netto" : "Gesamtbetrag", betrag: s.netto, fett: true });
   else summen.push({ text: "Nettobetrag", betrag: s.netto }, { text: ustText, betrag: s.ust }, { text: "Gesamtbetrag", betrag: s.brutto, fett: true, linie: true });
+  if (nachlass && summen[2]) summen[2] = { ...summen[2], linie: true };
 
   y = platzPruefen(pdf, y, summen.reduce((h, z) => h + (z.unter ? 10 : 7), 0) + 12);
   y += 2;
@@ -258,6 +290,29 @@ export async function belegPdfErstellen({ beleg, positionen: allePositionen, fir
     y += 7;
   });
   y += 6;
+
+  // ── Mögliche Förderung: nur zur Info, wird nicht abgezogen ──
+  const foerderung = Number(beleg.foerderung_betrag ?? 0);
+  if (foerderung > 0 && !storno) {
+    const zahlen = rc || klein ? s.netto : s.brutto;
+    y = platzPruefen(pdf, y, 24);
+    pdf.setFillColor(244, 244, 244);
+    pdf.rect(bw - RAND - 110, y - 4, 110, 19, "F");
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(9);
+    const text = `Mögliche Förderung${beleg.foerderung_text?.trim() ? ` (${beleg.foerderung_text.trim()})` : ""}`;
+    pdf.text(pdf.splitTextToSize(text, 74)[0], bw - RAND - 32, y + 1, { align: "right" });
+    pdf.setFont("helvetica", "bold");
+    pdf.text(eur(-foerderung), bw - RAND - 1, y + 1, { align: "right" });
+    pdf.text("Ihre Kosten nach Förderung", bw - RAND - 32, y + 7, { align: "right" });
+    pdf.text(eur(runden2(zahlen - foerderung)), bw - RAND - 1, y + 7, { align: "right" });
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(7);
+    pdf.setTextColor(...GRAU);
+    pdf.text("Vorbehaltlich der Zusage der Förderstelle — nicht vom Rechnungsbetrag abgezogen.", bw - RAND - 1, y + 12, { align: "right" });
+    pdf.setTextColor(0, 0, 0);
+    y += 22;
+  }
 
   // ── Steuerhinweis ──
   const hinweis = (fettZeile: string | null, zeilen: string[]) => {

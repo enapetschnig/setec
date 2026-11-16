@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { BadgePercent, ChevronLeft, Percent, ChevronRight, Loader2, Package, Plus, ScanBarcode, Search, SearchX, Sparkles, Upload } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Seite } from "@/components/PageHeader";
+import { KatalogReiter } from "@/components/stamm/KatalogReiter";
 import { Leer, StatusPille } from "@/components/Bausteine";
 import { useIstPc } from "@/components/AppLayout";
 import { useVerzoegert } from "@/components/material/ArtikelSuche";
@@ -198,7 +199,7 @@ export default function ArtikelSeite() {
 
   return (
     <Seite
-      titel="Artikel"
+      titel="Artikel & Leistungen"
       untertitel={anzahlAktiv != null ? `${zahl(anzahlAktiv)} aktive Artikel` : undefined}
       breit
       aktionen={
@@ -229,6 +230,7 @@ export default function ArtikelSeite() {
         </>
       }
     >
+      <KatalogReiter />
       <div className="space-y-3">
         <div className="flex gap-2">
           <div className="relative flex-1">

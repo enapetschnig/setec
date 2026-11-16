@@ -69,7 +69,7 @@ SETEC-Pakete (Lohnkosten, Angebot online als anon, Lager, Aufgaben, Dokumente).
   mit demselben Passwort anmelden (Doppeltipp). **Jedes neue Konto ist sofort
   aktiver Monteur** (`handle_new_user`, ohne Ausnahme — Chef-Adressen im Trigger wären ein Loch, weil E-Mails nicht bestätigt werden; Migration `20261116130000`) —
   die Freischaltung kommt später wieder. Chef-Rolle, Team, Farbe danach unter
-  Einstellungen → Mitarbeiter. **Sperren** setzt `gesperrt = true` (der
+  Menü „Mitarbeiter & Zugänge“ (`/mitarbeiter`). **Sperren** setzt `gesperrt = true` (der
   Trigger nimmt `aktiv` weg); „Freischalten“ hebt die Sperre auf.
 - **Passwort vergessen** (`/auth?modus=vergessen`): E-Mail eintragen →
   `resetPasswordForEmail` mit `redirectTo = <origin>/passwort-neu`. Gleiche
@@ -85,7 +85,7 @@ SETEC-Pakete (Lohnkosten, Angebot online als anon, Lager, Aufgaben, Dokumente).
   E-Mail (Benutzername): der Chef vergibt ein vorläufiges Passwort
   (`passwort_setzen()`), `passwort_neu` verlangt beim nächsten Anmelden ein
   eigenes (`ProtectedRoute` → `ChangePasswordDialog forced`).
-- **Einladen** (Einstellungen → Mitarbeiter, `components/einladung/Einladungen.tsx`):
+- **Einladen** (Menü „Mitarbeiter & Zugänge“ (`/mitarbeiter`), `components/einladung/Einladungen.tsx`):
   Link `KUNDE.appAdresse + /start` mit QR-Code, „Aushang drucken“
   (`/aushang`, eine A4-Seite), WhatsApp, E-Mail, Kopieren, Teilen und
   **per SMS**: Edge Function `einladung-sms` (nur Chef, fester Text ohne
@@ -485,8 +485,25 @@ Bewusst einfach, kein eigenes Kalkulationsblatt:
   Position (`ek_preis`, `minuten`), nie auf dem PDF.
 - **Kalkulationskasten** unter den Summen (nur am Bildschirm): Stunden,
   Material-Einkauf, was nach Material bleibt und je Arbeitsstunde
-  (`rohertrag`). „Alle Preise ± %“ für Nachlass oder Zuschlag
-  (`umProzent`).
+  (`rohertrag`).
+- **Knöpfe im Editor** nur drei: „+ Artikel“ (ein Dialog sucht Leistungen
+  und Artikel zugleich, sonst freie Position), „+ Arbeitszeit“, „Diktieren“;
+  Seltenes unter „Mehr“ (Titel/Raum, Hinweistext, aus Projekt/Vorlage,
+  Artikel nach Kategorie, Material per KI). Jede Zeile hat vorne einen
+  Griff zum Ziehen (@dnd-kit; ein Titel nimmt seinen Block mit, `ziehen`).
+- **Arbeitszeit**: Satz je Rolle im Dialog änderbar, neue Rolle gleich dort
+  (auf Wunsch in `firma.stundensaetze` gemerkt); im Zeilenmenü „Stundensatz
+  tauschen“.
+- **Nachlass** (Summenblock): eine Position `art = 'nachlass'` (% oder €,
+  `prozent`), immer am Ende, Betrag rechnet `nachlassRechnen` neu; das PDF
+  zeigt „Summe Positionen“ → „abzüglich Nachlass 5 %“ → Netto.
+- **Zusammenstellung**: ab zwei Titeln/Räumen je Titel die Summe am Ende
+  (Editor, PDF, Online-Angebot; `titelUebersicht`).
+- **Mögliche Förderung** (`belege.foerderung_text/_betrag`): nur Hinweis
+  im grauen Kasten „Ihre Kosten nach Förderung“, nie abgezogen.
+- **Im Projekt verbraucht** (Rechnung mit Projekt, `ProjektVerbrauch`):
+  Stunden je Mitarbeiter und Material je Artikel — hier, auf anderer
+  Rechnung, noch offen; „Offenes übernehmen“.
 - **Aufschlag je Position direkt in der Tabelle** (PC ab 1280 px): Spalten
   EK | Aufschlag % | EP netto hängen zusammen (`mitEinkauf`, `mitAufschlag`,
   `aufschlagVon` in `components/belege/editor.ts`): Aufschlag ändern →
@@ -495,13 +512,13 @@ Bewusst einfach, kein eigenes Kalkulationsblatt:
   Spalten ausblendbar („EK/Aufschlag ausblenden“, `elektro.beleg.kalk`), kleiner
   sonst als „EK 12,34 · +35 %“ unter dem Preis; im Positionsdialog Aufschlag
   ±5 und der Preis rechnet live mit (und umgekehrt).
-  „Aufschläge“ im Summenblock setzt Material-Aufschlag und Stundensatz für den
-  ganzen Beleg (`aufschlaegeSetzen`; Arbeit nur, wo noch der alte Satz steht).
+  „Aufschläge“ im Summenblock setzt Material-Aufschlag und Stundensatz nur
+  für die angehakten Positionen (`aufschlaegeSetzen`; Arbeit nur, wo noch der alte Satz steht).
 - **Material per KI** (`KiMaterialDialog`): „PV-Anlage 9 kW mit Speicher“
   sagen oder tippen → die KI schlägt Komponenten mit Menge vor, je Zeile ein
   Artikel aus dem eigenen Stamm samt Alternativen oder „Ohne Artikel“; nichts
   ist übernommen, bevor man es abhakt. Erfindet keine Artikelnummern.
-- **Artikelkatalog** (`KatalogDialog`, Knopf neben „Material per KI“ — eine
+- **Artikel nach Kategorie** (`KatalogDialog`, unter „Mehr“ — eine
   Option, das Angebot geht weiter ganz normal): Kacheln je Kategorie mit
   Anzahl → Hersteller und Programm (Warengruppe des Lieferanten) als Filter →
   Artikelliste mit Preis und ＋/−/Menge; gesammelt wird im Korb, „n übernehmen“
@@ -715,8 +732,14 @@ Ende nach 19, über 10 h, Überschneidung, Lücke über 1 h. Auch als CSV.
 
 ### Startseite und Menü
 
+Monteur am Handy: nur Täglich (Stunden, Scannen, Regieberichte), Baustelle
+(Projekte, Aufgaben, Lieferscheine), Sonstiges (Mein Konto, Änderungswünsche)
+— `START_MONTEUR` in `pages/Index.tsx`. Kontakte, Plantafel, Lager, Fuhrpark,
+Anlagen, Dokumente, Artikel sind `nurChef` im Menü. Das Büro hat eigene Punkte
+„Artikel & Leistungen“ (ein Katalog, Reiter) und „Mitarbeiter & Zugänge“.
+
 PC: unter dem Gruß die Schnellaktionen Neues Projekt, Neue Rechnung, Termin
-eintragen; dann „Zu erledigen“ (online angenommen, Rückfragen, überfällig,
+eintragen; dann „Zu erledigen“ (nur am PC — am Handy ist die Startseite nur das Menü) (online angenommen, Rückfragen, überfällig,
 mahnen, Rechnungen prüfen/überweisen, Skonto läuft ab, Fuhrpark fällig,
 Schäden, zuzuordnen …), darunter „Laufende Projekte“ (ohne abgeschlossene),
 dann Einsatz und Schnell festhalten. „Zu erledigen“ ordnet `lib/zuErledigen.ts`:
@@ -789,7 +812,7 @@ Migration `20261113114000_projekte_foerderung_planung_saetze.sql`, Bausteine in 
   Pauschale rechnet Angebot − Lohnkosten − Material-EK − Fremdleistung. Garantie kostet, bringt nichts;
   Überstunden ×1,5/×2 auf beiden Seiten. Auswertung → Nachkalkulation zeigt dieselbe Rechnung je Projekt
   (Spalte „davon Regie“, Stunden „ohne Regie / angeboten“).
-- **Lohnkosten und Stundensatz je Mitarbeiter** (Einstellungen → Mitarbeiter, Knopf „€“): Zeilen mit
+- **Lohnkosten und Stundensatz je Mitarbeiter** (Menü „Mitarbeiter & Zugänge“ (`/mitarbeiter`), Knopf „€“): Zeilen mit
   „gültig ab“; jede Stunde rechnet mit dem Satz ihres Tages (`satzAm`). Lohnkosten: Person, sonst
   `firma.kostensatz`. Verrechnungssatz: Person, sonst Lohnart, sonst Projekt-/Betriebssatz — so auch in
   „Aus dem Projekt übernehmen“ (Rechnung, Regie); wer einen eigenen Satz hat, bekommt eine eigene Zeile

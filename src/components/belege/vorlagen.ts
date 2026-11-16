@@ -50,7 +50,7 @@ const ARTEN: PositionsArt[] = ["titel", "leistung", "artikel", "arbeit", "materi
  */
 export function vorlageAusEditor(positionen: EditorPosition[]): VorlagePosition[] {
   return positionen
-    .filter((p) => p.art !== "abzug")
+    .filter((p) => p.art !== "abzug" && p.art !== "nachlass")
     .map((p) => {
       const leer = ohneBetrag(p);
       return {

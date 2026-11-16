@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { ClipboardList, Plus, Search, SearchX } from "lucide-react";
 import { Seite } from "@/components/PageHeader";
+import { KatalogReiter } from "@/components/stamm/KatalogReiter";
 import { Leer, StatusPille } from "@/components/Bausteine";
 import { useIstPc } from "@/components/AppLayout";
 import { LeistungDialog } from "@/components/stamm/LeistungDialog";
@@ -41,7 +42,7 @@ export default function LeistungenSeite() {
 
   return (
     <Seite
-      titel="Leistungskatalog"
+      titel="Artikel & Leistungen"
       untertitel={katalog.length ? `${zahl(katalog.length)} Leistungen · ${zahl(anzahlKategorien)} Kategorien` : undefined}
       breit
       aktionen={
@@ -50,6 +51,7 @@ export default function LeistungenSeite() {
         </Button>
       }
     >
+      <KatalogReiter />
       {katalog.length > 0 && (
         <div className="space-y-2">
           <div className="relative">

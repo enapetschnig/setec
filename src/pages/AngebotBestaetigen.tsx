@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { UnterschriftFeld, type UnterschriftHandle } from "@/components/regie/UnterschriftFeld";
-import { neueId, ohneBetrag, positionsNummern, zwischensummen } from "@/components/belege/editor";
+import { nachlassText, neueId, ohneBetrag, positionsNummern, titelUebersicht, zwischensummen } from "@/components/belege/editor";
 import { inAppBrowser, tokenGueltig, unterschriftPfad, ZUSTAND_TEXT, type OeffentlichZustand } from "@/components/belege/bestaetigung";
 import { DATEIEN_BUCKET } from "@/components/belege/datenblattLogik";
 import { belegPdfErstellen, kvHinweis } from "@/lib/belegPdf";
@@ -23,7 +23,7 @@ import { logoAdresse } from "@/lib/upload";
 import type { Beleg, Firma } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-type Pos = { art: string; bezeichnung: string; langtext: string | null; menge: number; einheit: string; einzelpreis: number };
+type Pos = { art: string; bezeichnung: string; langtext: string | null; menge: number; einheit: string; einzelpreis: number; prozent?: number | null };
 type Daten = {
   zustand: OeffentlichZustand;
   stand?: string;
@@ -80,7 +80,10 @@ export default function AngebotBestaetigen() {
 
 function Angebot({ daten, token, neuLaden }: { daten: Daten; token: string; neuLaden: () => void }) {
   const b = daten.beleg!;
-  const positionen = daten.positionen ?? [];
+  const allePositionen = daten.positionen ?? [];
+  // Nachlass steht bei den Summen, nicht in der Liste
+  const positionen = allePositionen.filter((p) => p.art !== "nachlass");
+  const nachlass = allePositionen.find((p) => p.art === "nachlass");
   const firma = daten.firma;
   const [schritt, setSchritt] = useState<Schritt>("ansehen");
   const [pdfLaeuft, setPdfLaeuft] = useState(false);
@@ -90,7 +93,7 @@ function Angebot({ daten, token, neuLaden }: { daten: Daten; token: string; neuL
   const pdf = async () => {
     setPdfLaeuft(true);
     try {
-      const { blob, dateiname } = await belegPdfErstellen({ beleg: b, positionen, firma: firma as Firma, projekt: daten.projekt ?? null });
+      const { blob, dateiname } = await belegPdfErstellen({ beleg: b, positionen: allePositionen, firma: firma as Firma, projekt: daten.projekt ?? null });
       await pdfTeilenOderLaden(blob, dateiname);
     } catch (e) {
       toast.error(`PDF nicht erstellt: ${(e as Error).message}`);
@@ -107,6 +110,7 @@ function Angebot({ daten, token, neuLaden }: { daten: Daten; token: string; neuL
   const gesamt = positionen.map((p) => (ohneBetrag(p) ? 0 : runden2(Number(p.menge) * Number(p.einzelpreis))));
   const nummern = positionsNummern(positionen.map((p) => p.art));
   const zs = zwischensummen(positionen.map((p, i) => ({ art: p.art, gesamt: gesamt[i] })));
+  const uebersicht = titelUebersicht(positionen.map((p, i) => ({ art: p.art, bezeichnung: p.bezeichnung, gesamt: gesamt[i] })));
   const zustand = schritt === "fertig" ? "angenommen" : daten.zustand;
 
   return (
@@ -169,10 +173,31 @@ function Angebot({ daten, token, neuLaden }: { daten: Daten; token: string; neuL
                 </li>
               ))}
             </ul>
+            {uebersicht.length > 0 && (
+              <dl className="space-y-1 border-t px-4 py-3 text-sm">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Zusammenstellung</p>
+                {uebersicht.map((u) => (
+                  <div key={`${u.nummer}-${u.name}`} className="flex justify-between gap-3"><dt className="min-w-0 truncate">{u.nummer} {u.name}</dt><dd className="zahl shrink-0">{euro(u.summe)}</dd></div>
+                ))}
+              </dl>
+            )}
             <dl className="space-y-1 border-t bg-muted/30 px-4 py-3 text-sm">
+              {nachlass && (
+                <>
+                  <div className="flex justify-between"><dt className="text-muted-foreground">Summe Positionen</dt><dd className="zahl">{euro(runden2(gesamt.reduce((a, x) => a + x, 0)))}</dd></div>
+                  <div className="flex justify-between"><dt className="text-muted-foreground">abzüglich {nachlassText(nachlass)}</dt><dd className="zahl">{euro(runden2(Number(nachlass.menge) * Number(nachlass.einzelpreis)))}</dd></div>
+                </>
+              )}
               <div className="flex justify-between"><dt className="text-muted-foreground">Summe netto</dt><dd className="zahl">{euro(Number(b.netto))}</dd></div>
               {!ohneUst && <div className="flex justify-between"><dt className="text-muted-foreground">USt {zahl(Number(b.ust_satz))} %</dt><dd className="zahl">{euro(Number(b.ust))}</dd></div>}
               <div className="flex justify-between border-t pt-1.5 text-base font-bold"><dt>Gesamt</dt><dd className="zahl">{euro(Number(ohneUst ? b.netto : b.brutto))}</dd></div>
+              {Number(b.foerderung_betrag) > 0 && (
+                <div className="mt-2 space-y-1 rounded-md bg-card px-3 py-2">
+                  <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Mögliche Förderung{b.foerderung_text ? ` (${b.foerderung_text})` : ""}</dt><dd className="zahl shrink-0">{euro(-Number(b.foerderung_betrag))}</dd></div>
+                  <div className="flex justify-between gap-3 font-semibold"><dt>Ihre Kosten nach Förderung</dt><dd className="zahl">{euro(runden2(Number(ohneUst ? b.netto : b.brutto) - Number(b.foerderung_betrag)))}</dd></div>
+                  <p className="text-[11px] text-muted-foreground">Vorbehaltlich der Zusage der Förderstelle.</p>
+                </div>
+              )}
             </dl>
           </section>
           {b.schlusstext && <p className="whitespace-pre-wrap px-1 text-[15px] leading-relaxed">{b.schlusstext}</p>}

@@ -13,7 +13,7 @@ import type { Artikel, Beleg, Firma, Kunde, Leistung, Position } from "@/lib/typ
  */
 
 export type BelegTyp = "angebot" | "rechnung";
-export type PositionsArt = "titel" | "leistung" | "artikel" | "arbeit" | "material" | "pauschale" | "text" | "abzug";
+export type PositionsArt = "titel" | "leistung" | "artikel" | "arbeit" | "material" | "pauschale" | "text" | "abzug" | "nachlass";
 
 export const ART_NAME: Record<PositionsArt, string> = {
   titel: "Titel / Raum",
@@ -24,6 +24,7 @@ export const ART_NAME: Record<PositionsArt, string> = {
   pauschale: "Pauschale",
   text: "Hinweistext",
   abzug: "Abzug Teilrechnung",
+  nachlass: "Nachlass",
 };
 
 /** Herkunft einer Position — beim Löschen gibt der Trigger diese Buchungen frei */
@@ -44,6 +45,8 @@ export type EditorPosition = {
   artikel_id: string | null;
   leistung_id: string | null;
   quelle: Quelle | null;
+  /** nur Nachlass: Prozent der Summe davor (null = fester Betrag) */
+  prozent: number | null;
 };
 
 /** Leistung aus dem Katalog samt Material — für Preis und Einsatz-EK */
@@ -141,7 +144,7 @@ export function quellenIds(positionen: Pick<EditorPosition, "quelle">[]): Quelle
 
 // ── Umwandeln: Datenbank ↔ Editor ──────────────────────────────────────
 
-const ARTEN: PositionsArt[] = ["titel", "leistung", "artikel", "arbeit", "material", "pauschale", "text", "abzug"];
+const ARTEN: PositionsArt[] = ["titel", "leistung", "artikel", "arbeit", "material", "pauschale", "text", "abzug", "nachlass"];
 
 export function positionAusDb(p: Position): EditorPosition {
   return {
@@ -157,6 +160,7 @@ export function positionAusDb(p: Position): EditorPosition {
     artikel_id: p.artikel_id,
     leistung_id: p.leistung_id,
     quelle: quelleLesen(p.quelle),
+    prozent: p.prozent == null ? null : Number(p.prozent),
   };
 }
 
@@ -178,6 +182,7 @@ export function positionZuDb(p: EditorPosition, belegId: string, pos: number) {
     artikel_id: p.artikel_id,
     leistung_id: p.leistung_id,
     quelle: quelleJson(p.quelle),
+    prozent: p.art === "nachlass" ? p.prozent ?? null : null,
   };
 }
 
@@ -197,6 +202,7 @@ export function leerePosition(art: PositionsArt, werte: Partial<EditorPosition> 
     artikel_id: null,
     leistung_id: null,
     quelle: null,
+    prozent: null,
     ...werte,
   };
 }
@@ -393,6 +399,38 @@ export function verschieben(positionen: EditorPosition[], id: string, richtung: 
   ];
 }
 
+/**
+ * Ziehen und Ablegen: Position `vonId` an die Stelle von `zuId`. Eine
+ * Position wandert einfach dorthin (auch in einen anderen Raum); ein Titel
+ * nimmt seine ganze Gruppe mit und landet vor bzw. nach der Gruppe des Ziels.
+ */
+export function ziehen(positionen: EditorPosition[], vonId: string, zuId: string): EditorPosition[] {
+  const i = positionen.findIndex((p) => p.id === vonId);
+  const j = positionen.findIndex((p) => p.id === zuId);
+  if (i < 0 || j < 0 || i === j) return positionen;
+  if (positionen[i].art !== "titel") {
+    const liste = [...positionen];
+    const [p] = liste.splice(i, 1);
+    liste.splice(j, 0, p);
+    return liste;
+  }
+  const ende = gruppenEnde(positionen, vonId);
+  if (j > i && j < ende) return positionen; // in die eigene Gruppe: nichts zu tun
+  const block = positionen.slice(i, ende);
+  const rest = [...positionen.slice(0, i), ...positionen.slice(ende)];
+  const zielTitel = titelVon(positionen, zuId);
+  let ziel: number;
+  if (j > i) {
+    // nach unten: hinter die Gruppe des Ziels
+    ziel = zielTitel ? gruppenEnde(rest, zielTitel) : rest.findIndex((p) => p.art === "titel");
+    if (ziel < 0) ziel = rest.length;
+  } else {
+    // nach oben: vor die Gruppe des Ziels (ohne Titel: ganz an den Anfang)
+    ziel = zielTitel ? rest.findIndex((p) => p.id === zielTitel) : 0;
+  }
+  return [...rest.slice(0, ziel), ...block, ...rest.slice(ziel)];
+}
+
 export const kannVerschieben = (positionen: EditorPosition[], id: string, richtung: -1 | 1) =>
   verschieben(positionen, id, richtung) !== positionen;
 
@@ -437,7 +475,7 @@ export function positionsNummern(arten: string[]): string[] {
   let titel: number | null = null;
   let unter = 0;
   return arten.map((art) => {
-    if (art === "text" || art === "abzug") return "";
+    if (art === "text" || art === "abzug" || art === "nachlass") return "";
     if (art === "titel") {
       oben += 1;
       titel = oben;
@@ -461,12 +499,76 @@ export function zwischensummen(zeilen: { art: string; gesamt: number }[]): Recor
     if (z.art === "titel") {
       titel = i;
       s[i] = 0;
-    } else if (titel != null && z.art !== "abzug") {
+    } else if (titel != null && z.art !== "abzug" && z.art !== "nachlass") {
       s[titel] = runden2(s[titel] + z.gesamt);
     }
   });
   return s;
 }
+
+/**
+ * Zusammenstellung am Ende des Dokuments: jeder Titel (Raum) mit seiner
+ * Summe — erst ab zwei Titeln. Positionen vor dem ersten Titel stehen als
+ * „Weitere Positionen“ dabei, damit die Liste aufs Netto aufgeht.
+ */
+export function titelUebersicht(zeilen: { art: string; bezeichnung: string; gesamt: number }[]): { nummer: string; name: string; summe: number }[] {
+  if (zeilen.filter((z) => z.art === "titel").length < 2) return [];
+  const nummern = positionsNummern(zeilen.map((z) => z.art));
+  const zs = zwischensummen(zeilen);
+  const erster = zeilen.findIndex((z) => z.art === "titel");
+  const davor = runden2(zeilen.slice(0, erster).reduce((s, z) => s + (z.art === "text" || z.art === "abzug" || z.art === "nachlass" ? 0 : z.gesamt), 0));
+  const liste = zeilen.flatMap((z, i) => (z.art === "titel" ? [{ nummer: nummern[i], name: z.bezeichnung.trim() || "Ohne Namen", summe: zs[i] ?? 0 }] : []));
+  return davor ? [{ nummer: "", name: "Weitere Positionen", summe: davor }, ...liste] : liste;
+}
+
+// ── Nachlass ────────────────────────────────────────────────────────────
+
+/**
+ * Ein Nachlass ist EINE Zeile am Ende (vor den Abzügen einer
+ * Schlussrechnung) und steht so auch im Dokument — statt alle Einzelpreise
+ * umzuschreiben. Mit Prozent folgt der Betrag der Summe davor.
+ */
+export const istNachlass = (p: { art: string }) => p.art === "nachlass";
+
+/** Summe der Positionen, auf die sich der Nachlass bezieht (ohne Abzüge) */
+export function summeVorNachlass(positionen: EditorPosition[]): number {
+  return runden2(positionen.reduce((s, p) => (ohneBetrag(p) || p.art === "abzug" || istNachlass(p) ? s : s + positionGesamt(p)), 0));
+}
+
+/** Nachlass an seinen Platz und (bei Prozent) neu gerechnet; unverändert = dieselbe Liste */
+export function nachlassRechnen(positionen: EditorPosition[]): EditorPosition[] {
+  const n = positionen.find(istNachlass);
+  if (!n) return positionen;
+  const rest = positionen.filter((p) => !istNachlass(p));
+  const betrag = n.prozent != null ? runden2((summeVorNachlass(rest) * n.prozent) / 100) : Math.abs(preisVon(n));
+  const neu: EditorPosition = { ...n, menge: "1", einheit: "Psch", einzelpreis: preisText(-betrag), quelle: null };
+  let ziel = rest.length;
+  while (ziel > 0 && rest[ziel - 1].art === "abzug") ziel--;
+  const liste = [...rest.slice(0, ziel), neu, ...rest.slice(ziel)];
+  const gleich = liste.length === positionen.length && liste.every((p, i) => p === positionen[i] || (p === neu && positionen[i] === n && n.einzelpreis === neu.einzelpreis && n.menge === "1" && n.einheit === "Psch"));
+  return gleich ? positionen : liste;
+}
+
+/** Nachlass setzen (Prozent ODER Betrag) oder mit null entfernen */
+export function nachlassSetzen(
+  positionen: EditorPosition[],
+  w: { text: string; prozent: number | null; betrag: number | null } | null,
+): EditorPosition[] {
+  const alt = positionen.find(istNachlass);
+  const ohne = positionen.filter((p) => !istNachlass(p));
+  if (!w || ((w.prozent ?? 0) <= 0 && (w.betrag ?? 0) <= 0)) return ohne;
+  const n = leerePosition("nachlass", {
+    id: alt?.id ?? neueId(),
+    bezeichnung: w.text.trim() || "Nachlass",
+    prozent: w.prozent != null && w.prozent > 0 ? Math.min(100, w.prozent) : null,
+    einzelpreis: preisText(-(w.betrag ?? 0)),
+  });
+  return nachlassRechnen([...ohne, n]);
+}
+
+/** „Nachlass 5 %“ — so steht die Zeile im Dokument */
+export const nachlassText = (p: { bezeichnung: string; prozent?: number | null }) =>
+  `${p.bezeichnung.trim() || "Nachlass"}${p.prozent ? ` ${zahlText(p.prozent, 2)} %` : ""}`;
 
 // ── Kopfdaten ───────────────────────────────────────────────────────────
 
@@ -494,6 +596,9 @@ export type Kopf = {
   reverse_charge: boolean;
   /** nur Angebote: Kostenvoranschlag mit Gewähr (§ 1170a Abs. 1 ABGB) */
   kv_verbindlich: boolean;
+  /** Mögliche Förderung — steht nur zur Info unter der Summe */
+  foerderung_text: string;
+  foerderung_betrag: number | null;
 };
 
 export function kopfNeu(typ: BelegTyp, firma: Firma | null | undefined, heute: string): Kopf {
@@ -520,6 +625,8 @@ export function kopfNeu(typ: BelegTyp, firma: Firma | null | undefined, heute: s
     ust_satz: 20,
     reverse_charge: false,
     kv_verbindlich: false,
+    foerderung_text: "",
+    foerderung_betrag: null,
   };
 }
 
@@ -547,6 +654,8 @@ export function kopfAusBeleg(b: Beleg): Kopf {
     ust_satz: Number(b.ust_satz ?? 20),
     reverse_charge: !!b.reverse_charge,
     kv_verbindlich: !!b.kv_verbindlich,
+    foerderung_text: b.foerderung_text ?? "",
+    foerderung_betrag: b.foerderung_betrag == null ? null : Number(b.foerderung_betrag),
   };
 }
 
@@ -577,6 +686,9 @@ export function kopfZuDb(k: Kopf) {
     ust_satz: k.ust_satz,
     reverse_charge: k.reverse_charge,
     kv_verbindlich: k.typ === "angebot" && k.kv_verbindlich,
+    // ?? — eine Sicherung im Gerät von vor dem 16.11.2026 kennt die Felder nicht
+    foerderung_text: oderNull(k.foerderung_text ?? ""),
+    foerderung_betrag: k.foerderung_betrag && k.foerderung_betrag > 0 ? runden2(k.foerderung_betrag) : null,
   };
 }
 
@@ -616,7 +728,7 @@ export function fertigHinweise(
   const rechnung = k.typ === "rechnung";
   const rc = !!k.reverse_charge && !firma?.kleinunternehmer;
   const empfUid = !!k.empf_uid.trim();
-  const ohneBetragAnzahl = positionen.filter((p) => !ohneBetrag(p) && (mengeVon(p) === 0 || preisVon(p) === 0)).length;
+  const ohneBetragAnzahl = positionen.filter((p) => !ohneBetrag(p) && p.art !== "nachlass" && (mengeVon(p) === 0 || preisVon(p) === 0)).length;
   return [
     ohneBetragAnzahl > 0 && `${ohneBetragAnzahl} ${ohneBetragAnzahl === 1 ? "Position" : "Positionen"} ohne Betrag (Menge oder Preis 0)`,
     rc && !empfUid && "Reverse Charge, aber keine UID des Empfängers",

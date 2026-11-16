@@ -40,7 +40,9 @@ describe("Navigation", () => {
     expect(finde("kalender")).toContain("Plantafel");
     expect(finde("Lohnzettel")).toContain("Dokumente");
     expect(finde("kunde")).toContain("Kontakte");
-    expect(finde("Mitarbeiter")).toContain("Einstellungen");
+    expect(finde("Mitarbeiter")).toContain("Mitarbeiter & Zugänge");
+    expect(finde("Admin")).toEqual(["Mitarbeiter & Zugänge"]);
+    expect(finde("Leistungskatalog")).toEqual(["Artikel & Leistungen"]);
     expect(finde("Pickerl")).toEqual(["Fuhrpark"]);
   });
 

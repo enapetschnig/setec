@@ -1,25 +1,30 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import {
-  ArrowDown, ArrowUp, Copy, CornerDownRight, FileText, Link2, Minus, MoreVertical, Pencil, Plus, Rows3, Trash2,
+  DndContext, KeyboardSensor, PointerSensor, TouchSensor, closestCenter, useSensor, useSensors, type DragEndEvent,
+} from "@dnd-kit/core";
+import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
+  ArrowDown, ArrowUp, Clock, Copy, CornerDownRight, FileText, GripVertical, Link2, Minus, MoreVertical, Pencil, Plus, Rows3, Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
   AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Leer } from "@/components/Bausteine";
 import { euro, zahl } from "@/lib/format";
-import { aufschlagAus } from "@/lib/kalkulation";
+import { arbeitszeitText, aufschlagAus, type Lohnart } from "@/lib/kalkulation";
 import { RAUM_VORSCHLAEGE } from "@/lib/sprachParser";
 import { EINHEITEN } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import {
-  aufschlagVon, duplizieren, entfernen, gruppenGroesse, kannVerschieben, mengeVon, mitAufschlag, mitEinkauf, ohneBetrag, positionGesamt,
-  positionsNummern, preisVon, preisText, titelPosition, verschieben, zahlText, zwischensummen, type EditorPosition,
+  aufschlagVon, duplizieren, entfernen, gruppenGroesse, istNachlass, kannVerschieben, mengeVon, mitAufschlag, mitEinkauf, ohneBetrag, positionGesamt,
+  positionsNummern, preisVon, preisText, titelPosition, verschieben, zahlText, ziehen, zwischensummen, type EditorPosition,
 } from "./editor";
 import { ZahlFeld } from "./Eingabezeile";
 import { PositionDialog } from "./PositionDialog";
@@ -30,13 +35,35 @@ type Setzen = (f: (alt: EditorPosition[]) => EditorPosition[]) => void;
 const langtextZeilen = (t: string) =>
   Math.min(6, Math.max(2, t.split("\n").reduce((n, z) => n + Math.max(1, Math.ceil(z.length / 90)), 0)));
 
+/** Eine Zeile, die sich am Griff ziehen lässt (Handy: Finger auf den Griff, PC: Maus) */
+function Sortierbar({ id, an, children }: {
+  id: string;
+  an: boolean;
+  children: (s: { ref: (el: HTMLElement | null) => void; style: CSSProperties; griff: ReactNode }) => ReactNode;
+}) {
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id, disabled: !an });
+  const style: CSSProperties = {
+    transform: CSS.Translate.toString(transform), transition, position: "relative",
+    zIndex: isDragging ? 20 : undefined, opacity: isDragging ? 0.9 : undefined,
+  };
+  const griff = an ? (
+    <button ref={setActivatorNodeRef} type="button" {...attributes} {...listeners} aria-label="Ziehen zum Verschieben" title="Ziehen zum Verschieben"
+      className="flex h-9 w-7 shrink-0 cursor-grab touch-none items-center justify-center rounded text-muted-foreground hover:bg-muted active:cursor-grabbing">
+      <GripVertical className="h-4 w-4" />
+    </button>
+  ) : null;
+  return <>{children({ ref: setNodeRef, style, griff })}</>;
+}
+
 /**
  * Positionsliste: am Handy Karten mit großem −/+, am PC eine Tabelle mit
  * Eingabefeldern. Titel (Räume) gliedern; ein angetippter Titel ist der
- * „aktive“ — neue Leistungen landen darunter.
+ * „aktive“ — neue Leistungen landen darunter. Vorne an jeder Zeile ein Griff
+ * zum Verschieben; ein Titel nimmt seinen Raum mit. Der Nachlass steht nicht
+ * in der Liste, sondern bei den Summen.
  */
 export function PositionenEditor({
-  positionen, setPositionen, bearbeitbar, pc, aktiverTitel, setAktiverTitel, stundensatz, kalk = true, materialAufschlag = 0,
+  positionen: allePositionen, setPositionen: setAlle, bearbeitbar, pc, aktiverTitel, setAktiverTitel, stundensatz, kalk = true, materialAufschlag = 0, lohnarten = [],
 }: {
   positionen: EditorPosition[];
   setPositionen: Setzen;
@@ -50,7 +77,21 @@ export function PositionenEditor({
   kalk?: boolean;
   /** Aufschlag des Betriebs — für den ersten Einkaufspreis einer Position ohne Preis */
   materialAufschlag?: number;
+  /** Stundensätze zum Tauschen an einer Arbeitszeit-Position */
+  lohnarten?: Lohnart[];
 }) {
+  // Der Nachlass bleibt unsichtbar am Ende — alles hier arbeitet mit dem Rest
+  const positionen = useMemo(() => allePositionen.filter((p) => !istNachlass(p)), [allePositionen]);
+  const setPositionen: Setzen = (f) => setAlle((alt) => [...f(alt.filter((p) => !istNachlass(p))), ...alt.filter(istNachlass)]);
+  const sensoren = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 120, tolerance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+  const abgelegt = (e: DragEndEvent) => {
+    if (e.over && e.active.id !== e.over.id) setPositionen((alt) => ziehen(alt, String(e.active.id), String(e.over!.id)));
+  };
+  const ziehbar = (p: EditorPosition) => bearbeitbar && p.art !== "abzug";
   const satz = stundensatz ?? 0;
   const ersetzen = (id: string, f: (p: EditorPosition) => EditorPosition) =>
     setPositionen((alt) => alt.map((p) => (p.id === id ? f(p) : p)));
@@ -80,7 +121,8 @@ export function PositionenEditor({
     setPositionen((alt) => entfernen(alt, p.id));
     if (aktiverTitel === p.id) setAktiverTitel(null);
   };
-  const aktion = (p: EditorPosition, was: Aktion) => {
+  const aktion = (p: EditorPosition, was: Aktion | Lohnart) => {
+    if (typeof was === "object") { aendern(p.id, { bezeichnung: arbeitszeitText(was), einzelpreis: preisText(was.satz) }); return; }
     if (was === "bearbeiten") setBearbeiten(p);
     else if (was === "hoch") setPositionen((alt) => verschieben(alt, p.id, -1));
     else if (was === "runter") setPositionen((alt) => verschieben(alt, p.id, 1));
@@ -160,7 +202,8 @@ export function PositionenEditor({
         <table className="w-full text-sm">
           <thead className="border-b bg-muted/60 text-xs text-muted-foreground">
             <tr>
-              <th className="w-14 py-2.5 pl-4 text-left font-medium">Pos.</th>
+              {bearbeitbar && <th className="w-8" aria-label="Verschieben" />}
+              <th className={cn("w-14 py-2.5 text-left font-medium", bearbeitbar ? "pl-1" : "pl-4")}>Pos.</th>
               <th className="py-2.5 pr-2 text-left font-medium">Bezeichnung</th>
               <th className="w-20 py-2.5 pr-2 text-right font-medium">Menge</th>
               <th className="w-20 py-2.5 pr-2 text-left font-medium">Einheit</th>
@@ -168,9 +211,11 @@ export function PositionenEditor({
               {kalkSpalten && <th className={cn(kalkZelle, "w-24 py-2.5 pr-2 text-right font-medium")} title="Aufschlag auf den Einkauf — nur intern">Aufschlag</th>}
               <th className="w-28 py-2.5 pr-2 text-right font-medium">EP netto</th>
               <th className="w-28 py-2.5 pr-3 text-right font-medium">Gesamt</th>
-              {bearbeitbar && <th className="w-[6.5rem] py-2.5 pr-3" aria-label="Aktionen" />}
+              {bearbeitbar && <th className="w-12 py-2.5 pr-3" aria-label="Aktionen" />}
             </tr>
           </thead>
+          <DndContext sensors={sensoren} collisionDetection={closestCenter} onDragEnd={abgelegt}>
+          <SortableContext items={positionen.map((p) => p.id)} strategy={verticalListSortingStrategy}>
           <tbody>
             {positionen.map((p, i) => {
               const titel = p.art === "titel";
@@ -179,12 +224,15 @@ export function PositionenEditor({
               const langtextSichtbar = !titel && (!!p.langtext || langOffen.has(p.id));
               const auf = aufschlagVon(p, satz);
               return (
+                <Sortierbar key={p.id} id={p.id} an={ziehbar(p)}>{({ ref, style, griff }) => (
                 <tr
-                  key={p.id}
-                  className={cn("border-b align-top last:border-b-0", titel && "bg-muted/40", aktiv && "bg-primary-soft")}
+                  ref={ref}
+                  style={style}
+                  className={cn("border-b bg-card align-top last:border-b-0", titel && "bg-muted/40", aktiv && "bg-primary-soft")}
                   onClick={titel && bearbeitbar ? () => setAktiverTitel(p.id) : undefined}
                 >
-                  <td className={cn("zahl py-2.5 pl-4 text-xs text-muted-foreground", titel && "pt-3.5 text-sm font-semibold text-foreground")}>{nummern[i]}</td>
+                  {bearbeitbar && <td className="py-1.5 pl-1" onClick={(e) => e.stopPropagation()}>{griff}</td>}
+                  <td className={cn("zahl py-2.5 text-xs text-muted-foreground", bearbeitbar ? "pl-1" : "pl-4", titel && "pt-3.5 text-sm font-semibold text-foreground")}>{nummern[i]}</td>
                   {titel || text ? (
                     <>
                     <td colSpan={3} className="py-1.5 pr-2">
@@ -286,16 +334,17 @@ export function PositionenEditor({
                   {bearbeitbar && (
                     <td className="py-1.5 pr-2" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-0.5">
-                        <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Nach oben" disabled={!kannVerschieben(positionen, p.id, -1)} onClick={() => aktion(p, "hoch")}><ArrowUp className="h-4 w-4" /></Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Nach unten" disabled={!kannVerschieben(positionen, p.id, 1)} onClick={() => aktion(p, "runter")}><ArrowDown className="h-4 w-4" /></Button>
-                        <ZeilenMenue p={p} positionen={positionen} onAktion={(a) => aktion(p, a)} pc />
+                        <ZeilenMenue p={p} positionen={positionen} lohnarten={lohnarten} onAktion={(a) => aktion(p, a)} pc />
                       </div>
                     </td>
                   )}
                 </tr>
+                )}</Sortierbar>
               );
             })}
           </tbody>
+          </SortableContext>
+          </DndContext>
         </table>
         <datalist id="titel-vorschlaege">
           {RAUM_VORSCHLAEGE.map((r) => <option key={r} value={r} />)}
@@ -307,8 +356,11 @@ export function PositionenEditor({
 
   // ── Handy: Karten ──
   return (
+    <DndContext sensors={sensoren} collisionDetection={closestCenter} onDragEnd={abgelegt}>
+    <SortableContext items={positionen.map((p) => p.id)} strategy={verticalListSortingStrategy}>
     <section className="space-y-2">
-      {positionen.map((p, i) => {
+      {positionen.map((p, i) => (
+        <Sortierbar key={p.id} id={p.id} an={ziehbar(p)}>{({ ref, style, griff }) => {
         if (p.art === "titel") {
           const aktiv = bearbeitbar && p.id === aktiverTitel;
           // Titel direkt in der Karte benennen; solange er leer ist, stehen die üblichen Räume zum Antippen da
@@ -316,8 +368,9 @@ export function PositionenEditor({
             ? RAUM_VORSCHLAEGE.filter((r) => !positionen.some((x) => x.art === "titel" && x.bezeichnung.trim().toLowerCase() === r.toLowerCase())).slice(0, 10)
             : [];
           return (
-            <div key={p.id} className={cn("rounded-lg border px-3 py-2", aktiv ? "border-primary bg-primary-soft" : "bg-muted/50", i > 0 && "mt-4")}>
+            <div ref={ref} style={style} className={cn("rounded-lg border px-3 py-2", aktiv ? "border-primary bg-primary-soft" : "bg-muted", i > 0 && "mt-4", griff && "pl-1")}>
               <div className="flex items-center gap-2">
+                {griff}
                 <span className="zahl shrink-0 text-sm font-semibold text-muted-foreground">{nummern[i]}</span>
                 {bearbeitbar ? (
                   <Input
@@ -333,7 +386,7 @@ export function PositionenEditor({
                   />
                 ) : <span className="min-w-0 flex-1 truncate font-semibold">{p.bezeichnung || "Ohne Namen"}</span>}
                 {titelAnzahl > 1 && <span className="zahl shrink-0 text-sm font-semibold">{euro(zs[i] ?? 0)}</span>}
-                {bearbeitbar && <ZeilenMenue p={p} positionen={positionen} onAktion={(a) => aktion(p, a)} />}
+                {bearbeitbar && <ZeilenMenue p={p} positionen={positionen} lohnarten={lohnarten} onAktion={(a) => aktion(p, a)} />}
               </div>
               {vorschlaege.length > 0 && (
                 <div className="mt-1.5 flex flex-wrap gap-1.5 pb-1">
@@ -350,26 +403,28 @@ export function PositionenEditor({
         }
         if (p.art === "text") {
           return (
-            <div key={p.id} className="flex items-start gap-2 rounded-lg border border-dashed bg-card px-3 py-2.5">
+            <div ref={ref} style={style} className={cn("flex items-start gap-2 rounded-lg border border-dashed bg-card px-3 py-2.5", griff && "pl-1")}>
+              {griff}
               <button type="button" className="min-w-0 flex-1 text-left text-sm italic text-muted-foreground [overflow-wrap:anywhere]" onClick={() => bearbeitbar && setBearbeiten(p)} disabled={!bearbeitbar}>
                 {p.bezeichnung || "Hinweistext"}
               </button>
-              {bearbeitbar && <ZeilenMenue p={p} positionen={positionen} onAktion={(a) => aktion(p, a)} />}
+              {bearbeitbar && <ZeilenMenue p={p} positionen={positionen} lohnarten={lohnarten} onAktion={(a) => aktion(p, a)} />}
             </div>
           );
         }
         return (
-          <div key={p.id} className="rounded-lg border bg-card p-3">
+          <div ref={ref} style={style} className={cn("rounded-lg border bg-card p-3", griff && "pl-1")}>
             <div className="flex items-start gap-2">
+              {griff && <span className="-my-1.5">{griff}</span>}
               <span className="zahl w-9 shrink-0 pt-0.5 text-xs text-muted-foreground">{nummern[i]}</span>
               <button type="button" className="min-w-0 flex-1 text-left" onClick={() => bearbeitbar && setBearbeiten(p)} disabled={!bearbeitbar}>
                 <span className="block text-sm font-medium leading-snug [overflow-wrap:anywhere]">{p.bezeichnung || <span className="text-muted-foreground">Ohne Bezeichnung</span>}</span>
                 {p.langtext && <span className="mt-0.5 line-clamp-2 block text-xs text-muted-foreground [overflow-wrap:anywhere]">{p.langtext}</span>}
                 {p.quelle && <Herkunft />}
               </button>
-              {bearbeitbar && <ZeilenMenue p={p} positionen={positionen} onAktion={(a) => aktion(p, a)} />}
+              {bearbeitbar && <ZeilenMenue p={p} positionen={positionen} lohnarten={lohnarten} onAktion={(a) => aktion(p, a)} />}
             </div>
-            <div className="mt-2 flex items-center gap-2">
+            <div className={cn("mt-2 flex items-center gap-2", griff && "pl-2")}>
               {bearbeitbar ? (
                 <div className="flex shrink-0 items-center">
                   <Button variant="outline" size="icon" className="h-11 w-11 rounded-r-none" aria-label="weniger" onClick={() => mengePlus(p, -1)}><Minus className="h-4 w-4" /></Button>
@@ -401,9 +456,12 @@ export function PositionenEditor({
             </div>
           </div>
         );
-      })}
+        }}</Sortierbar>
+      ))}
       {dialoge}
     </section>
+    </SortableContext>
+    </DndContext>
   );
 }
 
@@ -417,7 +475,14 @@ function Herkunft() {
 
 type Aktion = "bearbeiten" | "hoch" | "runter" | "kopieren" | "loeschen" | "langtext" | "hier" | "titelDavor";
 
-function ZeilenMenue({ p, positionen, onAktion, pc }: { p: EditorPosition; positionen: EditorPosition[]; onAktion: (a: Aktion) => void; pc?: boolean }) {
+function ZeilenMenue({ p, positionen, lohnarten = [], onAktion, pc }: {
+  p: EditorPosition;
+  positionen: EditorPosition[];
+  lohnarten?: Lohnart[];
+  onAktion: (a: Aktion | Lohnart) => void;
+  pc?: boolean;
+}) {
+  const andereSaetze = p.art === "arbeit" ? lohnarten.filter((l) => arbeitszeitText(l) !== p.bezeichnung || l.satz !== preisVon(p)) : [];
   const titel = p.art === "titel";
   return (
     <DropdownMenu>
@@ -433,12 +498,20 @@ function ZeilenMenue({ p, positionen, onAktion, pc }: { p: EditorPosition; posit
           <DropdownMenuItem className="h-11 gap-2" onClick={() => onAktion("langtext")}><FileText className="h-4 w-4" /> Langtext hinzufügen</DropdownMenuItem>
         )}
         {!titel && <DropdownMenuItem className="h-11 gap-2" onClick={() => onAktion("titelDavor")}><Rows3 className="h-4 w-4" /> Titel darüber einfügen</DropdownMenuItem>}
-        {!pc && (
+        {andereSaetze.length > 0 && (
           <>
-            <DropdownMenuItem className="h-11 gap-2" disabled={!kannVerschieben(positionen, p.id, -1)} onClick={() => onAktion("hoch")}><ArrowUp className="h-4 w-4" /> Nach oben</DropdownMenuItem>
-            <DropdownMenuItem className="h-11 gap-2" disabled={!kannVerschieben(positionen, p.id, 1)} onClick={() => onAktion("runter")}><ArrowDown className="h-4 w-4" /> Nach unten</DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">Stundensatz tauschen</DropdownMenuLabel>
+            {andereSaetze.map((l) => (
+              <DropdownMenuItem key={l.name} className="h-11 gap-2" onClick={() => onAktion(l)}>
+                <Clock className="h-4 w-4" /> <span className="flex-1">{l.standard ? "Standard" : l.name}</span><span className="zahl text-muted-foreground">{euro(l.satz)}</span>
+              </DropdownMenuItem>
+            ))}
+            <DropdownMenuSeparator />
           </>
         )}
+        <DropdownMenuItem className="h-11 gap-2" disabled={!kannVerschieben(positionen, p.id, -1)} onClick={() => onAktion("hoch")}><ArrowUp className="h-4 w-4" /> Nach oben</DropdownMenuItem>
+        <DropdownMenuItem className="h-11 gap-2" disabled={!kannVerschieben(positionen, p.id, 1)} onClick={() => onAktion("runter")}><ArrowDown className="h-4 w-4" /> Nach unten</DropdownMenuItem>
         <DropdownMenuItem className="h-11 gap-2" onClick={() => onAktion("kopieren")}><Copy className="h-4 w-4" /> {titel ? "Raum kopieren" : "Kopieren"}</DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem className="h-11 gap-2 text-destructive focus:text-destructive" onClick={() => onAktion("loeschen")}><Trash2 className="h-4 w-4" /> Löschen</DropdownMenuItem>

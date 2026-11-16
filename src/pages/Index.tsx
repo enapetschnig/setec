@@ -71,11 +71,17 @@ const START_GRUPPEN: { titel: string; gruppen: NavEintrag["gruppe"][] }[] = [
   { titel: "Sonstiges", gruppen: ["system"] },
 ];
 
+/** Monteur am Handy: was er auf der Baustelle braucht, das Häufigste oben */
+const START_MONTEUR: { titel: string; pfade: string[] }[] = [
+  { titel: "Täglich", pfade: ["/zeiten", "/scan", "/regie"] },
+  { titel: "Baustelle", pfade: ["/projekte", "/aufgaben", "/lieferscheine"] },
+  { titel: "Sonstiges", pfade: ["/einstellungen", "/wuensche"] },
+];
+
 /**
  * Startseite: Am Handy IST sie das Menü. Oben die
- * häufigsten Handgriffe als große Knöpfe, darunter (Chef) „Zu erledigen“
- * und die großen Menü-Karten. Am PC steht das Menü links, hier dafür die
- * Übersicht (offene Punkte, aktive Projekte).
+ * häufigsten Handgriffe als große Knöpfe, darunter die großen Menü-Karten.
+ * Am PC steht das Menü links, hier dafür die Übersicht (offene Punkte, aktive Projekte).
  */
 export default function Index() {
   const navigate = useNavigate();
@@ -231,7 +237,7 @@ export default function Index() {
       text: `${erledigtOffen.length} ${erledigtOffen.length === 1 ? "Projekt" : "Projekte"} mit erledigtem Einsatz, noch nicht verrechnet`,
       to: erledigtOffen.length === 1 ? `/projekte/${erledigtOffen[0]}` : "/projekte",
     },
-    buero.wartend > 0 && { icon: UserCheck, text: `${buero.wartend} ${buero.wartend === 1 ? "Mitarbeiter wartet" : "Mitarbeiter warten"} auf Freischaltung`, to: "/einstellungen?bereich=mitarbeiter", warn: true },
+    buero.wartend > 0 && { icon: UserCheck, text: `${buero.wartend} ${buero.wartend === 1 ? "Mitarbeiter wartet" : "Mitarbeiter warten"} auf Freischaltung`, to: "/mitarbeiter", warn: true },
     buero.ueberfaellig > 0 && { icon: AlertTriangle, text: `${buero.ueberfaellig} ${buero.ueberfaellig === 1 ? "Rechnung ist" : "Rechnungen sind"} überfällig`, to: "/offene-posten?filter=ueberfaellig", warn: true },
     zuMahnen > 0 && { icon: BellRing, text: `${zuMahnen} ${zuMahnen === 1 ? "Rechnung" : "Rechnungen"} zu mahnen`, to: "/offene-posten", warn: true },
     buero.offen > 0 && { icon: Receipt, text: `${buero.offen} offene ${buero.offen === 1 ? "Rechnung" : "Rechnungen"} · ${euro(buero.offenSumme)}`, to: "/offene-posten?filter=alle" },
@@ -365,9 +371,10 @@ export default function Index() {
         {!pc && handgriffe}
 
         {/* minmax(0,…): sonst macht eine lange, abgeschnittene Zeile die Spalte breiter als das Handy */}
-        {/* Am Handy nur „Zu erledigen“ (Chef) — laufende Projekte und zuletzt
-            Gebuchtes stehen in Projekte und Stunden, die Startseite bleibt das Menü */}
-        {(pc || istChef) && (
+        {/* Nur am PC — am Handy ist die Startseite das Menü (auch „Zu erledigen“
+            braucht man dort nicht, Wunsch 16.11.2026); laufende Projekte und
+            zuletzt Gebuchtes stehen in Projekte und Stunden */}
+        {pc && (
         <div className="grid grid-cols-1 gap-6">
           {pc && (
           <Karte titel="Laufende Projekte" alle={{ to: "/projekte", text: "Alle Projekte" }} ohnePolster>
@@ -459,9 +466,9 @@ export default function Index() {
 
         {/* Am Handy und Tablet ist die Startseite das Menü — große Karten */}
         {!pc && (
-          <StartListe monteur={!istChef} gruppen={START_GRUPPEN.map((g) => ({
-            titel: g.titel, eintraege: menue.filter((n) => g.gruppen.includes(n.gruppe)),
-          }))} />
+          <StartListe monteur={!istChef} gruppen={istChef
+            ? START_GRUPPEN.map((g) => ({ titel: g.titel, eintraege: menue.filter((n) => g.gruppen.includes(n.gruppe)) }))
+            : START_MONTEUR.map((g) => ({ titel: g.titel, eintraege: g.pfade.flatMap((p) => menue.filter((n) => n.pfad === p)) }))} />
         )}
 
       </main>

@@ -74,7 +74,7 @@ export function aufschlaegeSetzen(
 ): (number | null)[] {
   const satz = neu.satz ?? alterSatz;
   return positionen.map((p) => {
-    if (p.art === "titel" || p.art === "text" || p.art === "abzug") return null;
+    if (p.art === "titel" || p.art === "text" || p.art === "abzug" || p.art === "nachlass") return null;
     if (p.art === "arbeit") {
       // nur Stunden zum alten Standardsatz — Meister- oder Sondersätze bleiben
       if (neu.satz == null || p.einheit !== "h" || runden2(p.einzelpreis) !== runden2(alterSatz)) return null;

@@ -299,6 +299,8 @@ export async function belegKopieren({
     ust_satz: quelle.ust_satz,
     reverse_charge: quelle.reverse_charge,
     kv_verbindlich: typ === "angebot" && quelle.kv_verbindlich,
+    foerderung_text: quelle.foerderung_text,
+    foerderung_betrag: quelle.foerderung_betrag,
     korrektur_von: korrektur ? quelle.id : null,
     netto: s.netto,
     ust: s.ust,
@@ -327,6 +329,7 @@ export async function belegKopieren({
       artikel_id: p.artikel_id,
       leistung_id: p.leistung_id,
       quelle: mitHerkunft ? p.quelle : null,
+      prozent: p.prozent,
     }));
     const { error: e2 } = await supabase.from("beleg_positionen").insert(zeilen);
     if (e2) {

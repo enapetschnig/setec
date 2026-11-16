@@ -797,6 +797,7 @@ export type Database = {
           menge: number
           minuten: number | null
           pos: number
+          prozent: number | null
           quelle: Json | null
         }
         Insert: {
@@ -814,6 +815,7 @@ export type Database = {
           menge?: number
           minuten?: number | null
           pos?: number
+          prozent?: number | null
           quelle?: Json | null
         }
         Update: {
@@ -831,6 +833,7 @@ export type Database = {
           menge?: number
           minuten?: number | null
           pos?: number
+          prozent?: number | null
           quelle?: Json | null
         }
         Relationships: [
@@ -879,6 +882,8 @@ export type Database = {
           erstellt_von: string | null
           faellig_am: string | null
           fertig_am: string | null
+          foerderung_betrag: number | null
+          foerderung_text: string | null
           gueltig_bis: string | null
           id: string
           kategorie_id: string | null
@@ -921,6 +926,8 @@ export type Database = {
           erstellt_von?: string | null
           faellig_am?: string | null
           fertig_am?: string | null
+          foerderung_betrag?: number | null
+          foerderung_text?: string | null
           gueltig_bis?: string | null
           id?: string
           kategorie_id?: string | null
@@ -963,6 +970,8 @@ export type Database = {
           erstellt_von?: string | null
           faellig_am?: string | null
           fertig_am?: string | null
+          foerderung_betrag?: number | null
+          foerderung_text?: string | null
           gueltig_bis?: string | null
           id?: string
           kategorie_id?: string | null

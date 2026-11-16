@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { FormularDialog } from "@/components/FormularDialog";
@@ -8,8 +9,9 @@ import { aufschlaegeSetzen, aufschlagAus } from "@/lib/kalkulation";
 import { mengeVon, preisText, preisVon, summen, type EditorPosition } from "./editor";
 
 /**
- * Material-Aufschlag und Stundensatz für den ganzen Beleg auf einmal —
- * rauf wie runter. Rechnet jede Position mit Einkaufspreis bzw. Arbeitszeit neu.
+ * Material-Aufschlag und Stundensatz neu setzen — aber nur für die Positionen,
+ * die man anhakt. Artikel mit eigenem Aufschlag oder ausgehandeltem Preis
+ * bleiben sonst unberührt (früher änderte der Dialog jeden Preis im Beleg).
  */
 export function AufschlaegeDialog({
   open, onOpenChange, positionen, stundensatz, materialStandard, ustSatz, ohneUst, onAnwenden,
@@ -40,8 +42,10 @@ export function AufschlaegeDialog({
 
   const [material, setMaterial] = useState("");
   const [satz, setSatz] = useState("");
+  const [wahl, setWahl] = useState<Set<string>>(new Set());
   useEffect(() => {
     if (!open) return;
+    setWahl(new Set());
     setMaterial(zahl(jetzt ?? materialStandard));
     setSatz(zahl(stundensatz));
   }, [open, jetzt, materialStandard, stundensatz]);
@@ -53,8 +57,10 @@ export function AufschlaegeDialog({
     { material: m != null && m !== jetzt ? m : null, satz: sz != null && sz > 0 && sz !== stundensatz ? sz : null },
     stundensatz,
   ), [positionen, m, sz, jetzt, stundensatz]);
-  const geaendert = neuePreise.filter((x) => x != null).length;
-  const neu = positionen.map((p, i) => (neuePreise[i] == null ? p : { ...p, einzelpreis: preisText(neuePreise[i]) }));
+  const betroffen = positionen.flatMap((p, i) => (neuePreise[i] == null ? [] : [{ p, preis: neuePreise[i]! }]));
+  const geaendert = betroffen.filter((b) => wahl.has(b.p.id)).length;
+  const neu = positionen.map((p, i) => (neuePreise[i] == null || !wahl.has(p.id) ? p : { ...p, einzelpreis: preisText(neuePreise[i]) }));
+  const umschalten = (id: string) => setWahl((w) => { const n = new Set(w); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const vorher = summen(positionen, ustSatz, ohneUst).netto;
   const nachher = summen(neu, ustSatz, ohneUst).netto;
   const ohneEk = positionen.filter((p) => (p.art === "artikel" || p.art === "material" || p.art === "leistung") && p.ek_preis == null && p.minuten == null).length;
@@ -70,7 +76,7 @@ export function AufschlaegeDialog({
       open={open}
       onOpenChange={onOpenChange}
       titel="Aufschläge"
-      beschreibung="Material und Arbeit für den ganzen Beleg — rauf oder runter"
+      beschreibung="Neuen Aufschlag eintragen, dann anhaken, welche Positionen ihn bekommen — die anderen behalten ihren Preis."
       fuss={(
         <>
           <Button variant="outline" className="h-12" onClick={() => onOpenChange(false)}>Abbrechen</Button>
@@ -102,6 +108,30 @@ export function AufschlaegeDialog({
         </div>
         <p className="text-xs text-muted-foreground">Gilt für Arbeitszeit zum Satz {euro(stundensatz)} und für die Montagezeit kalkulierter Leistungen. Meister- und Sondersätze bleiben.</p>
       </section>
+      {betroffen.length > 0 && (
+        <section className="space-y-2" aria-label="Welche Positionen">
+          <div className="flex items-center justify-between px-1">
+            <p className="text-sm font-medium">Welche Positionen? <span className="font-normal text-muted-foreground">{geaendert} von {betroffen.length}</span></p>
+            <button type="button" className="text-sm font-medium text-primary" onClick={() => setWahl(geaendert === betroffen.length ? new Set() : new Set(betroffen.map((b) => b.p.id)))}>
+              {geaendert === betroffen.length ? "Keine" : "Alle"}
+            </button>
+          </div>
+          <ul className="max-h-72 divide-y overflow-y-auto rounded-lg border bg-card">
+            {betroffen.map(({ p, preis }) => (
+              <li key={p.id}>
+                <label className="flex min-h-12 cursor-pointer items-center gap-3 px-3 py-2">
+                  <Checkbox checked={wahl.has(p.id)} onCheckedChange={() => umschalten(p.id)} className="h-5 w-5" aria-label={p.bezeichnung || "Position"} />
+                  <span className="min-w-0 flex-1 truncate text-sm">{p.bezeichnung || "Ohne Bezeichnung"}</span>
+                  <span className="zahl shrink-0 text-right text-xs">
+                    <span className="text-muted-foreground line-through">{euro(preisVon(p))}</span>{" "}
+                    <span className="font-semibold">{euro(preis)}</span>
+                  </span>
+                </label>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       <p className="text-sm">
         Netto <span className="zahl font-semibold">{euro(nachher)}</span>
         {nachher !== vorher && <span className="text-muted-foreground"> statt {euro(vorher)}</span>}

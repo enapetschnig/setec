@@ -4,8 +4,8 @@ import { Link, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
-  Ban, Calculator, Check, Clock, Copy, Download, Eye, FileText, FolderInput, LayoutTemplate, LockOpen, Mic, MoreVertical, Package, PenLine, Percent, Plus,
-  LayoutGrid, Receipt, RotateCcw, Rows3, Save, Sparkles, SplitSquareHorizontal, ThumbsDown, ThumbsUp, Trash2, Undo2,
+  Ban, Calculator, Check, Clock, Copy, Download, Eye, FileText, FolderInput, HandCoins, LayoutTemplate, LockOpen, Mic, MoreHorizontal, MoreVertical, PenLine,
+  Percent, Plus, LayoutGrid, Receipt, RotateCcw, Rows3, Save, Sparkles, SplitSquareHorizontal, ThumbsDown, ThumbsUp, Trash2, Type, Undo2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -26,20 +26,20 @@ import { useNeuLaden, useProjekt } from "@/hooks/useDaten";
 import { useSitzung } from "@/hooks/useSitzung";
 import { archivieren, archivLaden } from "@/lib/belegArchiv";
 import { belegPdfErstellen } from "@/lib/belegPdf";
-import { datum, euro, isoTag, zahl } from "@/lib/format";
+import { datum, dezimalLesen, euro, isoTag, zahl } from "@/lib/format";
 import { pdfDateiname, pdfTeilenOderLaden } from "@/lib/pdfBasis";
-import { lohnarten as lohnartenFuer, rohertrag, umProzent } from "@/lib/kalkulation";
-import { stundensatzFuer } from "@/lib/preise";
+import { lohnarten as lohnartenFuer, rohertrag } from "@/lib/kalkulation";
+import { runden2, stundensatzFuer } from "@/lib/preise";
 import { belegStatus, TON_KLASSE, type Artikel, type Beleg, type Firma } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { ArbeitszeitDialog } from "./ArbeitszeitDialog";
-import { ArtikelDialog } from "./ArtikelDialog";
 import { AufschlaegeDialog } from "./AufschlaegeDialog";
 import { BelegKopf, BelegTexte } from "./BelegKopf";
 import { belegLaden, useBelegKurz, useFolgeRechnungen, useLeistungsKatalog, useNachfolger, type BelegMitPositionen } from "./daten";
 import {
-  artikelPosition, fertigHinweise, freierTitelName, hinzufuegen, kopfAusBeleg, leerePosition, leistungPosition, leistungWeniger, mengeVon,
-  ohneBetrag, ohneUstFuer, positionAusDb, preisText, preisVon, quelleLesen, quellenIds, summen, titelMitNamen, titelPosition, zahlText,
+  artikelPosition, fertigHinweise, freierTitelName, hinzufuegen, istNachlass, kopfAusBeleg, leerePosition, leistungPosition, leistungWeniger, mengeVon,
+  nachlassRechnen, nachlassSetzen, nachlassText, ohneBetrag, ohneUstFuer, positionAusDb, positionGesamt, preisVon, quelleLesen, quellenIds, summen,
+  summeVorNachlass, titelMitNamen, titelPosition, titelUebersicht, zahlText,
   type EditorPosition, type KatalogLeistung, type Kopf,
 } from "./editor";
 import { ImportDialog, type ImportErgebnis } from "./ImportDialog";
@@ -49,6 +49,7 @@ import { LiveVorschau } from "./LiveVorschau";
 import { LeistungDialog } from "./LeistungDialog";
 import { PositionDialog } from "./PositionDialog";
 import { PositionenEditor } from "./PositionenEditor";
+import { ProjektVerbrauch } from "./ProjektVerbrauch";
 import {
   belegKopieren, belegLoeschen, belegSpeichern, fertigstellen, inRechnungUmwandeln, teilrechnungAnlegen, abzuegeLaden, projektAktivieren, projektLoeschen,
   projektNurFuerBeleg, projektZurueckAufAngebot, rechnungAendern, StandVeraltet, statusSetzen, stornieren,
@@ -68,7 +69,7 @@ import { VerlassenDialog } from "./VerlassenSchutz";
 /** Stand des Editors als Text — ungleich dem gespeicherten Stand = ungespeichert */
 const schnappschuss = (k: Kopf, p: EditorPosition[]) => JSON.stringify([k, p]);
 const DETAIL = (id: string) => ["belege", "detail", id];
-const NACH_AENDERUNG = ["belege", "projekte", "projekt_zahlen", "zeiten", "material", "regieberichte"];
+const NACH_AENDERUNG = ["belege", "projekte", "projekt_zahlen", "zeiten", "material", "regieberichte", "projekt_verbrauch"];
 const KALK_KEY = "elektro.beleg.kalk";
 const VORSCHAU_KEY = "elektro.beleg.vorschau";
 /** Feld einer gerade angelegten Zeile fokussieren (nach dem nächsten Zeichnen) */
@@ -160,6 +161,12 @@ export function BelegEditor({
   /** Buchungen, die beim letzten Speichern schon an einer anderen Rechnung hingen */
   const [konflikte, setKonflikte] = useState(0);
 
+  // Nachlass in % folgt jeder Änderung der Positionen und bleibt am Ende
+  useEffect(() => {
+    const n = nachlassRechnen(positionen);
+    if (n !== positionen) setPositionen(n);
+  }, [positionen]);
+
   const aktuell = useMemo(() => schnappschuss(kopf, positionen), [kopf, positionen]);
   const dirty = aktuell !== basis;
   const aktuellRef = useRef(aktuell);
@@ -197,7 +204,7 @@ export function BelegEditor({
   const ohneUst = ohneUstFuer(kopf, firma);
   const s = useMemo(() => summen(positionen, kopf.ust_satz, ohneUst), [positionen, kopf.ust_satz, ohneUst]);
   const belegt = useMemo(() => quellenIds(positionen), [positionen]);
-  const anzahl = positionen.filter((p) => !ohneBetrag(p)).length;
+  const anzahl = positionen.filter((p) => !ohneBetrag(p) && !istNachlass(p)).length;
   const titelName = positionen.find((p) => p.id === aktiverTitel && p.art === "titel")?.bezeichnung ?? null;
 
   const schutz = useVerlassenSchutz(dirty);
@@ -572,7 +579,7 @@ export function BelegEditor({
     const { blob } = await belegPdfErstellen({
       beleg: d.beleg,
       positionen: d.positionen.map((p) => ({
-        art: p.art, bezeichnung: p.bezeichnung, langtext: p.langtext, menge: Number(p.menge), einheit: p.einheit, einzelpreis: Number(p.einzelpreis),
+        art: p.art, bezeichnung: p.bezeichnung, langtext: p.langtext, menge: Number(p.menge), einheit: p.einheit, einzelpreis: Number(p.einzelpreis), prozent: p.prozent,
       })),
       firma,
       projekt: await projektFuerPdf(),
@@ -606,9 +613,11 @@ export function BelegEditor({
       empf_ort: kopf.empf_ort.trim() || null,
       empf_uid: kopf.empf_uid.trim() || null,
       teil_nr: beleg?.teil_nr ?? null,
+      foerderung_text: kopf.foerderung_text?.trim() || null,
+      foerderung_betrag: kopf.foerderung_betrag ?? null,
     },
     positionen: positionen.map((p) => ({
-      art: p.art, bezeichnung: p.bezeichnung, langtext: p.langtext, menge: mengeVon(p), einheit: p.einheit, einzelpreis: preisVon(p),
+      art: p.art, bezeichnung: p.bezeichnung, langtext: p.langtext, menge: mengeVon(p), einheit: p.einheit, einzelpreis: preisVon(p), prozent: p.prozent,
     })),
     firma: f,
     projekt: await projektFuerPdf(),
@@ -674,9 +683,13 @@ export function BelegEditor({
   };
   const arbeitszeitHinzufuegen = (neue: EditorPosition[]) =>
     setPositionen((alt) => neue.reduce((liste, p) => hinzufuegen(liste, p, aktiverTitel).liste, alt));
-  // Alle Preise um ± % — Aufschlag oder Rabatt aufs ganze Angebot (Zeilen ohne Betrag bleiben)
-  const preiseUmProzent = (prozent: number) =>
-    setPositionen((alt) => alt.map((p) => (ohneBetrag(p) || p.art === "abzug" ? p : { ...p, einzelpreis: preisText(umProzent(preisVon(p), prozent)) })));
+  /** Freie Position aus „+ Artikel“: mit Text gleich in die Liste (Preis eintragen), ohne Text als Formular */
+  const freiAusSuche = (text: string) => {
+    if (!text.trim()) { setDialog(null); setFreie(leerePosition("leistung")); return; }
+    const p = leerePosition("leistung", { bezeichnung: text.trim(), einheit: "Stk" });
+    setPositionen((alt) => hinzufuegen(alt, p, aktiverTitel).liste);
+    toast.success(`„${text.trim()}“ hinzugefügt — Preis in der Position eintragen.`);
+  };
   /** Vorschlag der KI: optional unter eigenem Titel, Hinweise als Textzeile */
   const kiUebernehmen = (neue: EditorPosition[], titel: string | null, hinweise: string[]) => {
     let liste = positionen;
@@ -998,49 +1011,62 @@ export function BelegEditor({
     </section>
   );
 
-  // ── Hinzufügen ──
-  const hinzuKnoepfe: { key: string; text: string; icon: Icon; onClick: () => void; primaer?: boolean; aus?: boolean }[] = [
-    ...(!istAngebot ? [{ key: "import", text: kopf.projekt_id ? "Aus dem Projekt übernehmen" : "Aus dem Projekt (erst Projekt wählen)", icon: FolderInput, onClick: () => setDialog("import"), primaer: true, aus: !kopf.projekt_id }] : []),
-    { key: "leistung", text: istAngebot ? "Leistung hinzufügen" : "Leistung", icon: Plus, onClick: () => setDialog("leistung"), primaer: istAngebot },
-    ...(istAngebot ? [{ key: "vorlage", text: "Aus Vorlage", icon: LayoutTemplate, onClick: () => setDialog("vorlage") }] : []),
-    { key: "sprache", text: "Diktieren", icon: Mic, onClick: () => setDialog("sprache") },
-    { key: "katalog", text: "Artikelkatalog", icon: LayoutGrid, onClick: () => setDialog("katalog") },
-    { key: "ki", text: "Material per KI", icon: Sparkles, onClick: () => setDialog("ki") },
+  // ── Hinzufügen: „+ Artikel“, „+ Arbeitszeit“, „Diktieren“ — alles Seltene unter „Mehr“ ──
+  const hauptKnoepfe: { key: string; text: string; icon: Icon; onClick: () => void }[] = [
+    { key: "artikel", text: "Artikel", icon: Plus, onClick: () => setDialog("leistung") },
     { key: "arbeitszeit", text: "Arbeitszeit", icon: Clock, onClick: () => setDialog("arbeitszeit") },
-    { key: "titel", text: "Raum / Titel", icon: Rows3, onClick: () => titelAnlegen("") },
-    { key: "artikel", text: "Artikel", icon: Package, onClick: () => setDialog("artikel") },
-    { key: "frei", text: "Freie Position", icon: PenLine, onClick: () => setFreie(leerePosition("leistung")) },
+    { key: "sprache", text: "Diktieren", icon: Mic, onClick: () => setDialog("sprache") },
   ];
-  const nebenKnoepfe = hinzuKnoepfe.filter((k) => !k.primaer);
-
-  // PC: Titel, Artikel und freie Positionen gehen über die Eingabezeile — oben nur, was mehr kann
-  const pcKnoepfe = hinzuKnoepfe
-    .filter((k) => !["titel", "artikel", "frei"].includes(k.key))
-    .map((k) => (k.key === "leistung" ? { ...k, text: "Leistungskatalog", primaer: false } : k));
-  const hinzufuegenLeiste = bearbeitbar && (
-    pc ? null : (
-      <div className="space-y-2">
-        {hinzuKnoepfe.filter((k) => k.primaer).map((k) => (
-          <Button key={k.key} className="h-12 w-full text-base" onClick={k.onClick} disabled={k.aus}>
-            <k.icon className="h-5 w-5" /> {k.text}
-          </Button>
+  const ausProjekt = !istAngebot && !!kopf.projekt_id;
+  const mehrMenue = (trigger: React.ReactNode) => (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-64">
+        <MenuePunkt icon={Rows3} onClick={() => titelAnlegen("")}>Raum / Titel</MenuePunkt>
+        <MenuePunkt icon={PenLine} onClick={() => setFreie(leerePosition("leistung"))}>Freie Position</MenuePunkt>
+        <MenuePunkt icon={Type} onClick={() => (pc ? schnellText() : setFreie(leerePosition("text", { menge: "0" })))}>Hinweistext</MenuePunkt>
+        <DropdownMenuSeparator />
+        {!istAngebot && (
+          <DropdownMenuItem className="h-11 gap-2" disabled={!kopf.projekt_id} onClick={() => setDialog("import")}>
+            <FolderInput className="h-4 w-4" /> {kopf.projekt_id ? "Aus dem Projekt übernehmen" : "Aus dem Projekt (erst Projekt wählen)"}
+          </DropdownMenuItem>
+        )}
+        {istAngebot && <MenuePunkt icon={LayoutTemplate} onClick={() => setDialog("vorlage")}>Aus Vorlage</MenuePunkt>}
+        <MenuePunkt icon={LayoutGrid} onClick={() => setDialog("katalog")}>Artikel nach Kategorie</MenuePunkt>
+        <MenuePunkt icon={Sparkles} onClick={() => setDialog("ki")}>Material per KI</MenuePunkt>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+  const hinzufuegenLeiste = bearbeitbar && !pc && (
+    <div className="space-y-2">
+      {ausProjekt && (
+        <Button className="h-12 w-full text-base" onClick={() => setDialog("import")}>
+          <FolderInput className="h-5 w-5" /> Aus dem Projekt übernehmen
+        </Button>
+      )}
+      <div className="grid grid-cols-4 gap-2">
+        {hauptKnoepfe.map((k, i) => (
+          <button
+            key={k.key}
+            type="button"
+            onClick={k.onClick}
+            className={cn(
+              "flex h-16 flex-col items-center justify-center gap-1 rounded-lg border px-1 text-center text-xs font-medium leading-tight transition-colors active:scale-[0.98]",
+              i === 0 && !ausProjekt ? "border-primary bg-primary text-primary-foreground" : "bg-card hover:border-primary/50",
+            )}
+          >
+            <k.icon className={cn("h-5 w-5", i === 0 && !ausProjekt ? "" : "text-primary")} />
+            {i < 2 ? `+ ${k.text}` : k.text}
+          </button>
         ))}
-        <div className={cn("grid gap-2", nebenKnoepfe.length === 5 ? "grid-cols-5" : nebenKnoepfe.length === 6 ? "grid-cols-3" : "grid-cols-4")}>
-          {nebenKnoepfe.map((k) => (
-            <button
-              key={k.key}
-              type="button"
-              onClick={k.onClick}
-              className="flex h-16 flex-col items-center justify-center gap-1 rounded-lg border bg-card px-1 text-center text-[11px] font-medium leading-tight transition-colors hover:border-primary/50 active:bg-muted/40"
-            >
-              <k.icon className="h-5 w-5 text-primary" />
-              {k.text}
-            </button>
-          ))}
-        </div>
-        {titelName && <p className="px-1 text-xs text-muted-foreground">Neue Positionen landen unter „{titelName}“ — anderen Raum oben antippen.</p>}
+        {mehrMenue(
+          <button type="button" className="flex h-16 flex-col items-center justify-center gap-1 rounded-lg border bg-card px-1 text-xs font-medium hover:border-primary/50">
+            <MoreHorizontal className="h-5 w-5 text-primary" /> Mehr
+          </button>,
+        )}
       </div>
-    )
+      {titelName && <p className="px-1 text-xs text-muted-foreground">Neue Positionen landen unter „{titelName}“ — anderen Raum oben antippen.</p>}
+    </div>
   );
 
   // ── Kalkulation (nur intern) ──
@@ -1056,6 +1082,11 @@ export function BelegEditor({
     });
     return { stunden: minuten / 60, ek };
   }, [positionen]);
+
+  const uebersicht = useMemo(
+    () => titelUebersicht(positionen.filter((p) => p.art !== "abzug" && !istNachlass(p)).map((p) => ({ art: p.art, bezeichnung: p.bezeichnung, gesamt: positionGesamt(p) }))),
+    [positionen],
+  );
 
   const mitSeite = pc && breitGenug && seitenVorschau;
   const vorschauStand = JSON.stringify([kopf, positionen, firma?.id, beleg?.nummer, status]);
@@ -1107,6 +1138,15 @@ export function BelegEditor({
         </p>
       )}
 
+      {!istAngebot && !istStorno && kopf.projekt_id && (
+        <ProjektVerbrauch
+          projektId={kopf.projekt_id}
+          belegId={neu ? null : id}
+          positionen={positionen.map((p) => ({ art: p.art, menge: mengeVon(p), einheit: p.einheit, minuten: p.minuten }))}
+          onUebernehmen={bearbeitbar ? () => setDialog("import") : undefined}
+        />
+      )}
+
       <section className="space-y-2.5">
         <div className="flex flex-wrap items-center justify-between gap-2 px-1">
           <h2 className="text-[0.9375rem] font-semibold">
@@ -1115,11 +1155,15 @@ export function BelegEditor({
           </h2>
           {pc && (
             <div className="flex flex-wrap items-center gap-1.5">
-              {bearbeitbar && pcKnoepfe.map((k) => (
-                <Button key={k.key} variant={k.primaer ? "default" : "outline"} className="h-9 gap-1.5 px-3" onClick={k.onClick} disabled={k.aus}>
-                  <k.icon className="h-4 w-4" /> {k.text}
+              {bearbeitbar && ausProjekt && (
+                <Button className="h-9 gap-1.5 px-3" onClick={() => setDialog("import")}><FolderInput className="h-4 w-4" /> Aus dem Projekt</Button>
+              )}
+              {bearbeitbar && hauptKnoepfe.map((k, i) => (
+                <Button key={k.key} variant={i === 0 && !ausProjekt ? "default" : "outline"} className="h-9 gap-1.5 px-3" onClick={k.onClick}>
+                  <k.icon className="h-4 w-4" /> {i < 2 ? `${k.text}` : k.text}
                 </Button>
               ))}
+              {bearbeitbar && mehrMenue(<Button variant="outline" className="h-9 gap-1.5 px-3"><MoreHorizontal className="h-4 w-4" /> Mehr</Button>)}
               <Button variant="ghost" className="hidden h-9 gap-1.5 px-3 text-muted-foreground xl:inline-flex" onClick={kalkUmschalten} aria-pressed={kalkSpalten}
                 title="Einkaufspreis und Aufschlag je Position — nur intern, nie auf dem PDF">
                 <Calculator className="h-4 w-4" /> {kalkSpalten ? "EK/Aufschlag ausblenden" : "EK/Aufschlag zeigen"}
@@ -1137,6 +1181,7 @@ export function BelegEditor({
           stundensatz={stundensatz}
           kalk={kalkSpalten}
           materialAufschlag={Number(firma?.material_aufschlag ?? 0)}
+          lohnarten={lohnartenFuer(firma, stundensatz)}
         />
         {bearbeitbar && pc && (
           <Eingabezeile katalog={katalog} stundensatz={stundensatz} ziel={titelName}
@@ -1148,7 +1193,10 @@ export function BelegEditor({
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start">
         <BelegTexte kopf={kopf} aendern={kopfAendern} bearbeitbar={bearbeitbar} pc={pc} />
         <Summen netto={s.netto} ust={s.ust} brutto={s.brutto} ustSatz={kopf.ust_satz} ohneUst={ohneUst} firma={firma} kalk={kalk}
-          onProzent={bearbeitbar && anzahl > 0 ? preiseUmProzent : undefined}
+          uebersicht={uebersicht} nachlass={positionen.find(istNachlass) ?? null} summeVor={summeVorNachlass(positionen)}
+          foerderung={{ text: kopf.foerderung_text ?? "", betrag: kopf.foerderung_betrag ?? null }}
+          onNachlass={bearbeitbar && anzahl > 0 && !istStorno ? (w) => setPositionen((alt) => nachlassSetzen(alt, w)) : undefined}
+          onFoerderung={bearbeitbar && !istStorno ? (w) => kopfAendern({ foerderung_text: w.text, foerderung_betrag: w.betrag }) : undefined}
           onAufschlaege={bearbeitbar && anzahl > 0 ? () => setDialog("aufschlaege") : undefined} />
       </div>
 
@@ -1228,6 +1276,9 @@ export function BelegEditor({
         onNeuerTitel={titelAnlegen}
         onPlus={leistungPlus}
         onMinus={leistungMinus}
+        onArtikel={artikelPlus}
+        onFrei={freiAusSuche}
+        onKatalog={() => setDialog("katalog")}
         firma={firma}
         stundensatz={stundensatz}
       />
@@ -1242,7 +1293,6 @@ export function BelegEditor({
       <AufschlaegeDialog open={dialog === "aufschlaege"} onOpenChange={(o) => setDialog(o ? "aufschlaege" : null)} positionen={positionen}
         stundensatz={stundensatz} materialStandard={Number(firma?.material_aufschlag ?? 0)} ustSatz={kopf.ust_satz} ohneUst={ohneUst}
         onAnwenden={(neu) => { setPositionen(neu); toast.success("Preise neu gerechnet"); }} />
-      <ArtikelDialog open={dialog === "artikel"} onOpenChange={(o) => setDialog(o ? "artikel" : null)} ziel={titelName} onArtikel={artikelPlus} />
       <ArbeitszeitDialog
         open={dialog === "arbeitszeit"}
         onOpenChange={(o) => setDialog(o ? "arbeitszeit" : null)}
@@ -1448,8 +1498,10 @@ function MenuePunkt({ icon: I, onClick, children, gefahr }: { icon: Icon; onClic
   );
 }
 
+type NachlassWert = { text: string; prozent: number | null; betrag: number | null };
+
 function Summen({
-  netto, ust, brutto, ustSatz, ohneUst, firma, kalk, onProzent, onAufschlaege,
+  netto, ust, brutto, ustSatz, ohneUst, firma, kalk, uebersicht, nachlass, summeVor, foerderung, onNachlass, onFoerderung, onAufschlaege,
 }: {
   netto: number;
   ust: number;
@@ -1458,38 +1510,88 @@ function Summen({
   ohneUst: boolean;
   firma: Firma | null;
   kalk: { stunden: number; ek: number };
-  /** Alle Preise um ± % ändern (nur bearbeitbar) */
-  onProzent?: (prozent: number) => void;
-  /** Material-Aufschlag und Stundensatz für den ganzen Beleg */
+  /** Zusammenstellung: Titel mit Summe (ab zwei Titeln) */
+  uebersicht: { nummer: string; name: string; summe: number }[];
+  nachlass: EditorPosition | null;
+  /** Summe der Positionen vor dem Nachlass */
+  summeVor: number;
+  foerderung: { text: string; betrag: number | null };
+  /** nur bearbeitbar */
+  onNachlass?: (w: NachlassWert | null) => void;
+  onFoerderung?: (w: { text: string; betrag: number | null }) => void;
+  /** Material-Aufschlag und Stundensatz für ausgewählte Positionen */
   onAufschlaege?: () => void;
 }) {
-  const [prozentOffen, setProzentOffen] = useState(false);
-  const [prozent, setProzent] = useState("");
+  const [nachlassOffen, setNachlassOffen] = useState(false);
+  const [foerderOffen, setFoerderOffen] = useState(false);
   const r = rohertrag(netto, kalk.ek, kalk.stunden);
-  const p = Number(prozent.replace(",", "."));
-  const prozentOk = prozent.trim() !== "" && Number.isFinite(p) && p !== 0 && p > -100 && p <= 1000;
   const mitKalk = kalk.stunden > 0 || kalk.ek > 0;
+  const nachlassBetrag = nachlass ? positionGesamt(nachlass) : 0;
+  const zahlen = ohneUst ? netto : brutto;
+  const foerderBetrag = foerderung.betrag ?? 0;
+  const Zeile = ({ text, betrag, klasse, onClick }: { text: string; betrag: number; klasse?: string; onClick?: () => void }) => (
+    <div className={cn("flex justify-between gap-3", klasse)}>
+      <dt className="min-w-0 text-muted-foreground">
+        {onClick ? <button type="button" className="text-left underline-offset-2 hover:underline" onClick={onClick}>{text}</button> : text}
+      </dt>
+      <dd className="zahl shrink-0">{euro(betrag)}</dd>
+    </div>
+  );
 
   return (
-    <section className="rounded-lg border bg-card p-4">
+    <section className="rounded-lg border bg-card p-4" data-summen>
+      {uebersicht.length > 0 && (
+        <div className="mb-3 border-b pb-3">
+          <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Zusammenstellung</p>
+          <dl className="space-y-1 text-sm" data-zusammenstellung>
+            {uebersicht.map((u) => (
+              <div key={`${u.nummer}-${u.name}`} className="flex justify-between gap-3">
+                <dt className="min-w-0 truncate"><span className="zahl mr-1.5 text-muted-foreground">{u.nummer}</span>{u.name}</dt>
+                <dd className="zahl shrink-0">{euro(u.summe)}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      )}
       <dl className="space-y-1.5 text-sm">
-        <div className="flex justify-between gap-3">
-          <dt className="text-muted-foreground">Summe netto</dt>
-          <dd className="zahl">{euro(netto)}</dd>
-        </div>
-        <div className="flex justify-between gap-3">
-          <dt className="text-muted-foreground">
-            {ohneUst ? (firma?.kleinunternehmer ? "Kleinunternehmer — keine USt" : "Reverse Charge — keine USt") : `USt ${zahl(ustSatz)} %`}
-          </dt>
-          <dd className="zahl">{euro(ust)}</dd>
-        </div>
+        {nachlass && (
+          <>
+            <Zeile text="Summe Positionen" betrag={summeVor} />
+            <Zeile text={`abzüglich ${nachlassText(nachlass)}`} betrag={nachlassBetrag} onClick={onNachlass ? () => setNachlassOffen(true) : undefined} />
+          </>
+        )}
+        <Zeile text="Summe netto" betrag={netto} klasse={nachlass ? "border-t pt-1.5" : undefined} />
+        <Zeile text={ohneUst ? (firma?.kleinunternehmer ? "Kleinunternehmer — keine USt" : "Reverse Charge — keine USt") : `USt ${zahl(ustSatz)} %`} betrag={ust} />
         <div className="flex justify-between gap-3 border-t pt-2 text-base font-bold">
           <dt>Gesamt</dt>
           <dd className="zahl">{euro(brutto)}</dd>
         </div>
+        {foerderBetrag > 0 && (
+          <div className="mt-2 space-y-1 rounded-md bg-muted/60 px-3 py-2" data-foerderung>
+            <Zeile text={`Mögliche Förderung${foerderung.text.trim() ? ` (${foerderung.text.trim()})` : ""}`} betrag={-foerderBetrag}
+              onClick={onFoerderung ? () => setFoerderOffen(true) : undefined} />
+            <div className="flex justify-between gap-3 font-semibold"><dt>Kosten nach Förderung</dt><dd className="zahl">{euro(runden2(zahlen - foerderBetrag))}</dd></div>
+            <p className="text-[11px] text-muted-foreground">Nur zur Info im Dokument — wird nicht abgezogen.</p>
+          </div>
+        )}
       </dl>
 
-      {(mitKalk || onProzent) && (
+      {(onNachlass || onFoerderung) && (
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          {onNachlass && (
+            <Button variant="outline" className="h-11 gap-1.5" onClick={() => setNachlassOffen(true)}>
+              <Percent className="h-4 w-4" /> {nachlass ? "Nachlass ändern" : "Nachlass"}
+            </Button>
+          )}
+          {onFoerderung && (
+            <Button variant="outline" className="h-11 gap-1.5" onClick={() => setFoerderOffen(true)}>
+              <HandCoins className="h-4 w-4" /> {foerderBetrag > 0 ? "Förderung ändern" : "Förderung"}
+            </Button>
+          )}
+        </div>
+      )}
+
+      {(mitKalk || onAufschlaege) && (
         <div className="mt-3 space-y-1.5 border-t pt-3 text-sm">
           <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             <Calculator className="h-3.5 w-3.5" /> Kalkulation <span className="font-normal normal-case tracking-normal">— nur für dich, nicht auf dem PDF</span>
@@ -1511,52 +1613,119 @@ function Summen({
           )}
           {onAufschlaege && (
             <Button variant="outline" className="mt-1 w-full gap-1.5" onClick={onAufschlaege}>
-              <Calculator className="h-4 w-4" /> Aufschläge: Material und Stundensatz
-            </Button>
-          )}
-          {onProzent && (
-            <Button variant="outline" className="mt-1 w-full gap-1.5" onClick={() => { setProzent(""); setProzentOffen(true); }}>
-              <Percent className="h-4 w-4" /> Alle Preise ± % (Nachlass / Zuschlag)
+              <Calculator className="h-4 w-4" /> Aufschlag / Stundensatz für einzelne Positionen
             </Button>
           )}
         </div>
       )}
 
-      {onProzent && (
-        <AlertDialog open={prozentOffen} onOpenChange={setProzentOffen}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Alle Preise ändern</AlertDialogTitle>
-              <AlertDialogDescription>Plus für Aufschlag, Minus für Rabatt — gilt für jeden Einzelpreis in diesem Beleg.</AlertDialogDescription>
-            </AlertDialogHeader>
-            <div className="space-y-3">
-              <div className="flex flex-wrap gap-2">
-                {[-5, -3, 3, 5, 10].map((x) => (
-                  <Button key={x} variant={p === x ? "default" : "outline"} className="min-w-16" onClick={() => setProzent(String(x))}>
-                    {x > 0 ? `+${x}` : x} %
-                  </Button>
-                ))}
-              </div>
-              <div className="flex items-center gap-2">
-                <Label htmlFor="preis-prozent" className="shrink-0">Prozent</Label>
-                <Input id="preis-prozent" inputMode="decimal" className="zahl h-11 w-28 text-right" placeholder="z. B. 8 oder -3"
-                  value={prozent} onChange={(e) => setProzent(e.target.value)} />
-              </div>
-              {prozentOk && (
-                <p className="text-sm text-muted-foreground">
-                  Netto danach etwa <span className="zahl font-medium text-foreground">{euro(umProzent(netto, p))}</span> statt {euro(netto)}
-                </p>
-              )}
-            </div>
-            <AlertDialogFooter>
-              <AlertDialogCancel className="h-11">Abbrechen</AlertDialogCancel>
-              <Button className="h-11" disabled={!prozentOk} onClick={() => { onProzent(p); setProzentOffen(false); }}>
-                {prozentOk ? `Preise ${p > 0 ? "+" : ""}${zahl(p)} %` : "Ändern"}
-              </Button>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      )}
+      {onNachlass && <NachlassDialog open={nachlassOffen} onOpenChange={setNachlassOffen} nachlass={nachlass} summeVor={summeVor} onSetzen={onNachlass} />}
+      {onFoerderung && <FoerderungDialog open={foerderOffen} onOpenChange={setFoerderOffen} foerderung={foerderung} zahlen={zahlen} onSetzen={onFoerderung} />}
     </section>
+  );
+}
+
+/** Nachlass in % oder als Betrag — steht als eigene Zeile im Dokument */
+function NachlassDialog({ open, onOpenChange, nachlass, summeVor, onSetzen }: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  nachlass: EditorPosition | null;
+  summeVor: number;
+  onSetzen: (w: NachlassWert | null) => void;
+}) {
+  const [inProzent, setInProzent] = useState(true);
+  const [wert, setWert] = useState("");
+  const [text, setText] = useState("Nachlass");
+  useEffect(() => {
+    if (!open) return;
+    setInProzent(nachlass ? nachlass.prozent != null : true);
+    setWert(nachlass ? zahl(nachlass.prozent ?? Math.abs(preisVon(nachlass))) : "");
+    setText(nachlass?.bezeichnung || "Nachlass");
+  }, [open, nachlass]);
+  const n = dezimalLesen(wert);
+  const ok = n != null && n > 0 && (inProzent ? n <= 100 : n <= summeVor);
+  const betrag = ok ? (inProzent ? runden2((summeVor * n!) / 100) : runden2(n!)) : 0;
+  return (
+    <FormularDialog open={open} onOpenChange={onOpenChange} titel="Nachlass"
+      beschreibung="Steht als eigene Zeile im Dokument: Summe der Positionen, abzüglich Nachlass. Die Einzelpreise bleiben."
+      fuss={(
+        <>
+          {nachlass && <Button variant="outline" className="h-12 text-destructive" onClick={() => { onSetzen(null); onOpenChange(false); }}>Entfernen</Button>}
+          <Button variant="outline" className="h-12" onClick={() => onOpenChange(false)}>Abbrechen</Button>
+          <Button className="h-12" disabled={!ok} onClick={() => { onSetzen({ text, prozent: inProzent ? n : null, betrag: inProzent ? null : n }); onOpenChange(false); }}>Übernehmen</Button>
+        </>
+      )}>
+      <div className="grid grid-cols-2 gap-2">
+        <Button variant={inProzent ? "default" : "outline"} className="h-11" onClick={() => setInProzent(true)}>in %</Button>
+        <Button variant={!inProzent ? "default" : "outline"} className="h-11" onClick={() => setInProzent(false)}>in €</Button>
+      </div>
+      {inProzent && (
+        <div className="flex flex-wrap gap-2">
+          {[2, 3, 5, 10].map((x) => (
+            <Button key={x} variant={n === x ? "default" : "outline"} className="min-w-16" onClick={() => setWert(String(x))}>{x} %</Button>
+          ))}
+        </div>
+      )}
+      <div className="space-y-1.5">
+        <Label htmlFor="nachlass-wert">{inProzent ? "Prozent" : "Betrag netto"}</Label>
+        <Input id="nachlass-wert" inputMode="decimal" className="zahl h-12 text-right" value={wert} onChange={(e) => setWert(e.target.value)} placeholder={inProzent ? "z. B. 5" : "z. B. 200"} />
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="nachlass-text">Bezeichnung im Dokument</Label>
+        <Input id="nachlass-text" className="h-12" value={text} onChange={(e) => setText(e.target.value)} placeholder="Nachlass, Rabatt, Treuerabatt …" />
+      </div>
+      {ok && (
+        <p className="text-sm text-muted-foreground">
+          {euro(summeVor)} abzüglich <span className="zahl font-medium text-foreground">{euro(betrag)}</span> = <span className="zahl font-medium text-foreground">{euro(runden2(summeVor - betrag))}</span> netto
+        </p>
+      )}
+    </FormularDialog>
+  );
+}
+
+/** Mögliche Förderung — nur zur Info unter der Summe, wird nicht abgezogen */
+function FoerderungDialog({ open, onOpenChange, foerderung, zahlen, onSetzen }: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  foerderung: { text: string; betrag: number | null };
+  zahlen: number;
+  onSetzen: (w: { text: string; betrag: number | null }) => void;
+}) {
+  const [text, setText] = useState("");
+  const [betrag, setBetrag] = useState("");
+  useEffect(() => {
+    if (!open) return;
+    setText(foerderung.text);
+    setBetrag(foerderung.betrag ? zahl(foerderung.betrag) : "");
+  }, [open, foerderung]);
+  const b = dezimalLesen(betrag);
+  const ok = b != null && b > 0;
+  return (
+    <FormularDialog open={open} onOpenChange={onOpenChange} titel="Mögliche Förderung"
+      beschreibung="Steht unter der Summe mit „Kosten nach Förderung“ — als Info für den Kunden, der Betrag wird nicht abgezogen."
+      fuss={(
+        <>
+          {!!foerderung.betrag && <Button variant="outline" className="h-12 text-destructive" onClick={() => { onSetzen({ text: "", betrag: null }); onOpenChange(false); }}>Entfernen</Button>}
+          <Button variant="outline" className="h-12" onClick={() => onOpenChange(false)}>Abbrechen</Button>
+          <Button className="h-12" disabled={!ok} onClick={() => { onSetzen({ text: text.trim(), betrag: b }); onOpenChange(false); }}>Übernehmen</Button>
+        </>
+      )}>
+      <div className="space-y-1.5">
+        <Label htmlFor="foerder-text">Förderung</Label>
+        <Input id="foerder-text" className="h-12" value={text} onChange={(e) => setText(e.target.value)} list="foerder-vorschlaege" placeholder="z. B. Landesförderung PV, Klimafonds" />
+        <datalist id="foerder-vorschlaege">
+          {["Landesförderung Steiermark", "Klima- und Energiefonds", "EAG-Investitionszuschuss", "Bundesförderung Speicher", "Handwerkerbonus"].map((v) => <option key={v} value={v} />)}
+        </datalist>
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="foerder-betrag">Betrag (ca.)</Label>
+        <Input id="foerder-betrag" inputMode="decimal" className="zahl h-12 text-right" value={betrag} onChange={(e) => setBetrag(e.target.value)} placeholder="z. B. 1500" />
+      </div>
+      {ok && (
+        <p className="text-sm text-muted-foreground">
+          Kosten nach Förderung etwa <span className="zahl font-medium text-foreground">{euro(runden2(zahlen - b!))}</span>
+        </p>
+      )}
+    </FormularDialog>
   );
 }

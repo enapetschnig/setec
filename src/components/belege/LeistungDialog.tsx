@@ -1,23 +1,33 @@
-import { useMemo, useState } from "react";
-import { ListChecks, Minus, Plus, Search } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { LayoutGrid, ListChecks, Minus, Package, PenLine, Plus, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FormularDialog } from "@/components/FormularDialog";
 import { Leer } from "@/components/Bausteine";
 import { euro, zahl } from "@/lib/format";
-import { leistungPreis } from "@/lib/preise";
+import { useArtikelSuche } from "@/components/material/ArtikelSuche";
+import { artikelVk, leistungPreis } from "@/lib/preise";
 import { normalisieren, RAUM_VORSCHLAEGE } from "@/lib/sprachParser";
-import type { Firma } from "@/lib/types";
+import type { Artikel, Firma } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { mengeInGruppe, type EditorPosition, type KatalogLeistung } from "./editor";
+import { gruppenEnde, mengeInGruppe, mengeVon, type EditorPosition, type KatalogLeistung } from "./editor";
+
+/** Wie oft steckt ein Artikel schon in der Gruppe? */
+function artikelInGruppe(positionen: EditorPosition[], titelId: string | null, artikelId: string): number {
+  const start = titelId ? positionen.findIndex((p) => p.id === titelId) + 1 : 0;
+  const ende = gruppenEnde(positionen, titelId);
+  return positionen.slice(start, ende).reduce((s, p) => (p.artikel_id === artikelId ? s + mengeVon(p) : s), 0);
+}
 
 /**
- * Leistungskatalog als Kacheln, nach Kategorie. Antippen = +1 im gewählten
- * Raum; die Zahl auf der Kachel zeigt, wie viele dort schon stehen.
- * Der Raum lässt sich oben wechseln, ohne den Dialog zu schließen.
+ * „+ Artikel“: EIN Dialog für alles, was ins Angebot kommt. Leer zeigt er die
+ * Leistungen (Artikel samt Montagezeit) als Kacheln nach Kategorie; beim
+ * Tippen sucht er zusätzlich im Artikelstamm, und ohne Treffer wird der Text
+ * eine freie Position. Antippen = +1 im gewählten Raum, die Zahl zeigt, wie
+ * viele dort schon stehen. Der Raum lässt sich oben wechseln.
  */
 export function LeistungDialog({
-  open, onOpenChange, katalog, laedt, positionen, titelId, onTitelWahl, onNeuerTitel, onPlus, onMinus, firma, stundensatz,
+  open, onOpenChange, katalog, laedt, positionen, titelId, onTitelWahl, onNeuerTitel, onPlus, onMinus, onArtikel, onFrei, onKatalog, firma, stundensatz,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
@@ -30,10 +40,18 @@ export function LeistungDialog({
   onNeuerTitel: (name: string) => void;
   onPlus: (l: KatalogLeistung) => void;
   onMinus: (l: KatalogLeistung) => void;
+  onArtikel: (a: Artikel) => void;
+  /** Freie Position mit diesem Text (Preis trägt man danach ein) */
+  onFrei: (text: string) => void;
+  /** Artikel nach Kategorien blättern */
+  onKatalog: () => void;
   firma: Firma | null;
   stundensatz: number;
 }) {
   const [suche, setSuche] = useState("");
+  useEffect(() => { if (open) setSuche(""); }, [open]);
+  const such = suche.trim().length >= 2 ? suche.trim() : "";
+  const { data: artikel = [], isFetching: artikelLaedt } = useArtikelSuche(such, 12);
   // Neuer Raum direkt in der Chip-Reihe — kein eigener Dialog
   const [neuRaum, setNeuRaum] = useState<string | null>(null);
   const raumAnlegen = () => {
@@ -57,8 +75,8 @@ export function LeistungDialog({
     <FormularDialog
       open={open}
       onOpenChange={onOpenChange}
-      titel="Leistung hinzufügen"
-      beschreibung={gewaehlt ? `Landet unter „${gewaehlt.bezeichnung}“ — antippen = +1` : "Antippen = +1"}
+      titel="Artikel hinzufügen"
+      beschreibung={`Leistungen (mit Montagezeit) und Artikel — ${gewaehlt ? `landet unter „${gewaehlt.bezeichnung}“, ` : ""}antippen = +1`}
       breite="breit"
       fuss={<Button className="h-12 sm:min-w-40" onClick={() => onOpenChange(false)}>Fertig</Button>}
     >
@@ -67,7 +85,7 @@ export function LeistungDialog({
         <Input
           value={suche}
           onChange={(e) => setSuche(e.target.value)}
-          placeholder="Suchen – Steckdose, FI, Wallbox …"
+          placeholder="Suchen – Steckdose, FI, Wallbox, Artikelnummer …"
           className="h-12 pl-9"
           inputMode="search"
           enterKeyHint="search"
@@ -108,8 +126,14 @@ export function LeistungDialog({
       </div>
 
       {laedt && <p className="py-6 text-center text-sm text-muted-foreground">Katalog wird geladen …</p>}
-      {!laedt && gruppen.length === 0 && (
-        <Leer icon={ListChecks} text={katalog.length ? "Keine Leistung gefunden." : "Der Leistungskatalog ist noch leer."} />
+      {!laedt && !such && gruppen.length === 0 && (
+        <Leer icon={ListChecks} text={katalog.length ? "Keine Leistung gefunden." : "Noch keine Leistungen — oben einen Artikel suchen."} />
+      )}
+      {!such && (
+        <div className="grid grid-cols-2 gap-2">
+          <Button variant="outline" className="h-11" onClick={onKatalog}><LayoutGrid className="h-4 w-4" /> Artikel nach Kategorie</Button>
+          <Button variant="outline" className="h-11" onClick={() => onFrei("")}><PenLine className="h-4 w-4" /> Freie Position</Button>
+        </div>
       )}
 
       {gruppen.map(([kategorie, liste]) => (
@@ -152,6 +176,43 @@ export function LeistungDialog({
           </div>
         </section>
       ))}
+
+      {such && (
+        <section className="space-y-2" aria-label="Artikel">
+          <h3 className="px-1 text-[11px] font-medium uppercase tracking-[0.06em] text-muted-foreground">Artikel{artikelLaedt ? " …" : ""}</h3>
+          {!artikelLaedt && artikel.length === 0 && <p className="px-1 text-sm text-muted-foreground">Kein Artikel gefunden.</p>}
+          <ul className="divide-y rounded-lg border bg-card">
+            {artikel.map((a) => {
+              const anzahl = artikelInGruppe(positionen, titelId, a.id);
+              return (
+                <li key={a.id}>
+                  <button type="button" onClick={() => onArtikel(a)}
+                    className={cn("flex min-h-14 w-full items-center gap-3 px-3 py-2 text-left active:bg-muted/40", anzahl > 0 && "bg-primary-soft")}>
+                    <Package className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-medium leading-snug [overflow-wrap:anywhere]">{a.bezeichnung}</span>
+                      <span className="block truncate text-xs text-muted-foreground">{[a.hersteller, a.artikelnummer].filter(Boolean).join(" · ")}</span>
+                    </span>
+                    <span className="zahl shrink-0 text-right text-sm">
+                      <span className="block font-semibold">{euro(artikelVk(a, firma))}</span>
+                      <span className="block text-xs text-muted-foreground">/ {a.einheit || "Stk"}</span>
+                    </span>
+                    {anzahl > 0 && (
+                      <span className="zahl inline-flex h-6 min-w-6 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 text-xs font-bold text-primary-foreground">{zahl(anzahl)}</span>
+                    )}
+                  </button>
+                </li>
+              );
+            })}
+            <li>
+              <button type="button" onClick={() => { onFrei(such); setSuche(""); }} className="flex min-h-14 w-full items-center gap-3 px-3 py-2 text-left active:bg-muted/40">
+                <PenLine className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <span className="min-w-0 flex-1 text-sm">„{such}“ als freie Position — Preis selbst eintragen</span>
+              </button>
+            </li>
+          </ul>
+        </section>
+      )}
     </FormularDialog>
   );
 }
