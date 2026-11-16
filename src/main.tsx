@@ -15,6 +15,16 @@ try {
   }
 } catch { /* privater Modus: nichts zu übernehmen */ }
 
+// Link aus der Mail „Passwort vergessen“: Steht die Adresse, von der aus er
+// angefordert wurde, nicht in der uri_allow_list von Supabase Auth, zeigt er
+// auf die nackte site_url (?token_hash=…&type=recovery). Dann hierher weiter.
+{
+  const q = new URLSearchParams(window.location.search);
+  if (q.get("token_hash") && q.get("type") === "recovery" && window.location.pathname !== "/passwort-neu") {
+    window.history.replaceState(null, "", `/passwort-neu${window.location.search}`);
+  }
+}
+
 // Hauptfarbe aus kunde.config.ts anwenden, bevor die App rendert.
 farbenAnwenden();
 
