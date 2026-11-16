@@ -67,7 +67,7 @@ SETEC-Pakete (Lohnkosten, Angebot online als anon, Lager, Aufgaben, Dokumente).
   `emailVorschlag` „Meintest du …@gmail.com?“), Passwort mit Augen-Knopf.
   `signUp` (`mailer_autoconfirm`), sofort angemeldet; schon registriert →
   mit demselben Passwort anmelden (Doppeltipp). **Jedes neue Konto ist sofort
-  aktiver Monteur** (`handle_new_user`; die Bootstrap-Adressen werden Chef) —
+  aktiver Monteur** (`handle_new_user`, ohne Ausnahme — Chef-Adressen im Trigger wären ein Loch, weil E-Mails nicht bestätigt werden; Migration `20261116130000`) —
   die Freischaltung kommt später wieder. Chef-Rolle, Team, Farbe danach unter
   Einstellungen → Mitarbeiter. **Sperren** setzt `gesperrt = true` (der
   Trigger nimmt `aktiv` weg); „Freischalten“ hebt die Sperre auf.
@@ -78,7 +78,10 @@ SETEC-Pakete (Lohnkosten, Angebot online als anon, Lager, Aufgaben, Dokumente).
   in Supabase Auth: Link `{{ .RedirectTo }}?token_hash=…&type=recovery`).
   `pages/PasswortNeu.tsx` löst den Link erst beim Speichern ein
   (`verifyOtp`, dann `updateUser`) — Link-Scanner im Postfach verbrauchen ihn
-  nicht; benutzt/abgelaufen → „Neuen Link anfordern“. Konten ohne echte
+  nicht; scheitert nur das Speichern, gilt der eingelöste Link für den nächsten Versuch;
+  benutzt/abgelaufen → „Neuen Link anfordern“; am Handy im Browser zum Schluss „App öffnen
+  und anmelden“ (die iPhone-Home-App hat eigenen Speicher). `main.tsx` leitet einen nackten
+  `?token_hash=…&type=recovery` (Ersatz-`site_url`) auf `/passwort-neu` um. Konten ohne echte
   E-Mail (Benutzername): der Chef vergibt ein vorläufiges Passwort
   (`passwort_setzen()`), `passwort_neu` verlangt beim nächsten Anmelden ein
   eigenes (`ProtectedRoute` → `ChangePasswordDialog forced`).
@@ -87,8 +90,9 @@ SETEC-Pakete (Lohnkosten, Angebot online als anon, Lager, Aufgaben, Dokumente).
   (`/aushang`, eine A4-Seite), WhatsApp, E-Mail, Kopieren, Teilen und
   **per SMS**: Edge Function `einladung-sms` (nur Chef, fester Text ohne
   Umlaute + Link, Twilio von der Nummer `TWILIO_FROM` — Absendername
-  „SETEC“ lehnt Twilio für das Konto ab; Drossel 3 je Nummer/40 je Tag,
-  Protokoll `sms_einladungen`; Secrets `TWILIO_ACCOUNT_SID`,
+  „SETEC“ lehnt Twilio für das Konto ab; nur Handynummern AT + Nachbar-/Herkunftsländer
+  (`HANDY` in `lib/einladung.ts` und in der Funktion), Drossel 3 je Nummer/40 je Tag
+  atomar über `sms_platz()`, Protokoll `sms_einladungen`; Secrets `TWILIO_ACCOUNT_SID`,
   `TWILIO_AUTH_TOKEN`, `TWILIO_FROM`, `APP_URL`). Abgelöst: Firmen-Link
   mit Token, persönliche Einladungen, Freischaltung.
 

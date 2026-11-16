@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { alleSicherungenLoeschen } from "@/components/belege/sicherung";
 import { supabase } from "@/integrations/supabase/client";
@@ -52,9 +52,13 @@ export function SitzungProvider({ children }: { children: ReactNode }) {
   const [profil, setProfil] = useState<Profil | null>(null);
   const [firma, setFirma] = useState<Firma | null>(null);
   const [ohneVerbindung, setOhneVerbindung] = useState(false);
+  // Für wen ist das Profil geladen? Neue Anmeldung → bis dahin „lädt“, sonst
+  // stünde kurz (oder nach einem späten Nachladen dauerhaft) „Zugang nicht aktiv“ da
+  const profilFuer = useRef<string | null>(null);
 
   const datenLaden = useCallback(async (s: Session | null) => {
     if (!s) {
+      profilFuer.current = null;
       setProfil(null);
       setFirma(null);
       setLaden(false);
@@ -68,6 +72,7 @@ export function SitzungProvider({ children }: { children: ReactNode }) {
       // Funkloch o. Ä.: Bekanntes behalten (sonst stünde mitten in der Arbeit
       // „Wartet auf Freischaltung“ da und offene Formulare wären weg)
       const g = gemerkt(s.user.id);
+      profilFuer.current = s.user.id;
       setProfil((alt) => (alt?.id === s.user.id ? alt : g?.profil ?? null));
       setFirma((alt) => alt ?? g?.firma ?? null);
       setOhneVerbindung(!g);
@@ -75,6 +80,7 @@ export function SitzungProvider({ children }: { children: ReactNode }) {
       return;
     }
     setOhneVerbindung(false);
+    profilFuer.current = s.user.id;
     merken(p ? { id: s.user.id, profil: p, firma: f ?? null } : null);
     // Unveränderte Daten behalten ihr Objekt — Supabase meldet sich bei jeder
     // Rückkehr in den Tab neu an, und ein neues Objekt setzt offene Formulare zurück
@@ -90,6 +96,7 @@ export function SitzungProvider({ children }: { children: ReactNode }) {
       // Gesicherte Beleg-Entwürfe enthalten Kundendaten — nicht fürs nächste Konto am Gerät
       if (e === "SIGNED_OUT") { alleSicherungenLoeschen(); merken(null); }
       setSession(s);
+      if (s && profilFuer.current !== s.user.id) setLaden(true);
       window.setTimeout(() => void datenLaden(s), 0);
     });
     supabase.auth.getSession().then(({ data: { session: s } }) => {
@@ -106,7 +113,9 @@ export function SitzungProvider({ children }: { children: ReactNode }) {
     firma,
     istChef: !!profil?.aktiv && profil.rolle === "chef",
     ohneVerbindung,
-    neuLaden: () => datenLaden(session),
+    // immer mit der aktuellen Sitzung — die im Render festgehaltene kann veraltet
+    // sein (z. B. /passwort-neu: gerendert ohne, gespeichert mit Anmeldung)
+    neuLaden: async () => datenLaden((await supabase.auth.getSession()).data.session),
   };
 
   return <Ctx.Provider value={wert}>{children}</Ctx.Provider>;
