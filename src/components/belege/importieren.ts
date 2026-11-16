@@ -328,8 +328,8 @@ export function zeitraumText(daten: string[]): string {
 
 const q = (werte: Partial<Quelle>): Quelle => ({ zeiten: [], material: [], regie: [], ...werte });
 
-/** Überstunden kosten den Kunden den Zuschlag mit — die Vorschau zeigt es, der Preis bleibt änderbar */
-const ZUSCHLAG: Record<string, number> = { ue50: 1.5, ue100: 2 };
+/** Überstunden sind für den Kunden normale Arbeitszeit — der Zuschlag ist Lohnsache, nie auf der Rechnung */
+const rechnungsArt = (art: string | null | undefined) => (art === "fahrt" ? "fahrt" : "arbeit");
 
 /** Arbeitszeit-Zeilen: je Mitarbeiter oder eine Zeile */
 export function arbeitszeitPositionen(zeiten: ImportZeit[], opt: ImportOptionen, mitDatum: boolean): EditorPosition[] {
@@ -340,20 +340,19 @@ export function arbeitszeitPositionen(zeiten: ImportZeit[], opt: ImportOptionen,
     langtext: mitDatum ? zeitraumText(z.map((x) => x.datum)) : "",
     menge: zahlText(runden2(z.reduce((s, x) => s + x.stunden, 0))),
     einheit: "h",
-    einzelpreis: preisText(runden2((z[0].satz || lohnart(z[0])?.satz || opt.stundensatz) * (ZUSCHLAG[z[0].art ?? "arbeit"] ?? 1))),
+    einzelpreis: preisText(runden2((z[0].satz || lohnart(z[0])?.satz || opt.stundensatz))),
     quelle: q({ zeiten: z.map((x) => x.id) }),
   });
   const je = new Map<string, ImportZeit[]>();
   // Eine Zeile je Mitarbeiter — sonst eine je Stundensatz; wer einen eigenen
   // Satz hat, bekommt eine eigene Zeile (je Satz, falls er sich geändert hat)
   const schluessel = (z: ImportZeit) =>
-    `${opt.stundenJeMitarbeiter ? z.user_id : z.satz ? `${z.user_id}@${z.satz}` : lohnart(z)?.name ?? ""}|${opt.stundenJeMitarbeiter && z.satz ? z.satz : ""}|${z.art ?? "arbeit"}`;
+    `${opt.stundenJeMitarbeiter ? z.user_id : z.satz ? `${z.user_id}@${z.satz}` : lohnart(z)?.name ?? ""}|${opt.stundenJeMitarbeiter && z.satz ? z.satz : ""}|${rechnungsArt(z.art)}`;
   zeiten.forEach((z) => je.set(schluessel(z), [...(je.get(schluessel(z)) ?? []), z]));
   return [...je.values()].map((z) => {
     const l = lohnart(z[0]);
     const text = opt.stundenJeMitarbeiter || z[0].satz ? `Arbeitszeit ${z[0].name}` : l ? arbeitszeitText(l) : "Arbeitszeit";
-    const art = z[0].art ?? "arbeit";
-    return zeile(art === "fahrt" ? text.replace("Arbeitszeit", "Fahrzeit") : art === "ue50" ? `${text}, Überstunden 50 %` : art === "ue100" ? `${text}, Überstunden 100 %` : text, z);
+    return zeile(rechnungsArt(z[0].art) === "fahrt" ? text.replace("Arbeitszeit", "Fahrzeit") : text, z);
   });
 }
 

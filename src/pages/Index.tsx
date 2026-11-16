@@ -13,6 +13,7 @@ import { KontoMenue } from "@/components/KontoMenue";
 import { StartListe } from "@/components/rahmen/StartListe";
 import { sucheOeffnen } from "@/components/rahmen/Suchpalette";
 import { EinsatzBereich } from "@/components/einsatz/EinsatzBereich";
+import { Button } from "@/components/ui/button";
 import { MeineAufgaben } from "@/components/aufgaben/MeineAufgaben";
 import { useAufgabenZaehler } from "@/components/aufgaben/aufgabenDaten";
 import { NeueDokumente } from "@/components/dokumente/NeueDokumente";
@@ -305,6 +306,12 @@ export default function Index() {
           <SchnellKnopf icon={ScanBarcode} titel="Material" unter="scannen" onClick={() => navigate("/scan")} />
           <SchnellKnopf icon={ClipboardSignature} titel="Regiebericht" unter="mit Unterschrift" onClick={() => navigate("/regie/neu")} />
         </div>
+        {/* Monteur: kleine Baustelle selbst anlegen („Licht geht nicht“) — Projekte hat er nicht im Menü */}
+        {!istChef && (
+          <Button variant="outline" className="mt-2.5 h-12 w-full gap-2" onClick={() => setProjektOffen(true)}>
+            <FolderPlus className="h-4 w-4" /> Neue Baustelle anlegen
+          </Button>
+        )}
         {istChef && (
           <Link to="/belege/neu?typ=angebot&sprache=1"
             className="mt-2.5 flex min-h-16 items-center gap-3 rounded-lg border border-primary/30 bg-primary-soft p-3 transition-colors hover:border-primary active:scale-[0.99]">
