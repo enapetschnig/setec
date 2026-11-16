@@ -102,6 +102,8 @@ function Inhalt({ b }: { b: BestellungVoll }) {
     if (!kopf.lieferant) { toast.error("Lieferant fehlt."); return false; }
     if (!kopf.lagerort_id && !kopf.projekt_id) { toast.error(ziel === "lager" ? "Lagerort wählen." : "Projekt wählen."); return false; }
     if (zeilen.some((z) => !(zahlLesen(z.menge) > 0))) { toast.error("Jede Position braucht eine Menge über 0."); return false; }
+    const ekFalsch = zeilen.find((z) => Number.isNaN(preisEingabe(z.ek)));
+    if (ekFalsch) { toast.error(`EK „${ekFalsch.ek.trim()}“ ist keine gültige Zahl.`, { description: ekFalsch.artikel.bezeichnung }); return false; }
     setLaeuft("speichern");
     try {
       if (zeilenText(zeilen) !== zeilenText(anfang)) {

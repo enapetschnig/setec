@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { downloadName } from "@/lib/dokumente";
 import { bildVerkleinern, sichererDateiname } from "@/lib/upload";
 import type { FirmenDokument, PersonalDokument } from "@/lib/types";
 
@@ -57,6 +58,27 @@ export async function dateiOeffnen(bucket: "personal" | "firmen-dokumente", pfad
   }
   if (fenster) fenster.location.href = data.signedUrl;
   else window.location.href = data.signedUrl;
+  return true;
+}
+
+/**
+ * Datei herunterladen unter dem ursprünglichen Namen (mit Umlauten, ohne
+ * Zufallspräfix): die signierte Adresse liefert `Content-Disposition:
+ * attachment; filename=…` — die Seite bleibt offen.
+ */
+export async function dateiHerunterladen(bucket: "personal" | "firmen-dokumente", pfad: string, name: string | null) {
+  const { data, error } = await supabase.storage.from(bucket).createSignedUrl(pfad, 600, { download: downloadName(name, pfad) });
+  if (error || !data?.signedUrl) {
+    toast.error("Datei nicht gefunden", { description: error?.message });
+    return false;
+  }
+  const a = document.createElement("a");
+  a.href = data.signedUrl;
+  a.download = downloadName(name, pfad);
+  a.rel = "noopener";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
   return true;
 }
 

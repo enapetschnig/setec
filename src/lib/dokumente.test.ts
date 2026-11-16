@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ablauf, groesseText, monatText, nachOrdner, passt, personalTitel, vormonat } from "./dokumente";
+import { ablauf, downloadName, groesseText, monatText, nachOrdner, passt, personalTitel, vormonat } from "./dokumente";
 
 describe("Dokumente", () => {
   it("Monat und Vormonat", () => {
@@ -36,5 +36,12 @@ describe("Dokumente", () => {
     expect(groesseText(0)).toBe("");
     expect(groesseText(300)).toBe("1 KB");
     expect(groesseText(1572864)).toBe("1,5 MB");
+  });
+  it("Dateiname beim Herunterladen: Original mit Umlauten, ohne Zufallspräfix", () => {
+    expect(downloadName("Prüfbericht Größe.pdf", "Prüfberichte/1a2b3c4d-Prufbericht_Grosse.pdf")).toBe("Prüfbericht Größe.pdf");
+    expect(downloadName("IMG_0001.HEIC", "u1/1a2b3c4d-IMG_0001.jpg")).toBe("IMG_0001.jpg");
+    expect(downloadName("Foto.jpeg", "u1/1a2b3c4d-Foto.jpg")).toBe("Foto.jpeg");
+    expect(downloadName(null, "u1/1a2b3c4d-Lohnzettel_Maerz.pdf")).toBe("Lohnzettel_Maerz.pdf");
+    expect(downloadName("a/b.pdf", "x/1a2b3c4d-a_b.pdf")).toBe("a_b.pdf");
   });
 });

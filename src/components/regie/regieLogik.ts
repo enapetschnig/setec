@@ -1,4 +1,4 @@
-import { stundenAusVonBis, uhrzeit, zahlLesen } from "@/lib/format";
+import { stundenAusVonBis, uhrzeit, zahlLesen, zahlUngueltig } from "@/lib/format";
 
 /**
  * Regiebericht — Rechen- und Prüfregeln ohne Datenbank und ohne React.
@@ -75,9 +75,11 @@ export function zeileFehler(z: ZeitZeile): string | null {
   if (z.modus === "vonbis") {
     if (!z.von || !z.bis) return "Von und Bis eintragen";
     if (z.bis.slice(0, 5) === z.von.slice(0, 5)) return "Von und Bis sind gleich";
+    if (zahlUngueltig(z.pause)) return "Die Pause ist keine Zahl";
     if (zahlLesen(z.pause) < 0) return "Die Pause kann nicht negativ sein";
     if (zeileStunden(z) <= 0) return "Die Pause ist länger als die Arbeitszeit";
   }
+  if (z.modus === "stunden" && zahlUngueltig(z.stunden)) return "Die Stunden sind keine Zahl";
   const h = zeileStunden(z);
   if (!(h > 0)) return "Stunden eintragen";
   if (h > 24) return "Höchstens 24 Stunden";

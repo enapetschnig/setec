@@ -26,7 +26,7 @@ import { useNeuLaden, useProjekt } from "@/hooks/useDaten";
 import { useSitzung } from "@/hooks/useSitzung";
 import { archivieren, archivLaden } from "@/lib/belegArchiv";
 import { belegPdfErstellen } from "@/lib/belegPdf";
-import { datum, dezimalLesen, euro, isoTag, zahl } from "@/lib/format";
+import { datum, dezimalLesen, euro, isoTag, zahl, zahlUngueltig } from "@/lib/format";
 import { pdfDateiname, pdfTeilenOderLaden } from "@/lib/pdfBasis";
 import { lohnarten as lohnartenFuer, rohertrag } from "@/lib/kalkulation";
 import { runden2, stundensatzFuer } from "@/lib/preise";
@@ -336,6 +336,11 @@ export function BelegEditor({
     }
     if (istAngebot && !kopf.projekt_id && !kopf.empf_name.trim() && !kopf.betreff.trim()) {
       toast.error("Bitte zuerst Kunde oder Betreff eintragen — daraus wird das Projekt angelegt.");
+      return false;
+    }
+    const falsch = positionen.findIndex((p) => zahlUngueltig(p.menge) || zahlUngueltig(p.einzelpreis));
+    if (falsch >= 0) {
+      toast.error(`Position ${falsch + 1}: Menge oder Preis ist keine Zahl („${zahlUngueltig(positionen[falsch].menge) ? positionen[falsch].menge : positionen[falsch].einzelpreis}“) — bitte korrigieren.`);
       return false;
     }
     const vorher = aktuellRef.current;

@@ -2,7 +2,8 @@ import { stundensaetzeLesen } from "@/lib/kalkulation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { Building2, ImagePlus, KeyRound, Loader2, LogOut, Plus, Smartphone, Trash2, User, Users } from "lucide-react";
+import { Ban, Building2, ImagePlus, KeyRound, Loader2, LogOut, Plus, Smartphone, Trash2, User, Users } from "lucide-react";
+import { Rueckfrage, type Frage } from "@/components/Rueckfrage";
 import { supabase } from "@/integrations/supabase/client";
 import { Seite } from "@/components/PageHeader";
 import {
@@ -394,6 +395,7 @@ function Mitarbeiter() {
   const [sperren, setSperren] = useState<Profil | null>(null);
   const [passwort, setPasswort] = useState<{ p: Profil; neu: string | null } | null>(null);
   const [laeuft, setLaeuft] = useState(false);
+  const [frage, setFrage] = useState<Frage | null>(null);
   const { data: alle = [], refetch } = useQuery({
     queryKey: ["mitarbeiter", "alle"],
     queryFn: async () => {
@@ -466,7 +468,17 @@ function Mitarbeiter() {
               <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-3 border-t pt-3">
                 <div className="flex h-9 overflow-hidden rounded-md border text-sm">
                   {(["monteur", "chef"] as Rolle[]).map((r, i) => (
-                    <button key={r} type="button" disabled={p.id === ich?.id} onClick={() => aendern(p, { rolle: r })}
+                    <button key={r} type="button" disabled={p.id === ich?.id} aria-pressed={p.rolle === r}
+                      onClick={() => {
+                        if (p.rolle === r) return;
+                        if (r !== "chef") return void aendern(p, { rolle: r });
+                        setFrage({
+                          titel: `${name(p)} zum Chef machen?`,
+                          text: `${p.vorname || name(p)} sieht dann alles wie du — Rechnungen, Angebote, Preise, Stunden und Dokumente aller Mitarbeiter — und kann Rechnungen fertigstellen, Mitarbeiter sperren und Rollen ändern.`,
+                          knopf: "Ja, Chef",
+                          aktion: () => aendern(p, { rolle: "chef" }, `${name(p)} ist jetzt Chef`),
+                        });
+                      }}
                       className={cn("px-3 font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60", i > 0 && "border-l",
                         p.rolle === r ? "bg-primary text-primary-foreground" : "hover:bg-muted")}>
                       {r === "chef" ? "Chef" : "Monteur"}
@@ -486,7 +498,12 @@ function Mitarbeiter() {
                 )}
                 <PersonalFelder p={p} onAendern={(daten) => aendern(p, daten)} />
                 <LohnSaetze p={p} />
-                <div className="flex flex-wrap gap-1.5" aria-label="Farbe">
+                <div className="flex flex-wrap items-center gap-1.5" aria-label="Farbe">
+                  <button type="button" onClick={() => aendern(p, { farbe: null })} aria-label="Keine Farbe" aria-pressed={!p.farbe} title="Keine Farbe"
+                    className={cn("flex h-7 w-7 items-center justify-center rounded-full border border-dashed border-muted-foreground/60 bg-card text-muted-foreground ring-offset-2 transition",
+                      !p.farbe && "ring-2 ring-foreground")}>
+                    <Ban className="h-3.5 w-3.5" />
+                  </button>
                   {PERSONENFARBEN.map((c) => (
                     <button key={c} type="button" onClick={() => aendern(p, { farbe: c })} aria-label={`Farbe ${c}`}
                       className={cn("h-7 w-7 rounded-full ring-offset-2 transition", p.farbe === c && "ring-2 ring-foreground")} style={{ backgroundColor: c }} />
@@ -507,6 +524,8 @@ function Mitarbeiter() {
           </section>
         ))}
       </div>
+
+      <Rueckfrage frage={frage} onClose={() => setFrage(null)} />
 
       <AlertDialog open={!!sperren} onOpenChange={(o) => { if (!o && !laeuft) setSperren(null); }}>
         <AlertDialogContent>

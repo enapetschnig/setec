@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { Building2, FileText, FolderOpen, Image as Bild, Lock, Plus, Search, Trash2, User, Users } from "lucide-react";
+import { Building2, Download, FileText, FolderOpen, Image as Bild, Lock, Plus, Search, Trash2, User, Users } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Seite } from "@/components/PageHeader";
 import { Avatar, Leer, StatusPille } from "@/components/Bausteine";
@@ -11,7 +11,7 @@ import {
   AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { DokumentDialog } from "@/components/dokumente/DokumentDialog";
-import { dateiOeffnen, useFirmenDokumente, usePersonalDokumente } from "@/components/dokumente/dokumentDaten";
+import { dateiHerunterladen, dateiOeffnen, useFirmenDokumente, usePersonalDokumente } from "@/components/dokumente/dokumentDaten";
 import { fehlerText } from "@/components/stamm/stammDaten";
 import { useMitarbeiter, useNeuLaden } from "@/hooks/useDaten";
 import { useSitzung } from "@/hooks/useSitzung";
@@ -120,6 +120,10 @@ function FirmenAblage() {
                           </span>
                         </span>
                       </button>
+                      <Button variant="ghost" size="icon" className="h-11 w-11 shrink-0 text-muted-foreground" aria-label={`${d.titel} herunterladen`}
+                        onClick={() => void dateiHerunterladen("firmen-dokumente", d.pfad, d.name)}>
+                        <Download className="h-4 w-4" />
+                      </Button>
                       {istChef && (
                         <Button variant="ghost" size="icon" className="h-11 w-11 shrink-0 text-muted-foreground" aria-label={`${d.titel} löschen`} onClick={() => setWeg(d)}>
                           <Trash2 className="h-4 w-4" />
@@ -216,6 +220,10 @@ function PersonAblage({ userId, personName, eigene = false }: { userId: string; 
                         </span>
                       </span>
                     </button>
+                    <Button variant="ghost" size="icon" className="h-11 w-11 shrink-0 text-muted-foreground" aria-label={`${personalTitel(d)} herunterladen`}
+                      onClick={() => void dateiHerunterladen("personal", d.pfad, d.name)}>
+                      <Download className="h-4 w-4" />
+                    </Button>
                     {darfLoeschen(d) && (
                       <Button variant="ghost" size="icon" className="h-11 w-11 shrink-0 text-muted-foreground" aria-label={`${personalTitel(d)} löschen`} onClick={() => setWeg(d)}>
                         <Trash2 className="h-4 w-4" />

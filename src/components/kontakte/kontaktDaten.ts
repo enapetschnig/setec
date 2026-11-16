@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { Kunde } from "@/lib/types";
 import { brauchtGeo, geoAnfrage, nominatimLesen, nominatimUrl, type LieferantBeleg } from "./kontaktLogik";
@@ -60,6 +61,27 @@ export async function geoSuchen(k: Pick<Kunde, "id" | "strasse" | "plz" | "ort">
     .update({ lat: punkt?.lat ?? null, lng: punkt?.lng ?? null, geo_adresse: anfrage }).eq("id", k.id);
   if (error) throw error;
   return !!punkt;
+}
+
+/**
+ * Lage im Hintergrund suchen (Kontakt gespeichert oder geöffnet). Schlägt die
+ * Suche fehl (Netz, Dienst überlastet), bleibt `geo_adresse` alt — beim
+ * nächsten Öffnen oder Speichern wird erneut gesucht. Dezenter Hinweis statt
+ * stillem Fehlschlag.
+ */
+const imGang = new Set<string>();
+export async function geoImHintergrund(k: Pick<Kunde, "id" | "strasse" | "plz" | "ort">, danach?: () => unknown, { beimOeffnen = false } = {}) {
+  if (imGang.has(k.id)) return;
+  imGang.add(k.id);
+  try {
+    const gefunden = await geoSuchen(k);
+    if (!gefunden && !beimOeffnen) toast("Adresse auf der Karte nicht gefunden – bitte PLZ und Ort prüfen.");
+    await danach?.();
+  } catch {
+    toast("Ort auf der Karte nicht gefunden – später erneut");
+  } finally {
+    imGang.delete(k.id);
+  }
 }
 
 /**

@@ -62,6 +62,18 @@ export type AnteilEntwurf = {
 };
 
 /**
+ * Passen die Positionen zum Netto? Gibt den Unterschied (Positionen − Netto)
+ * zurück, wenn er über einem Cent liegt — sonst null. Ohne Positionen mit
+ * Betrag gibt es nichts zu vergleichen.
+ */
+export function positionenAbweichung(netto: number, betraege: (number | null)[]): number | null {
+  const mit = betraege.filter((b): b is number => b != null);
+  if (!mit.length) return null;
+  const diff = Math.round((mit.reduce((s, b) => s + b, 0) - netto) * 100) / 100;
+  return Math.abs(diff) > 0.01 ? diff : null;
+}
+
+/**
  * Prüft die Aufteilung vor dem Speichern. Gibt einen Satz für den Benutzer
  * zurück oder null. `lesen` wandelt die Eingabe in eine Zahl (Komma!).
  */

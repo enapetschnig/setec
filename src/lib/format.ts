@@ -57,16 +57,25 @@ export function stundenAusVonBis(von: string, bis: string, pauseMin: number): nu
   return min > 0 ? Math.round((min / 60) * 100) / 100 : 0;
 }
 
+/** Einheiten und Währungen, die vor oder hinter einer Zahl stehen dürfen */
+const EINHEIT = "€|eur|euro|%|h|std\\.?|stunden?|min|stk\\.?|stück|lfm|m²|kwp?|kwh";
+const ZAHL_MIT_EINHEIT = new RegExp(`^(?:${EINHEIT})?([+-]?[\\d.,]+?)(?:,-|,—|\\.-)?(?:${EINHEIT})?$`, "i");
+
 /**
  * Zahl aus einer Zelle oder einem Eingabefeld: »12,50«, »1.250,50«,
  * »1,250.50«, »12.5«, »12,50 €«. »1.250« = 1250 (Tausenderpunkt, wie man es
  * in Österreich schreibt), »0.250« und »1.25« = Dezimalpunkt.
- * null = leer oder keine Zahl.
+ * null = leer oder keine Zahl, auch bei Fremdzeichen (»9,8x«).
  */
 export function dezimalLesen(eingabe: string | number | null | undefined): number | null {
   if (eingabe === null || eingabe === undefined) return null;
   if (typeof eingabe === "number") return Number.isFinite(eingabe) ? eingabe : null;
-  let s = String(eingabe).replace(/[^\d,.-]/g, "");
+  // Nur Ziffern, Trenner, Vorzeichen, Leerzeichen und eine Einheit/Währung
+  // davor oder dahinter — „9,8x“ oder „1o“ ist ein Tippfehler, keine Zahl
+  const roh = String(eingabe).replace(/[\s\u00a0\u202f'’]/g, "");
+  const teil = roh.match(ZAHL_MIT_EINHEIT);
+  if (!teil) return null;
+  let s = teil[1].replace(/^\+/, "");
   if (!s || !/\d/.test(s)) return null;
   const komma = s.includes(",");
   const punkt = s.includes(".");
@@ -82,10 +91,15 @@ export function dezimalLesen(eingabe: string | number | null | undefined): numbe
     if (teile.length > 2 || (punkt && tausender)) s = teile.join("");
     else if (komma) s = s.replace(",", ".");
   }
-  const m = s.match(/^-?\d*\.?\d*/);
+  const m = s.match(/^-?\d*\.?\d*$/);
   if (!m || m[0] === "" || m[0] === "-" || m[0] === ".") return null;
   const n = Number(m[0]);
   return Number.isFinite(n) ? n : null;
+}
+
+/** Feld enthält etwas, das keine Zahl ist („9,8x“) — leer zählt nicht */
+export function zahlUngueltig(s: string | null | undefined): boolean {
+  return !!s && s.trim() !== "" && dezimalLesen(s) === null;
 }
 
 /** Zahl aus einem Eingabefeld wie `dezimalLesen` — leer oder unlesbar = 0 */

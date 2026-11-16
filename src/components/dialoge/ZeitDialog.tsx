@@ -17,7 +17,7 @@ import { DiktatKnopf } from "@/components/DiktatKnopf";
 import { PersonenWahl } from "@/components/PersonenWahl";
 import { useMitarbeiter, useNeuLaden, useProjekte, useTeams } from "@/hooks/useDaten";
 import { useSitzung } from "@/hooks/useSitzung";
-import { datum as datumText, isoTag, stunden as stundenText, stundenAusVonBis, ueberMitternacht, zahlLesen } from "@/lib/format";
+import { datum as datumText, isoTag, stunden as stundenText, stundenAusVonBis, ueberMitternacht, zahlLesen, zahlUngueltig } from "@/lib/format";
 import { ersteUeberschneidung, naechsterBlock, ueberschneiden } from "@/lib/zeitBloecke";
 import { name, PROJEKT_STATUS, type ProjektStatus, type Zeit } from "@/lib/types";
 import { STUNDEN_ART, type StundenArt } from "@/lib/types";
@@ -209,6 +209,7 @@ export function ZeitDialog({
       for (const [i, b] of bloecke.entries()) {
         const welcher = bloecke.length > 1 ? `${i + 1}. Block: ` : "";
         if (!b.von || !b.bis) return toast.error(`${welcher}Bitte Von und Bis eintragen.`);
+        if (zahlUngueltig(b.pause)) return toast.error(`${welcher}Die Pause „${b.pause}“ ist keine Zahl (Minuten).`);
         if (zahlLesen(b.pause) < 0) return toast.error(`${welcher}Die Pause kann nicht negativ sein.`);
         if (b.von === b.bis) return toast.error(`${welcher}Von und Bis sind gleich.`);
         if (blockStunden(b) === 0) return toast.error(`${welcher}Die Pause ist länger als die Arbeitszeit.`);
@@ -222,6 +223,7 @@ export function ZeitDialog({
       const paar = ersteUeberschneidung(bloecke);
       if (paar) return toast.error(`Block ${paar[0] + 1} und ${paar[1] + 1} überschneiden sich.`);
     }
+    if (!vonBis && zahlUngueltig(std)) return toast.error(`„${std}“ ist keine Zahl — bitte die Stunden z. B. als 7,5 eintragen.`);
     if (!(ergebnis > 0 && ergebnis <= 24)) return toast.error("Bitte die Stunden eintragen — mehr als 0 und höchstens 24.");
     setSpeichert(true);
     // Mehr als 24 h an einem Tag für eine Person geht nicht — meist doppelt gebucht

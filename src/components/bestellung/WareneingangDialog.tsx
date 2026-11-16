@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { artikelZuCode } from "@/components/scanner/artikelZuCode";
 import { useNeuLaden } from "@/hooks/useDaten";
 import { codeVarianten } from "@/lib/strichcode";
-import { zahl, zahlLesen } from "@/lib/format";
+import { zahl, zahlLesen, zahlUngueltig } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { positionInfo, wareneingangBuchen, type BestellungVoll } from "./bestellDaten";
 import { offeneMenge, positionFuerArtikel } from "./bestellLogik";
@@ -73,6 +73,8 @@ export function WareneingangDialog({ open, onOpenChange, bestellung: b }: {
 
   const buchen = async () => {
     if (laeuftRef.current) return;
+    const falsch = positionen.find((p) => zahlUngueltig(mengen[p.id]));
+    if (falsch) return toast.error(`Menge „${mengen[falsch.id]}“ ist keine Zahl`, { description: falsch.artikel.bezeichnung });
     laeuftRef.current = true;
     setLaeuft(true);
     try {

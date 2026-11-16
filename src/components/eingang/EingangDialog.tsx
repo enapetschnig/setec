@@ -17,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Feld, leerNull, useBeimOeffnen, zahlFeld, Zusatz } from "@/components/stamm/Felder";
 import { fehlerText } from "@/components/stamm/stammDaten";
 import { useNeuLaden } from "@/hooks/useDaten";
-import { dezimalLesen, euro, isoTag } from "@/lib/format";
+import { dezimalLesen, euro, isoTag, zahlUngueltig } from "@/lib/format";
 import { belegLesen } from "@/lib/ki";
 import { ibanPruefen } from "@/lib/sepa";
 import { BELEG_STATUS, FREIGABE_STATUS } from "@/lib/types";
@@ -26,7 +26,7 @@ import {
   BUCKET, dateiAdresse, eingangDateiHochladen, eingangLoeschen, eingangSpeichern, freigabeSetzen, type EingangMitAnteilen, type Hochgeladen,
 } from "./eingangDaten";
 import {
-  ablauf, anteileAusPositionen, aufteilungFehler, bruttoAusNetto, KATEGORIEN, nettoAusBrutto, zuZahlen, type AnteilEntwurf, type PositionEntwurf,
+  ablauf, anteileAusPositionen, aufteilungFehler, bruttoAusNetto, KATEGORIEN, nettoAusBrutto, positionenAbweichung, zuZahlen, type AnteilEntwurf, type PositionEntwurf,
 } from "./eingangLogik";
 import { EingangPositionen } from "./EingangPositionen";
 import { LieferscheinAbgleich } from "./LieferscheinAbgleich";
@@ -133,6 +133,9 @@ export function EingangDialog({
   const satz = dezimalLesen(k.ust_satz) ?? 0;
   const summeAnteile = anteile.reduce((s, a) => s + (dezimalLesen(a.betrag) ?? 0), 0);
   const rest = Math.round((netto - summeAnteile) * 100) / 100;
+  const positionsBetraege = positionen.filter((p) => p.bezeichnung.trim()).map((p) => (p.gesamt.trim() ? dezimalLesen(p.gesamt) : null));
+  const summePositionen = positionsBetraege.reduce<number>((s, b) => s + (b ?? 0), 0);
+  const abweichung = dezimalLesen(k.netto) === null ? null : positionenAbweichung(netto, positionsBetraege);
   const verrechnet = anteile.some((a) => a.rechnung_id);
   const geaendert = !!datei || !!hochgeladen || JSON.stringify([k, anteile, positionen]) !== basis;
   const status = rechnung ? ablauf(rechnung) : null;
@@ -183,6 +186,12 @@ export function EingangDialog({
   const sichern = async (): Promise<string | null> => {
     const lieferant = k.lieferant.trim();
     if (!lieferant) { toast.error("Bitte den Lieferanten eintragen."); return null; }
+    for (const [text, wert] of [["Netto", k.netto], ["Brutto", k.brutto], ["USt-Satz", k.ust_satz], ["Skonto", k.skonto_prozent]] as const) {
+      if (zahlUngueltig(wert)) { toast.error(`${text}: „${wert.trim()}“ ist keine Zahl.`); return null; }
+    }
+    const falschePos = positionen.find((p) => zahlUngueltig(p.menge) || zahlUngueltig(p.einzelpreis) || zahlUngueltig(p.gesamt));
+    if (falschePos) { toast.error(`Position „${falschePos.bezeichnung || "ohne Bezeichnung"}“: Menge oder Betrag ist keine Zahl.`); return null; }
+    if (anteile.some((a) => zahlUngueltig(a.betrag))) { toast.error("Aufteilung: ein Betrag ist keine Zahl."); return null; }
     if (dezimalLesen(k.netto) === null) { toast.error("Bitte den Betrag eintragen (netto oder brutto)."); return null; }
     if (!k.datum) { toast.error("Bitte das Rechnungsdatum eintragen."); return null; }
     if (k.faellig_am && k.faellig_am < k.datum) { toast.error("Fällig kann nicht vor dem Rechnungsdatum liegen."); return null; }
@@ -229,6 +238,12 @@ export function EingangDialog({
   const speichern = async () => {
     if (!(await sichern())) return;
     toast.success(rechnung ? "Eingangsrechnung gespeichert" : "Eingangsrechnung erfasst");
+    if (abweichung != null) {
+      toast.warning(`Positionen passen nicht zum Netto: ${euro(summePositionen)} statt ${euro(netto)}`, {
+        description: `Unterschied ${euro(abweichung)} — bitte Positionen oder Betrag prüfen. Gespeichert ist trotzdem.`,
+        duration: 15_000,
+      });
+    }
     onOpenChange(false);
   };
   /** Freigeben/ablehnen — ungespeicherte Änderungen gehen vorher mit */
@@ -537,6 +552,11 @@ export function EingangDialog({
       </div>
 
       <EingangPositionen positionen={positionen} setPositionen={setPositionen} onAnteile={anteileAusZeilen} anteileGesperrt={verrechnet} />
+      {abweichung != null && (
+        <p role="alert" className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+          Die Positionen ergeben {euro(summePositionen)}, das Netto ist {euro(netto)} — Unterschied {euro(abweichung)}. Speichern geht trotzdem.
+        </p>
+      )}
       <Feld id="e-ls" label={<>Lieferscheine laut Rechnung<Zusatz>(Nummern, mit Komma)</Zusatz></>}>
         <Input id="e-ls" className="h-11" value={k.ls_nummern} placeholder="z. B. LS-4711, LS-4718" onChange={(e) => setz({ ls_nummern: e.target.value })} />
       </Feld>

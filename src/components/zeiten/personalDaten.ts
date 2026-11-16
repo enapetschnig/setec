@@ -48,6 +48,22 @@ export function useKalenderAbwesenheit(von: string | undefined, bis: string | un
   });
 }
 
+export type KontoBuchung = { id: string; art: string; menge: number; datum: string; text: string; created_at: string };
+
+/** Korrekturen am Zeitkonto (Anfangsbestand, Auszahlung, Übertrag) — neueste zuerst */
+export function useKontoBuchungen(userId: string | undefined, aktiv = true) {
+  return useQuery({
+    queryKey: ["zeiten", "konto-buchungen", userId],
+    enabled: !!userId && aktiv,
+    queryFn: async () => {
+      const { data, error } = await supabase.from("konto_buchungen").select("id, art, menge, datum, text, created_at")
+        .eq("user_id", userId!).order("datum", { ascending: false }).order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as KontoBuchung[];
+    },
+  });
+}
+
 export function useKonto(p: (KontoProfil & { id: string }) | null | undefined) {
   const heute = isoTag();
   return useQuery({

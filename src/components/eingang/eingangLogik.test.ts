@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { dezimalLesen } from "@/lib/format";
 import {
-  ablauf, abgleich, anteileAusPositionen, aufteilungFehler, bruttoAusNetto, nettoAusBrutto, rest, textAehnlich, zahlung, zuordnung, zuZahlen,
+  ablauf, abgleich, anteileAusPositionen, aufteilungFehler, positionenAbweichung, bruttoAusNetto, nettoAusBrutto, rest, textAehnlich, zahlung, zuordnung, zuZahlen,
   type AnteilEntwurf,
 } from "./eingangLogik";
 
@@ -92,5 +92,16 @@ describe("Abgleich Lieferschein", () => {
       ["Fracht", "nicht_geliefert", 1, null],
       ["Abzweigdose AP", "nicht_verrechnet", null, 10],
     ]);
+  });
+});
+
+describe("Positionen gegen Netto", () => {
+  it("meldet nur echte Unterschiede", () => {
+    expect(positionenAbweichung(100, [60, 40])).toBeNull();
+    expect(positionenAbweichung(100, [60, 40.01])).toBeNull();
+    expect(positionenAbweichung(100, [60, 30])).toBe(-10);
+    expect(positionenAbweichung(100, [60, 50, null])).toBe(10);
+    expect(positionenAbweichung(100, [])).toBeNull();
+    expect(positionenAbweichung(100, [null])).toBeNull();
   });
 });

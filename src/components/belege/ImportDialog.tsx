@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { FormularDialog } from "@/components/FormularDialog";
 import { Leer, StatusBadge } from "@/components/Bausteine";
-import { datum, euro, stunden, zahl, zahlLesen } from "@/lib/format";
+import { datum, euro, stunden, zahl, zahlLesen, zahlUngueltig } from "@/lib/format";
 import type { Firma } from "@/lib/types";
 import { TON_KLASSE } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -120,7 +120,7 @@ export function ImportDialog({
           <Button variant="outline" className="h-12" onClick={() => onOpenChange(false)}>Abbrechen</Button>
           <Button
             className="h-12"
-            disabled={!vorschau || (anzahl === 0 && !nurAbgegolten)}
+            disabled={!vorschau || (anzahl === 0 && !nurAbgegolten) || zahlUngueltig(satz) || zahlUngueltig(aufschlag)}
             onClick={() => { if (vorschau) { onUebernehmen(vorschau); onOpenChange(false); } }}
           >
             {anzahl ? `${anzahl} ${anzahl === 1 ? "Position" : "Positionen"} übernehmen · ${euro(netto)}` : nurAbgegolten ? "Als abgegolten übernehmen" : "Übernehmen"}
@@ -278,12 +278,12 @@ export function ImportDialog({
           )}
           <div className="flex items-center justify-between gap-3">
             <Label htmlFor="imp-satz" className="text-sm">Stundensatz netto €</Label>
-            <Input id="imp-satz" value={satz} onChange={(e) => setSatz(e.target.value)} inputMode="decimal" className="zahl h-11 w-28 text-right" />
+            <Input id="imp-satz" value={satz} onChange={(e) => setSatz(e.target.value)} inputMode="decimal" className={cn("zahl h-11 w-28 text-right", zahlUngueltig(satz) && "border-destructive text-destructive")} />
           </div>
           {eingang.length > 0 && (
             <div className="flex items-center justify-between gap-3">
               <Label htmlFor="imp-aufschlag" className="text-sm">Aufschlag auf Eingangsrechnungen %</Label>
-              <Input id="imp-aufschlag" value={aufschlag} onChange={(e) => setAufschlag(e.target.value)} inputMode="decimal" className="zahl h-11 w-28 text-right" />
+              <Input id="imp-aufschlag" value={aufschlag} onChange={(e) => setAufschlag(e.target.value)} inputMode="decimal" className={cn("zahl h-11 w-28 text-right", zahlUngueltig(aufschlag) && "border-destructive text-destructive")} />
             </div>
           )}
         </section>

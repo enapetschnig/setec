@@ -15,7 +15,7 @@ import { datum, dezimalLesen, isoTag, stunden, zahl } from "@/lib/format";
 import { ABWESENHEIT_ART, ABWESENHEIT_STATUS, name, type AbwesenheitArt, type Profil } from "@/lib/types";
 import { abwesenheitsTage } from "@/lib/zeitkonto";
 import { cn } from "@/lib/utils";
-import { useAbwesenheiten, useAntraege, useKonto } from "./personalDaten";
+import { useAbwesenheiten, useAntraege, useKonto, useKontoBuchungen, type KontoBuchung } from "./personalDaten";
 
 const artText = (a: string) => ABWESENHEIT_ART[a as AbwesenheitArt]?.text ?? a;
 const zeitraum = (von: string, bis: string) => (von === bis ? datum(von) : `${datum(von).slice(0, 6)} – ${datum(bis)}`);
@@ -52,8 +52,52 @@ export function KontoKarte({ person, onAbwesenheit }: { person: Profil; onAbwese
         </Button>
         {istChef && <Button variant="ghost" className="h-11" onClick={() => setKorrektur(true)}>Konto korrigieren</Button>}
       </div>
+      {istChef && <KontoBuchungen person={person} />}
       {istChef && <KontoDialog open={korrektur} onOpenChange={setKorrektur} person={person} />}
     </Karte>
+  );
+}
+
+/** Für den Chef: die Korrekturen am Konto ansehen und eine falsche löschen */
+function KontoBuchungen({ person }: { person: Profil }) {
+  const neuLaden = useNeuLaden();
+  const { data: liste = [] } = useKontoBuchungen(person.id);
+  const [frage, setFrage] = useState<Frage | null>(null);
+  if (!liste.length) return null;
+  const mengeText = (b: KontoBuchung) => {
+    const m = Number(b.menge);
+    const v = m > 0 ? "+" : "";
+    return b.art === "urlaub" ? `${v}${zahl(m)} ${Math.abs(m) === 1 ? "Tag" : "Tage"} Urlaub` : `${v}${stunden(m)} Überstunden`;
+  };
+  const weg = async (b: KontoBuchung) => {
+    const { data, error } = await supabase.from("konto_buchungen").delete().eq("id", b.id).select("id");
+    if (error || !data?.length) return toast.error("Nicht gelöscht", { description: error ? fehlerText(error) : "Löschen kann nur der Chef." });
+    toast.success("Korrektur gelöscht");
+    await neuLaden("zeiten");
+  };
+  return (
+    <div className="mt-4 border-t pt-3" data-konto-buchungen>
+      <p className="pb-1 text-xs font-medium text-muted-foreground">Korrekturen · {liste.length}</p>
+      <ul className="divide-y">
+        {liste.map((b) => (
+          <li key={b.id} className="flex items-center gap-3 py-1.5">
+            <div className="min-w-0 flex-1">
+              <p className={cn("zahl text-sm font-medium", Number(b.menge) < 0 && "text-destructive")}>{mengeText(b)}</p>
+              <p className="truncate text-xs text-muted-foreground">{datum(b.datum)} · {b.text}</p>
+            </div>
+            <Button variant="ghost" size="icon" className="h-11 w-11 shrink-0 text-muted-foreground" aria-label={`Korrektur ${b.text} löschen`}
+              onClick={() => setFrage({
+                titel: "Korrektur löschen?",
+                text: `${mengeText(b)} vom ${datum(b.datum)} („${b.text}“) wird gelöscht — das Konto von ${person.vorname || name(person)} rechnet dann ohne sie.`,
+                knopf: "Löschen", gefahr: true, aktion: () => weg(b),
+              })}>
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </li>
+        ))}
+      </ul>
+      <Rueckfrage frage={frage} onClose={() => setFrage(null)} />
+    </div>
   );
 }
 

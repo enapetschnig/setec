@@ -17,7 +17,7 @@ import {
   AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Leer } from "@/components/Bausteine";
-import { euro, zahl } from "@/lib/format";
+import { euro, zahl, zahlUngueltig } from "@/lib/format";
 import { arbeitszeitText, aufschlagAus, type Lohnart } from "@/lib/kalkulation";
 import { RAUM_VORSCHLAEGE } from "@/lib/sprachParser";
 import { EINHEITEN } from "@/lib/types";
@@ -287,7 +287,7 @@ export function PositionenEditor({
                       </td>
                       <td className="py-1.5 pr-2">
                         {bearbeitbar
-                          ? <Input value={p.menge} onChange={(e) => aendern(p.id, { menge: e.target.value })} inputMode="decimal" className="zahl h-9 text-right" aria-label={`Menge ${nummern[i]}`} />
+                          ? <Input value={p.menge} onChange={(e) => aendern(p.id, { menge: e.target.value })} inputMode="decimal" className={cn("zahl h-9 text-right", zahlUngueltig(p.menge) && "border-destructive text-destructive")} aria-label={`Menge ${nummern[i]}`} />
                           : <p className="zahl py-1 text-right">{zahl(mengeVon(p))}</p>}
                       </td>
                       <td className="py-1.5 pr-2">
@@ -322,7 +322,7 @@ export function PositionenEditor({
                       )}
                       <td className="py-1.5 pr-2">
                         {bearbeitbar
-                          ? <Input value={p.einzelpreis} onChange={(e) => aendern(p.id, { einzelpreis: e.target.value })} inputMode="decimal" className="zahl h-9 text-right" data-preis-id={p.id} aria-label={`Einzelpreis ${nummern[i]}`} />
+                          ? <Input value={p.einzelpreis} onChange={(e) => aendern(p.id, { einzelpreis: e.target.value })} inputMode="decimal" className={cn("zahl h-9 text-right", zahlUngueltig(p.einzelpreis) && "border-destructive text-destructive")} data-preis-id={p.id} aria-label={`Einzelpreis ${nummern[i]}`} />
                           : <p className="zahl py-1 text-right">{euro(preisVon(p))}</p>}
                         <span className={cn("block pt-0.5 text-right", kalkSpalten && "xl:hidden")}>{kalkText(p)}</span>
                       </td>
@@ -432,7 +432,7 @@ export function PositionenEditor({
                     value={p.menge}
                     onChange={(e) => aendern(p.id, { menge: e.target.value })}
                     inputMode="decimal"
-                    className="zahl h-11 w-16 rounded-none border-x-0 px-1 text-center"
+                    className={cn("zahl h-11 w-16 rounded-none border-x-0 px-1 text-center", zahlUngueltig(p.menge) && "text-destructive")}
                     aria-label="Menge"
                   />
                   <Button variant="outline" size="icon" className="h-11 w-11 rounded-l-none" aria-label="mehr" onClick={() => mengePlus(p, 1)}><Plus className="h-4 w-4" /></Button>

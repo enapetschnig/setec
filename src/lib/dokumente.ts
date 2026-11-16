@@ -77,3 +77,20 @@ export function groesseText(bytes: number | null | undefined): string {
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
   return `${(bytes / 1024 / 1024).toLocaleString("de-AT", { maximumFractionDigits: 1 })} MB`;
 }
+
+/**
+ * Dateiname zum Herunterladen: der ursprüngliche Name mit Umlauten, ohne das
+ * Zufallspräfix des Speicherpfads. Wurde ein Foto beim Hochladen umgewandelt
+ * (HEIC → JPG), gilt die Endung der gespeicherten Datei.
+ */
+export function downloadName(name: string | null | undefined, pfad: string): string {
+  const datei = pfad.split("/").pop() ?? pfad;
+  const ohnePraefix = datei.replace(/^[0-9a-f]{8}-/, "");
+  // eslint-disable-next-line no-control-regex
+  const n = (name ?? "").replace(/[\\/:*?"<>|\u0000-\u001f]+/g, "_").trim() || ohnePraefix;
+  const endung = (s: string) => (/\.([a-z0-9]{1,5})$/i.exec(s)?.[1] ?? "").toLowerCase();
+  const gespeichert = endung(datei);
+  const eigene = endung(n);
+  if (!gespeichert || eigene === gespeichert || (eigene === "jpeg" && gespeichert === "jpg")) return n;
+  return eigene ? n.replace(/\.[a-z0-9]{1,5}$/i, `.${gespeichert}`) : `${n}.${gespeichert}`;
+}

@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FormularDialog } from "@/components/FormularDialog";
-import { dezimalLesen, euro, zahl } from "@/lib/format";
+import { dezimalLesen, euro, zahl, zahlUngueltig } from "@/lib/format";
 import { useSitzung } from "@/hooks/useSitzung";
 import { aufschlagAus, kalkPreis, lohnarten } from "@/lib/kalkulation";
 import { EINHEITEN } from "@/lib/types";
@@ -73,6 +73,8 @@ export function PositionDialog({
     const drin = aufschlagAus({ preis: dezimalLesen(wert) ?? 0, ek: dezimalLesen(ek), minuten: dezimalLesen(minuten), satz: satz?.satz ?? 0 });
     if (drin != null) setAufschlag(zahl(drin));
   };
+  // „9,8x“ ist keine Zahl — Übernehmen erst, wenn alles lesbar ist
+  const falscheZahl = [p.menge, p.einzelpreis, ek, aufschlag, minuten].some((t) => zahlUngueltig(t));
   const ekZahl = dezimalLesen(ek);
   const ertrag = ekZahl != null ? (dezimalLesen(p.einzelpreis) ?? 0) - ekZahl - ((dezimalLesen(minuten) ?? 0) / 60) * (satz?.satz ?? 0) : null;
 
@@ -95,7 +97,7 @@ export function PositionDialog({
             </Button>
           )}
           <Button variant="outline" className="h-12" onClick={() => onOpenChange(false)}>Abbrechen</Button>
-          <Button className="h-12" disabled={neu && !p.bezeichnung.trim()} onClick={() => onUebernehmen(p)}>
+          <Button className="h-12" disabled={(neu && !p.bezeichnung.trim()) || falscheZahl} onClick={() => onUebernehmen(p)}>
             {neu ? "Hinzufügen" : "Übernehmen"}
           </Button>
         </>
@@ -115,7 +117,7 @@ export function PositionDialog({
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <div className="space-y-1.5">
               <Label htmlFor="pos-menge">Menge</Label>
-              <Input id="pos-menge" inputMode="decimal" className="h-12 text-right zahl" value={p.menge} onChange={(e) => set({ menge: e.target.value })} />
+              <Input id="pos-menge" inputMode="decimal" className={cn("h-12 text-right zahl", zahlUngueltig(p.menge) && "border-destructive text-destructive")} value={p.menge} onChange={(e) => set({ menge: e.target.value })} />
             </div>
             <div className="space-y-1.5">
               <Label>Einheit</Label>
@@ -126,7 +128,7 @@ export function PositionDialog({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="pos-ep">Einzelpreis netto €</Label>
-              <Input id="pos-ep" inputMode="decimal" className="h-12 text-right zahl" value={p.einzelpreis} onChange={(e) => preisAendern(e.target.value)} />
+              <Input id="pos-ep" inputMode="decimal" className={cn("h-12 text-right zahl", zahlUngueltig(p.einzelpreis) && "border-destructive text-destructive")} value={p.einzelpreis} onChange={(e) => preisAendern(e.target.value)} />
             </div>
             <div className="space-y-1.5">
               <Label>Gesamt</Label>
@@ -153,7 +155,7 @@ export function PositionDialog({
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                     <div className="space-y-1.5">
                       <Label htmlFor="k-ek">Einkauf € je {p.einheit}</Label>
-                      <Input id="k-ek" inputMode="decimal" className="zahl h-12 text-right" value={ek} onChange={(e) => kalkAendern({ ek: e.target.value })} />
+                      <Input id="k-ek" inputMode="decimal" className={cn("zahl h-12 text-right", zahlUngueltig(ek) && "border-destructive text-destructive")} value={ek} onChange={(e) => kalkAendern({ ek: e.target.value })} />
                     </div>
                     <div className="space-y-1.5">
                       <Label htmlFor="k-auf">Aufschlag %</Label>
@@ -161,7 +163,7 @@ export function PositionDialog({
                         <Button type="button" variant="outline" className="h-12 w-10 shrink-0 rounded-r-none px-0" aria-label="Aufschlag 5 % weniger" onClick={() => aufschlagPlus(-5)}>
                           <Minus className="h-4 w-4" />
                         </Button>
-                        <Input id="k-auf" inputMode="decimal" className="zahl h-12 min-w-0 rounded-none border-x-0 text-center" value={aufschlag}
+                        <Input id="k-auf" inputMode="decimal" className={cn("zahl h-12 min-w-0 rounded-none border-x-0 text-center", zahlUngueltig(aufschlag) && "text-destructive")} value={aufschlag}
                           onChange={(e) => kalkAendern({ aufschlag: e.target.value })} />
                         <Button type="button" variant="outline" className="h-12 w-10 shrink-0 rounded-l-none px-0" aria-label="Aufschlag 5 % mehr" onClick={() => aufschlagPlus(5)}>
                           <Plus className="h-4 w-4" />
@@ -170,7 +172,7 @@ export function PositionDialog({
                     </div>
                     <div className="space-y-1.5">
                       <Label htmlFor="k-min">Arbeitszeit Min.</Label>
-                      <Input id="k-min" inputMode="decimal" className="zahl h-12 text-right" value={minuten} onChange={(e) => kalkAendern({ minuten: e.target.value })} />
+                      <Input id="k-min" inputMode="decimal" className={cn("zahl h-12 text-right", zahlUngueltig(minuten) && "border-destructive text-destructive")} value={minuten} onChange={(e) => kalkAendern({ minuten: e.target.value })} />
                     </div>
                     <div className="space-y-1.5">
                       <Label>Stundensatz</Label>

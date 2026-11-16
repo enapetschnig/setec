@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils";
 import { Feld, leerNull, useBeimOeffnen, Zusatz } from "./Felder";
 import { fehlerText } from "./stammDaten";
 import { brauchtGeo, KONTAKT_ART, kontaktArt, namenLesen, type KontaktArt } from "@/components/kontakte/kontaktLogik";
-import { geoSuchen } from "@/components/kontakte/kontaktDaten";
+import { geoImHintergrund } from "@/components/kontakte/kontaktDaten";
 import { waNummer } from "@/lib/whatsapp";
 
 type Grunddaten = Pick<Kunde, "name" | "strasse" | "plz" | "ort" | "telefon" | "email">;
@@ -99,6 +99,8 @@ export function KundeDialog({
     setZusatz(z);
     setBasis(JSON.stringify([g, z]));
     setLoeschInfo(null);
+    // Letzte Suche fehlgeschlagen (oder nie gesucht): beim Öffnen erneut
+    if (kunde && brauchtGeo(kunde)) void geoImHintergrund(kunde, () => neuLaden("kunden"), { beimOeffnen: true });
   });
 
   const name = grund.name.trim();
@@ -134,7 +136,7 @@ export function KundeDialog({
     if (error) return toast.error("Nicht gespeichert", { description: fehlerText(error) });
     await neuLaden("kunden", "projekte");
     // Lage für die Karte im Hintergrund — nur wenn die Adresse neu ist
-    if (brauchtGeo(data)) void geoSuchen(data).then(() => neuLaden("kunden")).catch(() => undefined);
+    if (brauchtGeo(data)) void geoImHintergrund(data, () => neuLaden("kunden"));
     toast.success(`${KONTAKT_ART[zusatz.art].text} ${kunde ? "gespeichert" : "angelegt"}`);
     onGespeichert?.(data);
     onOpenChange(false);
