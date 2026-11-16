@@ -11,7 +11,7 @@ Elektriker — am Handy auf der Baustelle bedienbar, Angebot vor Ort per Sprache
 | | |
 |---|---|
 | Supabase | `xcsbbaiwzdivmaodltxm` (Projekt „setec“, ePower-Org, eu-central-1) |
-| Vercel | Projekt `setec`, Auto-Deploy von `main` — https://setec-gmbh.vercel.app (alt: mayr.vercel.app bleibt, dort liegen installierte Apps und Anlagen-QR-Codes); eigene Domain verbindet Christoph — dann `site_url`/`uri_allow_list` in Supabase-Auth nachziehen |
+| Vercel | Projekt `setec`, Auto-Deploy von `main` — **https://setec.handwerkapp.at** (seit 16.11.2026; = `appAdresse`, Supabase-Auth `site_url`, Secret `APP_URL`); setec-gmbh.vercel.app, mayr.vercel.app, mayr.handwerkapp.at bleiben (installierte Apps, Anlagen-QR-Codes) und stehen in der `uri_allow_list` |
 | GitHub | `enapetschnig/setec` (öffentlich; alte Adresse `mayr` leitet um) |
 | Betrieb | „SETEC GmbH“ — Bank noch Demo, in Einstellungen änderbar |
 | Konten | Stefan Sattler `s.sattler@setec-gmbh.at` (Chef, Erstpasswort `SETEC_STEFAN_ERSTPASSWORT`, muss beim ersten Anmelden ändern) · Christoph Napetschnig `napetschnig.chris@gmail.com` (ePower-Zugang, Chef, `SETEC_EPOWER_PASSWORT`, `profiles.versteckt` — für SETEC unsichtbar, nur per SQL änderbar) — beides in `~/.config/hw/zugangsdaten.env`. Mitarbeiter registrieren sich selbst über den EINEN Link `/start` (QR/Aushang `/aushang`, WhatsApp, Mail, SMS über Edge Function `einladung-sms`/Twilio) mit E-Mail und sind sofort aktiv — Freischaltung kommt später; „Passwort vergessen“ per Mail-Link (Resend-SMTP) auf `/passwort-neu`. Details KONZEPT „Konten“. Neue Domain → `appAdresse` in `kunde.config.ts`, Secret `APP_URL`, Supabase Auth `site_url`/`uri_allow_list`. Die Demo-Konten chef/max/lisa … sind gelöscht. |

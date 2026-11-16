@@ -54,7 +54,7 @@ export const KUNDE: KundeConfig = {
   },
 
   loginDomain: "setec.handwerkapp.at",
-  appAdresse: "https://setec-gmbh.vercel.app",
+  appAdresse: "https://setec.handwerkapp.at",
 
   logo: "/logo.png",
   logoQuerHell: "/logo-quer-hell.png",
