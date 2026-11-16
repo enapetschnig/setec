@@ -9,6 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useSitzung } from "@/hooks/useSitzung";
+import { KUNDE } from "@/kunde.config";
 import { datum, euro } from "@/lib/format";
 import { pdfDateiname, pdfTeilenOderLaden } from "@/lib/pdfBasis";
 import { TON_KLASSE, type Beleg } from "@/lib/types";
@@ -67,7 +68,8 @@ export function AngebotVersand({
   const { data, isLoading } = useAngebotOnline(beleg.id, fertig);
   const [laeuft, setLaeuft] = useState<string | null>(null);
 
-  const link = data?.link ? linkAdresse(window.location.origin, data.link.token) : null;
+  // Kunden bekommen immer die Hauptadresse – nicht die, unter der der Chef die App gerade offen hat (alte Domain, Dev-Server).
+  const link = data?.link ? linkAdresse(import.meta.env.PROD ? KUNDE.appAdresse : window.location.origin, data.link.token) : null;
   const verlauf = data?.verlauf ?? [];
   const ungelesen = verlauf.filter((v) => !v.gelesen).length;
 
