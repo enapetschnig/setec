@@ -58,7 +58,7 @@ export function stundenAusVonBis(von: string, bis: string, pauseMin: number): nu
 }
 
 /** Einheiten und Währungen, die vor oder hinter einer Zahl stehen dürfen */
-const EINHEIT = "€|eur|euro|%|h|std\\.?|stunden?|min|stk\\.?|stück|lfm|m²|kwp?|kwh";
+const EINHEIT = "€|eur|euro|%|h|std\\.?|stunden?|min|stk\\.?|stück|lfm|m²|m|kwp?|kwh";
 const ZAHL_MIT_EINHEIT = new RegExp(`^(?:${EINHEIT})?([+-]?[\\d.,]+?)(?:,-|,—|\\.-)?(?:${EINHEIT})?$`, "i");
 
 /**

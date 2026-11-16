@@ -38,7 +38,7 @@ describe("Fremdzeichen", () => {
     expect(dezimalLesen("x5")).toBeNull();
     expect(dezimalLesen("5 6a")).toBeNull();
     expect(dezimalLesen("9,8a")).toBeNull();
-    expect(dezimalLesen("9,8m")).toBeNull();
+    expect(dezimalLesen("9,8n")).toBeNull();
     expect(dezimalLesen("9,8t")).toBeNull();
     expect(zahlUngueltig("9,8x")).toBe(true);
     expect(zahlUngueltig(" ")).toBe(false);
@@ -60,6 +60,7 @@ describe("Fremdzeichen", () => {
     expect(dezimalLesen("+3")).toBe(3);
     expect(dezimalLesen("20 %")).toBe(20);
     expect(dezimalLesen("12,5 lfm")).toBe(12.5);
+    expect(dezimalLesen("12,5 m")).toBe(12.5);
     expect(dezimalLesen("3 Stk.")).toBe(3);
     expect(dezimalLesen("-")).toBeNull();
     expect(dezimalLesen("€")).toBeNull();
