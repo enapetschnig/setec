@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Feld, leerNull, useBeimOeffnen, zahlFeld, Zusatz } from "@/components/stamm/Felder";
-import { fehlerText, useLieferanten } from "@/components/stamm/stammDaten";
+import { fehlerText } from "@/components/stamm/stammDaten";
+import { LieferantWahl } from "@/components/LieferantWahl";
 import { useNeuLaden } from "@/hooks/useDaten";
 import { dezimalLesen, euro, zahl } from "@/lib/format";
 import { ekAusListe } from "./artikelLogik";
@@ -45,7 +46,6 @@ export function ArtikelLieferantDialog({
   vergeben: string[];
 }) {
   const neuLaden = useNeuLaden();
-  const { data: lieferanten = [] } = useLieferanten();
   const [f, setF] = useState<Form>(formAus(null));
   const [speichert, setSpeichert] = useState(false);
   useBeimOeffnen(open ? eintrag?.id ?? "neu" : null, () => setF(formAus(eintrag)));
@@ -57,7 +57,7 @@ export function ArtikelLieferantDialog({
 
   const speichern = async () => {
     const lieferant = f.lieferant.trim();
-    if (!lieferant) return toast.error("Bitte den Lieferanten eintragen.");
+    if (!lieferant) return toast.error("Bitte den Lieferanten wählen.");
     if (lieferant.toLowerCase() === hauptLieferant.trim().toLowerCase()) {
       return toast.error(`${lieferant} ist schon der Lieferant am Artikel.`, { description: "Dessen Preis steht beim Artikel selbst." });
     }
@@ -138,9 +138,8 @@ export function ArtikelLieferantDialog({
       <div className="mx-auto max-w-2xl space-y-4">
         <div className="grid gap-4 sm:grid-cols-2">
           <Feld id="al-lief" label="Lieferant">
-            <Input id="al-lief" className="h-11" list="al-lieferanten" value={f.lieferant} onChange={(e) => setze("lieferant", e.target.value)}
-              placeholder="z. B. Rexel" autoFocus={!eintrag} />
-            <datalist id="al-lieferanten">{lieferanten.filter((l) => l !== hauptLieferant).map((l) => <option key={l} value={l} />)}</datalist>
+            <LieferantWahl id="al-lief" wert={f.lieferant} onChange={(v) => setze("lieferant", v)}
+              ohne={[hauptLieferant, ...vergeben.filter((v) => v !== eintrag?.lieferant)]} />
           </Feld>
           <Feld id="al-nr" label={<>Artikelnummer<Zusatz>beim Lieferanten</Zusatz></>}>
             <Input id="al-nr" className="h-11" value={f.lieferanten_nr} onChange={(e) => setze("lieferanten_nr", e.target.value)} />

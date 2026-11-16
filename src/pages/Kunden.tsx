@@ -7,6 +7,7 @@ import { useIstPc } from "@/components/AppLayout";
 import { useAnlagen, type AnlageMitKunde } from "@/components/anlagen/anlagenDaten";
 import { KONTAKT_ART, kontaktArt, merkmale, type KontaktArt } from "@/components/kontakte/kontaktLogik";
 import { KundeDetail } from "@/components/stamm/KundeDetail";
+import { useKontaktPersonen } from "@/components/kontakte/KontaktPersonen";
 import { KundeDialog } from "@/components/stamm/KundeDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,12 +20,12 @@ import { cn } from "@/lib/utils";
 // Leaflet nur laden, wenn jemand die Karte öffnet
 const KontakteKarte = lazy(() => import("@/components/kontakte/KontakteKarte"));
 
-/** Alle Wörter müssen vorkommen — Name, Ort, Nummer (mit oder ohne „K“), Ansprechpartner, Straße, Telefon, E-Mail, UID, Schreibweisen */
-function passt(k: Kunde, suchtext: string) {
+/** Alle Wörter müssen vorkommen — Name, Ort, Nummer (mit oder ohne „K“), Ansprechpartner, Straße, Telefon, E-Mail, UID, Schreibweisen, Ansprechpersonen */
+function passt(k: Kunde, suchtext: string, personen: string[] = []) {
   const woerter = suchtext.toLowerCase().split(/\s+/).filter(Boolean);
   if (!woerter.length) return true;
   const text = [k.name, k.ort, k.plz, k.strasse, k.ansprechpartner, k.telefon, k.email, `k${k.nummer}`, String(k.nummer), k.uid,
-    k.kundennummer_extern, ...(k.namen ?? [])]
+    k.kundennummer_extern, ...(k.namen ?? []), ...personen]
     .filter(Boolean).join(" ").toLowerCase();
   return woerter.every((w) => text.includes(w));
 }
@@ -50,6 +51,13 @@ export default function KundenSeite() {
   const { data: kunden = [], isLoading } = useKunden();
   const { data: projekte = [] } = useProjekte();
   const { data: anlagen = [] } = useAnlagen();
+  const { data: personen = [] } = useKontaktPersonen();
+  // Suche findet den Lieferanten auch über Name, Telefon, E-Mail seiner Ansprechpersonen
+  const personenText = useMemo(() => {
+    const m = new Map<string, string[]>();
+    for (const p of personen) m.set(p.kunde_id, [...(m.get(p.kunde_id) ?? []), p.name, p.telefon ?? "", p.email ?? "", p.funktion ?? ""]);
+    return m;
+  }, [personen]);
   const [text, setText] = useState("");
   const [dialog, setDialog] = useState<{ kunde: Kunde | null; name?: string }>({ kunde: null });
   const [dialogOffen, setDialogOffen] = useState(false);
@@ -100,8 +108,8 @@ export default function KundenSeite() {
   }, [kunden]);
 
   const treffer = useMemo(
-    () => kunden.filter((k) => (art === "alle" || kontaktArt(k.art) === art) && passt(k, text)),
-    [kunden, text, art],
+    () => kunden.filter((k) => (art === "alle" || kontaktArt(k.art) === art) && passt(k, text, personenText.get(k.id))),
+    [kunden, text, art, personenText],
   );
   const gewaehlt = kunden.find((k) => k.id === gewaehltId) ?? null;
   const gewaehltArt = gewaehlt ? kontaktArt(gewaehlt.art) : "kunde";

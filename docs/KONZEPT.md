@@ -303,6 +303,16 @@ Migration `20261113113000_kontakte_anlagen_karte.sql`, Logik in `kontaktLogik.ts
   Im Kontakt Summen (Rechnungen, nicht überwiesen, bestellt) und Öffnen (`/eingang?offen=`,
   `/lieferscheine?offen=`, `/bestellungen/:id`); dazu `kundennummer_extern` und die Kreditorennummer.
   Lieferanten-Kontakte erscheinen als Vorschlag in Eingangsrechnung und Bestellung.
+  Am **Artikel** (Lieferant am Artikel und „+ Lieferant“) wird der Lieferant aus den
+  Lieferanten-Kontakten gewählt (`components/LieferantWahl.tsx`, „Neuer Lieferant“ gleich dort);
+  gespeichert bleibt der Name als Text, ein alter Name ohne Kontakt bleibt wählbar.
+- **Ansprechpersonen** je Kontakt (Lieferant, Partner): Tabelle `kontakt_personen` (Name, Aufgabe
+  wie Außendienst/Innendienst, Telefon, E-Mail, Notiz; Migration `20261116180000`), Rechte wie
+  `kunden`. Karte im Kontakt (`kontakte/KontaktPersonen.tsx`), Suche in Kontakte und Strg+K findet sie.
+  Das Textfeld `kunden.ansprechpartner` bleibt (Rechnung, Regiebericht).
+- **Adress-Vorschläge** beim Tippen der Straße (Kunde, Projekt-Baustelle, Anlage):
+  `components/AdresseFeld.tsx` + `lib/adresse.ts` (getestet), Quelle Photon (OpenStreetMap, ohne
+  Schlüssel, nur AT, Mürztal zuerst). Google Places bräuchte ein Google-Konto mit Abrechnung.
 - **PV-Anlagendaten** an der vorhandenen Anlage (`anlagen`, Art PV — ein Kunde kann mehrere haben):
   kWp, Module, Wechselrichter, Speicher kWh + Typ, Einspeisebegrenzung % und/oder kW, Wallbox,
   Überschussregelung (ja/nein + wie), Inbetriebnahme, Zählpunkt, Überwachung (Fronius Solar.web,

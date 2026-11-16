@@ -12,6 +12,7 @@ import { KundeAnlagen } from "@/components/anlagen/KundeAnlagen";
 import { KONTAKT_ART, kontaktArt } from "@/components/kontakte/kontaktLogik";
 import { useKreditor } from "@/components/kontakte/kontaktDaten";
 import { LieferantBelege } from "@/components/kontakte/LieferantBelege";
+import { KontaktPersonen } from "@/components/kontakte/KontaktPersonen";
 import { istFestnetz, waNummer } from "@/lib/whatsapp";
 
 const adresse = (k: Pick<Kunde, "strasse" | "plz" | "ort">) =>
@@ -103,6 +104,8 @@ export function KundeDetail({
           <AktionsLink href={kartenLink(kunde)} icon={Navigation} text="Navigation" extern titel={adr ? `Route zu ${adr}` : undefined} />
         </div>
       </section>
+
+      {art !== "kunde" && <KontaktPersonen kundeId={kunde.id} />}
 
       {kunde.notiz && (
         <Karte titel="Notiz">

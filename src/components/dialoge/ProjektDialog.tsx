@@ -1,3 +1,4 @@
+import { AdresseFeld } from "@/components/AdresseFeld";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -178,7 +179,8 @@ export function ProjektDialog({
 
         <div className="space-y-2">
           <Label htmlFor="p-strasse">Baustelle</Label>
-          <Input id="p-strasse" className="h-12" value={w.strasse} onChange={(e) => setze({ strasse: e.target.value })} placeholder="Straße und Hausnummer" />
+          <AdresseFeld id="p-strasse" className="h-12" wert={w.strasse} onChange={(strasse) => setze({ strasse })}
+            onWaehlen={(a) => setze({ strasse: a.strasse, plz: a.plz, ort: a.ort })} />
           <div className="grid grid-cols-[6rem_1fr] gap-2">
             <Input className="h-12" inputMode="numeric" value={w.plz} onChange={(e) => setze({ plz: e.target.value })} placeholder="PLZ" aria-label="PLZ" />
             <Input className="h-12" value={w.ort} onChange={(e) => setze({ ort: e.target.value })} placeholder="Ort" aria-label="Ort" />

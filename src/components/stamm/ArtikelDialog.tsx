@@ -1,3 +1,4 @@
+import { LieferantWahl } from "@/components/LieferantWahl";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -23,7 +24,7 @@ import { artikelVk } from "@/lib/preise";
 import { codeVarianten, normalisieren } from "@/lib/strichcode";
 import { EINHEITEN, KATEGORIEN_ARTIKEL, type Artikel, type ArtikelCode } from "@/lib/types";
 import { Feld, leerNull, useBeimOeffnen, zahlFeld, Zusatz } from "./Felder";
-import { fehlerText, useBestandSummen, useLieferanten } from "./stammDaten";
+import { fehlerText, useBestandSummen } from "./stammDaten";
 
 type Form = {
   bezeichnung: string;
@@ -96,7 +97,6 @@ export function ArtikelDialog({
 }) {
   const neuLaden = useNeuLaden();
   const { firma, istChef } = useSitzung();
-  const { data: lieferanten = [] } = useLieferanten();
   const { data: bestaende } = useBestandSummen();
   const [f, setF] = useState<Form>(formAus(null));
   const [neueCodes, setNeueCodes] = useState<NeuerCode[]>([]);
@@ -408,9 +408,7 @@ export function ArtikelDialog({
               <Input id="a-hnr" className="h-11" value={f.hersteller_nr} onChange={(e) => setze("hersteller_nr", e.target.value)} />
             </Feld>
             <Feld id="a-lief" label="Lieferant">
-              <Input id="a-lief" className="h-11" list="a-lieferanten" value={f.lieferant} onChange={(e) => setze("lieferant", e.target.value)}
-                placeholder="Eigen" />
-              <datalist id="a-lieferanten">{lieferanten.map((l) => <option key={l} value={l} />)}</datalist>
+              <LieferantWahl id="a-lief" wert={f.lieferant} onChange={(v) => setze("lieferant", v)} eigen="Eigen" />
             </Feld>
             <Feld id="a-nr" label={<>Artikelnummer<Zusatz>beim Lieferanten</Zusatz></>}>
               <Input id="a-nr" className="h-11" value={f.artikelnummer} onChange={(e) => setze("artikelnummer", e.target.value)} />

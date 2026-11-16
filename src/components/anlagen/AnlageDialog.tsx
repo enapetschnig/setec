@@ -1,3 +1,4 @@
+import { AdresseFeld } from "@/components/AdresseFeld";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Loader2, Trash2 } from "lucide-react";
@@ -350,7 +351,8 @@ export function AnlageDialog({
         <section className="space-y-3">
           <Gruppentitel className="px-0 pb-0">Details<Zusatz>(optional)</Zusatz></Gruppentitel>
           <Feld id="an-strasse" label="Adresse der Anlage" hinweis="Leer = Adresse des Kunden.">
-            <Input id="an-strasse" className="h-11" value={f.strasse} onChange={(e) => setze("strasse", e.target.value)} placeholder="Straße" />
+            <AdresseFeld id="an-strasse" className="h-11" wert={f.strasse} onChange={(v) => setze("strasse", v)}
+              onWaehlen={(a) => { setze("strasse", a.strasse); setze("plz", a.plz); setze("ort", a.ort); }} />
           </Feld>
           <div className="grid grid-cols-[6rem_1fr] gap-2">
             <Input aria-label="PLZ" className="h-11" inputMode="numeric" value={f.plz} onChange={(e) => setze("plz", e.target.value)} placeholder="PLZ" />

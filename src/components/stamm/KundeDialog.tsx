@@ -22,6 +22,7 @@ import { fehlerText } from "./stammDaten";
 import { brauchtGeo, KONTAKT_ART, kontaktArt, namenLesen, type KontaktArt } from "@/components/kontakte/kontaktLogik";
 import { geoImHintergrund } from "@/components/kontakte/kontaktDaten";
 import { waNummer } from "@/lib/whatsapp";
+import { AdresseFeld } from "@/components/AdresseFeld";
 
 type Grunddaten = Pick<Kunde, "name" | "strasse" | "plz" | "ort" | "telefon" | "email">;
 type Zusatzdaten = { art: KontaktArt; ansprechpartner: string; uid: string; notiz: string; kundennummer_extern: string; namen: string };
@@ -41,7 +42,11 @@ export function KundeFelder({ wert, onChange, fokus = true }: { wert: Grunddaten
   return (
     <div className="grid gap-3">
       {feld("name", "Name / Firma", { placeholder: "z. B. Familie Huber", autoFocus: fokus })}
-      {feld("strasse", "Straße")}
+      <div className="space-y-1.5">
+        <Label htmlFor="k-strasse">Straße</Label>
+        <AdresseFeld id="k-strasse" className="h-11" wert={wert.strasse ?? ""} onChange={(strasse) => onChange({ ...wert, strasse })}
+          onWaehlen={(a) => onChange({ ...wert, strasse: a.strasse, plz: a.plz, ort: a.ort })} placeholder="Tippen – Vorschläge kommen" />
+      </div>
       <div className="grid grid-cols-[6rem_1fr] gap-2">
         {feld("plz", "PLZ", { inputMode: "numeric" })}
         {feld("ort", "Ort")}

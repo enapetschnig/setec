@@ -72,20 +72,25 @@ export function Suchpalette() {
     setLaedt(true);
     const t = window.setTimeout(async () => {
       const m = `%${q}%`;
-      const [k, b] = await Promise.all([
+      const [k, b, pe] = await Promise.all([
         supabase.from("kunden").select("id, name, ort, ansprechpartner")
           .or(`name.ilike.${m},ort.ilike.${m},ansprechpartner.ilike.${m}`).order("name").limit(5),
         istChef
           ? supabase.from("belege").select("id, typ, nummer, betreff, empf_name")
             .or(`nummer.ilike.${m},betreff.ilike.${m},empf_name.ilike.${m}`).order("datum", { ascending: false }).limit(5)
           : Promise.resolve({ data: [] as { id: string; typ: string; nummer: string | null; betreff: string | null; empf_name: string | null }[] }),
+        // Ansprechpersonen (Außendienst …) führen zu ihrem Lieferanten
+        supabase.from("kontakt_personen").select("id, name, funktion, kunden(id, name)").ilike("name", m).order("name").limit(5),
       ]);
       if (nr !== lauf.current) return;
       setDb({
         kunden: (k.data ?? []).map((x) => ({
           schluessel: `k-${x.id}`, titel: x.name, zusatz: [x.ansprechpartner, x.ort].filter(Boolean).join(" · ") || undefined, icon: Users,
           los: () => gehe(`/kunden?k=${x.id}`),
-        })),
+        })).concat((pe.data ?? []).filter((x) => x.kunden).map((x) => ({
+          schluessel: `kp-${x.id}`, titel: x.name, zusatz: [x.funktion, x.kunden!.name].filter(Boolean).join(" · "), icon: Users,
+          los: () => gehe(`/kunden?k=${x.kunden!.id}`),
+        }))),
         belege: (b.data ?? []).map((x) => ({
           schluessel: `b-${x.id}`, titel: [x.nummer || "Entwurf", x.betreff].filter(Boolean).join(" · "),
           zusatz: [x.typ === "angebot" ? "Angebot" : "Rechnung", x.empf_name].filter(Boolean).join(" · "),

@@ -1935,6 +1935,50 @@ export type Database = {
           },
         ]
       }
+      kontakt_personen: {
+        Row: {
+          created_at: string
+          email: string | null
+          funktion: string | null
+          id: string
+          kunde_id: string
+          name: string
+          notiz: string | null
+          telefon: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          funktion?: string | null
+          id?: string
+          kunde_id: string
+          name: string
+          notiz?: string | null
+          telefon?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          funktion?: string | null
+          id?: string
+          kunde_id?: string
+          name?: string
+          notiz?: string | null
+          telefon?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kontakt_personen_kunde_id_fkey"
+            columns: ["kunde_id"]
+            isOneToOne: false
+            referencedRelation: "kunden"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       kreditor_konten: {
         Row: {
           created_at: string
