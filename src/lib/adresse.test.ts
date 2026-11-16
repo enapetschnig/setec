@@ -19,7 +19,7 @@ describe("Adress-Vorschläge", () => {
         f({ countrycode: "AT", type: "house", street: "Grazer Straße", housenumber: "2", postcode: "8605", city: "Kapfenberg", district: "Katastralgemeinde Kapfenberg" }),
       ],
     };
-    expect(photonLesen(antwort, "Wiener 5")).toEqual([
+    expect(photonLesen(antwort)).toEqual([
       { strasse: "Wiener Straße 5", plz: "8644", ort: "Kindberg", zusatz: "Mürzhofen", lat: 47.5, lng: 15.4 },
       { strasse: "Grazer Straße 2", plz: "8605", ort: "Kapfenberg", zusatz: "", lat: 47.5, lng: 15.4 },
     ]);
@@ -27,6 +27,16 @@ describe("Adress-Vorschläge", () => {
   it("Straße ohne Hausnummer behält die getippte", () => {
     const antwort = { features: [f({ countrycode: "AT", type: "street", name: "Bahnhofstraße", postcode: "8650", city: "Kindberg" })] };
     expect(photonLesen(antwort, "Bahnhofstr 12")[0].strasse).toBe("Bahnhofstraße 12");
+  });
+  it("getippter Ort muss passen — keine gleichnamige Straße im Nachbarort", () => {
+    const antwort = { features: [
+      f({ countrycode: "AT", type: "house", street: "Schulgasse", housenumber: "2", postcode: "8650", city: "Kindberg" }),
+      f({ countrycode: "AT", type: "house", street: "Wiener Straße", housenumber: "5", postcode: "8680", city: "Mürzzuschlag" }),
+    ] };
+    expect(photonLesen(antwort, "Schulgasse 2 Mürzzuschlag")).toEqual([]);
+    expect(photonLesen(antwort, "Wiener Str 5 Mürzzu").map((a) => a.ort)).toEqual(["Mürzzuschlag"]);
+    expect(photonLesen(antwort, "Schulgase 2 Kindbreg").map((a) => a.ort)).toEqual(["Kindberg"]);
+    expect(photonLesen(antwort, "Schulgasse 2 8650").map((a) => a.ort)).toEqual(["Kindberg"]);
   });
   it("Unsinn ergibt nichts", () => {
     expect(photonLesen(null)).toEqual([]);

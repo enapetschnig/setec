@@ -87,6 +87,12 @@ try {
     ok(await page.getByRole("link", { name: `${name} anrufen` }).getAttribute("href") === "tel:06641234567", "Anrufen-Knopf wählt die Nummer");
     ok(await page.getByRole("link", { name: `${name} schreiben` }).getAttribute("href") === "mailto:zz@test.local", "E-Mail-Knopf");
 
+    // Suche in Kontakte findet den Lieferanten über die Ansprechperson
+    await page.goto(`${APP_URL}/kunden?art=alle`);
+    await page.getByPlaceholder(/Suchen – Name/).fill(name.split(" ")[1]);
+    await page.waitForTimeout(500);
+    ok(await page.getByText("ZZ Großhandel").count() > 0, "Suche nach der Ansprechperson findet den Lieferanten");
+
     // 2) Neuer Kunde mit Adress-Vorschlag
     const kname = `ZZ Kunde ${breite}`;
     await page.goto(`${APP_URL}/kunden?art=kunde`);
@@ -97,6 +103,14 @@ try {
     ok(await page.locator("#k-strasse").inputValue() === "Hauptstraße 10", "Straße aus dem Vorschlag");
     ok(await page.locator("#k-plz").inputValue() === "8650" && await page.locator("#k-ort").inputValue() === "Kindberg", "PLZ und Ort ausgefüllt");
     ok(photonFragen > 0 && photonFragen < 6, `Vorschläge gefragt (${photonFragen}×, nicht bei jedem Tastendruck)`);
+    // Schreibt jemand weiter und geht ins nächste Feld, darf die Liste nicht nachträglich aufgehen
+    await ctx.unroute("https://photon.komoot.io/**");
+    await ctx.route("https://photon.komoot.io/**", async (r) => { photonFragen++; await new Promise((x) => setTimeout(x, 1200)); return r.fulfill({ json: PHOTON }); });
+    await page.locator("#k-strasse").pressSequentially("x", { delay: 10 });
+    await page.locator("#k-telefon").click();
+    await page.waitForTimeout(2000);
+    ok(await page.getByRole("listbox", { name: "Adress-Vorschläge" }).count() === 0, "Liste bleibt zu, wenn das Feld verlassen wurde");
+    await page.locator("#k-strasse").fill("Hauptstraße 10");
     await page.getByRole("button", { name: "Kunde anlegen" }).click();
     await page.waitForTimeout(1500);
     const { data: k } = await admin.from("kunden").select("strasse, plz, ort").eq("name", kname).maybeSingle();

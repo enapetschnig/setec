@@ -310,7 +310,7 @@ Migration `20261113113000_kontakte_anlagen_karte.sql`, Logik in `kontaktLogik.ts
   wie Außendienst/Innendienst, Telefon, E-Mail, Notiz; Migration `20261116180000`), Rechte wie
   `kunden`. Karte im Kontakt (`kontakte/KontaktPersonen.tsx`), Suche in Kontakte und Strg+K findet sie.
   Das Textfeld `kunden.ansprechpartner` bleibt (Rechnung, Regiebericht).
-- **Adress-Vorschläge** beim Tippen der Straße (Kunde, Projekt-Baustelle, Anlage):
+- **Adress-Vorschläge** beim Tippen der Straße (Kunde, Projekt-Baustelle, Anlage, Termin-Ort):
   `components/AdresseFeld.tsx` + `lib/adresse.ts` (getestet), Quelle Photon (OpenStreetMap, ohne
   Schlüssel, nur AT, Mürztal zuerst). Google Places bräuchte ein Google-Konto mit Abrechnung.
 - **PV-Anlagendaten** an der vorhandenen Anlage (`anlagen`, Art PV — ein Kunde kann mehrere haben):

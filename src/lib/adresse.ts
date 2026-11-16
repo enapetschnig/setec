@@ -33,6 +33,24 @@ export function hausnummerAus(eingabe: string): string {
   return m ? m[1].replace(/\s+/g, "") : "";
 }
 
+const grund = (x: string) => x.toLowerCase().replace(/ä/g, "a").replace(/ö/g, "o").replace(/ü/g, "u").replace(/ß/g, "ss");
+const woerter = (x: string) => grund(x).split(/[^a-z0-9]+/).filter(Boolean);
+
+/**
+ * Passt der Vorschlag zu allem, was getippt wurde? Jedes getippte Wort (ohne
+ * Hausnummern) muss mit seinen ersten 4 Buchstaben in Straße, PLZ, Ort oder
+ * Ortsteil vorkommen — „Hauptstr 10 Kindb“ passt zu Hauptstraße 10, Kindberg,
+ * Tippfehler weiter hinten im Wort („Kindbreg“) auch. Photon schlägt sonst
+ * dieselbe Straße im Nachbarort vor, wenn es sie im getippten Ort nicht gibt —
+ * genau die Verwechslung, die das Navi in den falschen Ort schickt.
+ */
+export function passtZurEingabe(a: Pick<AdressVorschlag, "strasse" | "plz" | "ort" | "zusatz">, eingabe: string): boolean {
+  const ziel = woerter(`${a.strasse} ${a.plz} ${a.ort} ${a.zusatz}`);
+  return woerter(eingabe)
+    .filter((w) => /[a-z]/.test(w) && w.length >= 3)
+    .every((w) => ziel.some((z) => z.startsWith(w.slice(0, 4))));
+}
+
 /**
  * Antwort von Photon → Vorschläge. Nur Österreich, nur mit Straße oder
  * Hausnummer und PLZ; doppelte fallen weg. Hat der Treffer keine Hausnummer,
@@ -58,6 +76,7 @@ export function photonLesen(antwort: unknown, eingabe = ""): AdressVorschlag[] {
     const strasse = nr ? `${strassenName} ${nr}` : strassenName;
     const teil = t(p.district) || t(p.locality);
     const zusatz = teil && !/^katastralgemeinde/i.test(teil) && teil !== ort ? teil : "";
+    if (eingabe && !passtZurEingabe({ strasse, plz, ort, zusatz }, eingabe)) continue;
     const schluessel = `${strasse}|${plz}|${ort}`.toLowerCase();
     if (gesehen.has(schluessel)) continue;
     gesehen.add(schluessel);

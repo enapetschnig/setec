@@ -1,3 +1,4 @@
+import { AdresseFeld } from "@/components/AdresseFeld";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Loader2, Trash2 } from "lucide-react";
@@ -361,7 +362,8 @@ export function TerminDialog({
 
         <div className="space-y-2">
           <Label htmlFor="t-ort">Ort</Label>
-          <Input id="t-ort" className="h-12" value={w.ort} onChange={(e) => setze({ ort: e.target.value })} />
+          <AdresseFeld id="t-ort" className="h-12" wert={w.ort} onChange={(ort) => setze({ ort })} placeholder="Adresse – Vorschläge kommen beim Tippen"
+            onWaehlen={(a) => setze({ ort: `${a.strasse}, ${a.plz} ${a.ort}` })} />
         </div>
 
         <div className="space-y-2">

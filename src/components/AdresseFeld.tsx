@@ -26,6 +26,7 @@ export function AdresseFeld({
   const [aktiv, setAktiv] = useState(-1);
   /** nur nach echtem Tippen suchen — nicht beim Öffnen oder nach dem Wählen */
   const getippt = useRef(false);
+  const feld = useRef<HTMLInputElement>(null);
 
   const anfrage = adressAnfrage(wert);
   useEffect(() => {
@@ -43,7 +44,8 @@ export function AdresseFeld({
         const liste = photonLesen(await antwort.json(), anfrage);
         setVorschlaege(liste);
         setAktiv(-1);
-        setOffen(true);
+        // Nur aufklappen, wenn noch jemand im Feld ist (sonst deckt die Liste PLZ und Ort zu)
+        setOffen(document.activeElement === feld.current);
       } catch {
         // Kein Netz oder Dienst überlastet: einfach ohne Vorschläge weiter
         if (!abbruch.signal.aborted) setVorschlaege([]);
@@ -66,6 +68,7 @@ export function AdresseFeld({
   return (
     <div className="relative">
       <Input
+        ref={feld}
         id={id}
         className={cn("pr-9", className)}
         value={wert}
