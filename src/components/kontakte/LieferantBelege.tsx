@@ -35,7 +35,7 @@ export function LieferantBelege({ kontakt, istChef }: { kontakt: Kunde; istChef:
           {istChef && (
             <div className={cn("grid grid-cols-2 gap-2 px-4 pb-3 lg:px-5", s.bestellungen > 0 && "sm:grid-cols-3")}>
               <Kennzahl titel="Rechnungen" wert={euro(s.rechnungenSumme)} unter={`${zahl(s.rechnungen)} Rechnung${s.rechnungen === 1 ? "" : "en"}, brutto`} />
-              <Kennzahl titel="Nicht überwiesen" wert={euro(s.offenSumme)} unter={s.offen ? `${zahl(s.offen)} Rechnung${s.offen === 1 ? "" : "en"}` : "alles bezahlt"} />
+              <Kennzahl titel="Nicht bezahlt" wert={euro(s.offenSumme)} unter={s.offen ? `${zahl(s.offen)} Rechnung${s.offen === 1 ? "" : "en"}` : "alles bezahlt"} />
               {s.bestellungen > 0 && <Kennzahl titel="Bestellt" wert={euro(s.bestellungenSumme)} unter={`${zahl(s.bestellungen)} Bestellung${s.bestellungen === 1 ? "" : "en"} netto`} />}
             </div>
           )}

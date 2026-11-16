@@ -86,7 +86,7 @@ describe("PV-Anlage", () => {
 describe("Belege eines Lieferanten", () => {
   const b = (quelle: string, status: string, betrag: number | null): LieferantBeleg =>
     ({ quelle, status, betrag, id: "x", nummer: null, datum: "2026-11-01", projekt_id: null, projekt: null });
-  it("Summen: offen = weder überwiesen noch abgelehnt, stornierte Bestellungen zählen nicht", () => {
+  it("Summen: offen = weder bezahlt noch abgelehnt, stornierte Bestellungen zählen nicht", () => {
     const s = belegSummen([
       b("rechnung", "bezahlt", 100.1), b("rechnung", "offen", 50.2), b("rechnung", "freigegeben", 10), b("rechnung", "abgelehnt", 999),
       b("bestellung", "bestellt", 30), b("bestellung", "storniert", 500), b("lieferschein", "offen", null),
