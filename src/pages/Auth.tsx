@@ -1,24 +1,23 @@
 import { useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { Clock, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useSitzung } from "@/hooks/useSitzung";
-import { authFehler, benutzerFehler, benutzername, zuEmail } from "@/lib/konto";
+import { authFehler, zuEmail } from "@/lib/konto";
 import { offeneEinladung } from "@/lib/einladung";
 import { KUNDE } from "@/kunde.config";
 
-type Modus = "login" | "register" | "reset" | "registriert";
+type Modus = "login" | "reset" | "neu";
 
 export default function Auth() {
   const navigate = useNavigate();
   const { session, laden: sitzungLaedt } = useSitzung();
   const [laden, setLaden] = useState(false);
   const [modus, setModus] = useState<Modus>("login");
-  const [neuerName, setNeuerName] = useState("");
 
   if (!sitzungLaedt && session && modus === "login") return <Navigate to="/" replace />;
   // Frisch installierte App (Android/PC) startet auf „/“ — zurück zur offenen Einladung
@@ -41,34 +40,6 @@ export default function Auth() {
     navigate("/");
   };
 
-  const registrieren = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const fd = new FormData(e.currentTarget);
-    const benutzer = String(fd.get("benutzer"));
-    const vorname = String(fd.get("vorname")).trim();
-    const nachname = String(fd.get("nachname")).trim();
-    if (!vorname || !nachname) return toast.error("Bitte Vor- und Nachnamen eintragen.");
-    const falsch = benutzerFehler(benutzer);
-    if (falsch) return toast.error("Benutzername geht so nicht", { description: falsch });
-    setLaden(true);
-    const { error } = await supabase.auth.signUp({
-      email: zuEmail(benutzer, KUNDE.loginDomain),
-      password: String(fd.get("password")),
-      options: {
-        emailRedirectTo: `${window.location.origin}/`,
-        data: { vorname, nachname },
-      },
-    });
-    if (error) {
-      setLaden(false);
-      return toast.error("Registrierung fehlgeschlagen", { description: authFehler(error.message) });
-    }
-    await supabase.auth.signOut({ scope: "local" });
-    setLaden(false);
-    setNeuerName(benutzer.includes("@") ? benutzer.trim().toLowerCase() : benutzername(benutzer));
-    setModus("registriert");
-  };
-
   return (
     <div className="flex min-h-screen flex-col bg-background">
       {/* Kopf in SETEC-Schwarz mit Querlogo wie auf setec-gmbh.at, das Schild groß und leise im Hintergrund */}
@@ -84,17 +55,14 @@ export default function Auth() {
 
       <div className="relative -mt-10 flex-1 px-4 pb-10">
         <div className="mx-auto w-full max-w-sm rounded-2xl border bg-card p-6 shadow-lg">
-          {modus === "registriert" && (
-            <div className="space-y-5 text-center">
-              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-primary-soft"><Clock className="h-8 w-8 text-primary" /></div>
-              <div>
-                <h2 className="text-lg font-semibold">Registrierung eingegangen</h2>
-                <p className="mt-2 text-sm text-muted-foreground">Der Chef schaltet dein Konto frei — danach meldest du dich mit Benutzername und Passwort an.</p>
-                {neuerName && (
-                  <p className="mt-3 text-sm">Dein Benutzername: <span className="font-mono font-semibold">{neuerName}</span></p>
-                )}
-              </div>
-              <Button className="h-12 w-full" onClick={() => setModus("login")}>Zur Anmeldung</Button>
+          {modus === "neu" && (
+            <div className="space-y-4">
+              <h2 className="text-lg font-semibold">Neu bei {KUNDE.kurzname}?</h2>
+              <p className="text-sm text-muted-foreground">
+                Scan den QR-Code am Aushang oder öffne den Link, den dir der Chef geschickt hat. Damit legst du die App auf den
+                Startbildschirm und registrierst dich darin selbst — in einer Minute.
+              </p>
+              <Button className="h-12 w-full" onClick={() => setModus("login")}>Zurück zur Anmeldung</Button>
             </div>
           )}
 
@@ -125,37 +93,11 @@ export default function Auth() {
               </Button>
               <div className="flex items-center justify-between text-sm">
                 <button type="button" onClick={() => setModus("reset")} className="h-11 text-muted-foreground hover:text-foreground">Passwort vergessen?</button>
-                <button type="button" onClick={() => setModus("register")} className="h-11 font-medium text-primary hover:underline">Konto anlegen</button>
+                <button type="button" onClick={() => setModus("neu")} className="h-11 font-medium text-primary hover:underline" data-pruef="neu-hier">Neu hier?</button>
               </div>
-              <p className="text-center text-xs text-muted-foreground">Neu hier? Am schnellsten mit dem Einladungslink vom Chef — dann bist du gleich freigeschaltet.</p>
             </form>
           )}
 
-          {modus === "register" && (
-            <form onSubmit={registrieren} className="space-y-4">
-              <h2 className="text-lg font-semibold">Konto anlegen</h2>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-2"><Label htmlFor="vorname">Vorname</Label><Input id="vorname" name="vorname" autoComplete="given-name" required className="h-12 text-base md:text-base" /></div>
-                <div className="space-y-2"><Label htmlFor="nachname">Nachname</Label><Input id="nachname" name="nachname" autoComplete="family-name" required className="h-12 text-base md:text-base" /></div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="reg-benutzer">Benutzername oder E-Mail</Label>
-                <Input id="reg-benutzer" name="benutzer" autoComplete="username" autoCapitalize="none" required className="h-12 text-base md:text-base" placeholder="z. B. max" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="reg-password">Passwort</Label>
-                <Input id="reg-password" name="password" type="password" autoComplete="new-password" required minLength={6} className="h-12 text-base md:text-base" placeholder="mindestens 6 Zeichen" />
-              </div>
-              <Button type="submit" className="h-12 w-full text-base" disabled={laden}>
-                {laden && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Registrieren
-              </Button>
-              <p className="text-center text-xs text-muted-foreground">Neue Konten schaltet der Chef frei.</p>
-              <p className="text-center text-sm text-muted-foreground">
-                Schon registriert?{" "}
-                <button type="button" onClick={() => setModus("login")} className="font-medium text-primary hover:underline">Anmelden</button>
-              </p>
-            </form>
-          )}
         </div>
       </div>
     </div>

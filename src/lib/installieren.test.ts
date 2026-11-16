@@ -64,10 +64,9 @@ describe("einladung", () => {
     expect(tokenAusPfad("/einladung/<script>")).toBeNull();
   });
   it("Text, WhatsApp und Mail", () => {
-    const t = einladungsText({ vorname: "Jürgen", firma: "SETEC", link });
-    expect(t).toMatch(/^Hallo Jürgen, du bist zur SETEC-App eingeladen/);
+    const t = einladungsText({ firma: "SETEC", link });
+    expect(t).toMatch(/^Unsere SETEC-App: .*registrieren/);
     expect(t.endsWith(link)).toBe(true);
-    expect(einladungsText({ vorname: "Stefan", firma: "SETEC", link, zugang: true })).toMatch(/dein Zugang/);
     expect(decodeURIComponent(whatsAppAdresse("A & B"))).toBe("https://wa.me/?text=A & B");
     expect(mailAdresse("Betreff", "x&y")).toBe("mailto:?subject=Betreff&body=x%26y");
   });

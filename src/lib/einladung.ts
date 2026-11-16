@@ -1,7 +1,8 @@
 /**
- * Einladungslinks: /einladung/<token>. Der Chef erzeugt sie unter
- * Einstellungen → Mitarbeiter, der Eingeladene installiert damit die App und
- * legt darin sein Passwort fest (Seite pages/Einladung.tsx).
+ * Der Firmen-Link /einladung/<token> — der EINE Weg in die App. Der Chef holt
+ * ihn unter Einstellungen → Mitarbeiter (QR, WhatsApp, Aushang); jeder neue
+ * Mitarbeiter installiert damit die App und legt darin sein Konto an (Seite
+ * pages/Einladung.tsx, Migration 20261116110000_firmen_link.sql).
  *
  * Merker „offene Einladung“: Android und PC teilen den Speicher zwischen
  * Browser und installierter App. Startet die frisch installierte App auf „/“
@@ -12,12 +13,8 @@
 
 export type EinladungInfo = {
   status: "gueltig" | "eingeloest" | "abgelaufen" | "zurueckgezogen" | "unbekannt";
-  art?: "neu" | "zugang";
-  vorname?: string;
-  nachname?: string;
+  art?: "firma";
   firma?: string | null;
-  /** Neu: freier Vorschlag für den Benutzernamen; Zugang: der bestehende Benutzername */
-  benutzer?: string | null;
 };
 
 export function einladungsAdresse(origin: string, token: string): string {
@@ -25,11 +22,8 @@ export function einladungsAdresse(origin: string, token: string): string {
 }
 
 /** Der Text, der per WhatsApp oder Mail rausgeht — kurz, mit dem Link am Ende */
-export function einladungsText(o: { vorname: string; firma: string; link: string; zugang?: boolean }): string {
-  const gruss = o.vorname ? `Hallo ${o.vorname}` : "Hallo";
-  return o.zugang
-    ? `${gruss}, hier ist dein Zugang zur ${o.firma}-App. Link am Handy öffnen, App installieren und anmelden:\n${o.link}`
-    : `${gruss}, du bist zur ${o.firma}-App eingeladen. Link am Handy öffnen, App installieren und Passwort festlegen — fertig:\n${o.link}`;
+export function einladungsText(o: { firma: string; link: string }): string {
+  return `Unsere ${o.firma}-App: Link am Handy öffnen, App auf den Startbildschirm legen, darin registrieren — fertig:\n${o.link}`;
 }
 
 /** WhatsApp öffnet sich mit dem Text, den Empfänger wählt man dort selbst. Nichts wird von hier gesendet. */

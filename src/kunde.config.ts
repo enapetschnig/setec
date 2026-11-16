@@ -20,6 +20,8 @@ export interface KundeConfig {
   kontakt: { telefon: string; email: string; website: string; uid: string };
   /** Benutzername ohne @ → <name>@<loginDomain> */
   loginDomain: string;
+  /** Offizielle Adresse der App — darauf zeigen Firmen-Link, QR-Code und Aushang */
+  appAdresse: string;
   /** Quadratisches App-Zeichen (Schild auf Schwarz) */
   logo: string;
   /** Querlogo mit Schriftzug: für dunkle bzw. helle Flächen */
@@ -52,6 +54,7 @@ export const KUNDE: KundeConfig = {
   },
 
   loginDomain: "setec.handwerkapp.at",
+  appAdresse: "https://setec-gmbh.vercel.app",
 
   logo: "/logo.png",
   logoQuerHell: "/logo-quer-hell.png",

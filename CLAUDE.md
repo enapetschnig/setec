@@ -14,7 +14,7 @@ Elektriker — am Handy auf der Baustelle bedienbar, Angebot vor Ort per Sprache
 | Vercel | Projekt `setec`, Auto-Deploy von `main` — https://setec-gmbh.vercel.app (alt: mayr.vercel.app bleibt, dort liegen installierte Apps und Anlagen-QR-Codes); eigene Domain verbindet Christoph — dann `site_url`/`uri_allow_list` in Supabase-Auth nachziehen |
 | GitHub | `enapetschnig/setec` (öffentlich; alte Adresse `mayr` leitet um) |
 | Betrieb | „SETEC GmbH“ — Bank noch Demo, in Einstellungen änderbar |
-| Konten | Stefan Sattler `s.sattler@setec-gmbh.at` (Chef, Erstpasswort `SETEC_STEFAN_ERSTPASSWORT`, muss beim ersten Anmelden ändern) · ePower Support, Benutzer `epower` (Chef, `SETEC_EPOWER_PASSWORT`, `profiles.versteckt` — für SETEC unsichtbar, nur per SQL änderbar) — beides in `~/.config/hw/zugangsdaten.env`. Mitarbeiter lädt Stefan selbst ein (`<name>@setec.handwerkapp.at`). Die Demo-Konten chef/max/lisa … sind gelöscht. |
+| Konten | Stefan Sattler `s.sattler@setec-gmbh.at` (Chef, Erstpasswort `SETEC_STEFAN_ERSTPASSWORT`, muss beim ersten Anmelden ändern) · ePower Support, Benutzer `epower` (Chef, `SETEC_EPOWER_PASSWORT`, `profiles.versteckt` — für SETEC unsichtbar, nur per SQL änderbar) — beides in `~/.config/hw/zugangsdaten.env`. Mitarbeiter registrieren sich selbst über den EINEN Firmen-Link/QR-Code (Einstellungen → Mitarbeiter, Aushang `/aushang`; Benutzer `<name>@setec.handwerkapp.at`, sofort aktiv). Neue Domain → auch `appAdresse` in `kunde.config.ts` ändern. Die Demo-Konten chef/max/lisa … sind gelöscht. |
 
 Die frühere Drei-Firmen-App ist abgelöst; sie
 steht im Git-Verlauf bis Commit `769f917`, die Datensicherung unter

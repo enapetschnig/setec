@@ -1505,10 +1505,12 @@ export type Database = {
           erstellt_von: string | null
           gueltig_bis: string
           id: string
+          mehrfach: boolean
           nachname: string
           profil_id: string | null
           rolle: string
           team_id: string | null
+          token: string | null
           token_hash: string
           vorname: string
           zurueckgezogen_am: string | null
@@ -1520,10 +1522,12 @@ export type Database = {
           erstellt_von?: string | null
           gueltig_bis?: string
           id?: string
+          mehrfach?: boolean
           nachname?: string
           profil_id?: string | null
           rolle?: string
           team_id?: string | null
+          token?: string | null
           token_hash: string
           vorname?: string
           zurueckgezogen_am?: string | null
@@ -1535,10 +1539,12 @@ export type Database = {
           erstellt_von?: string | null
           gueltig_bis?: string
           id?: string
+          mehrfach?: boolean
           nachname?: string
           profil_id?: string | null
           rolle?: string
           team_id?: string | null
+          token?: string | null
           token_hash?: string
           vorname?: string
           zurueckgezogen_am?: string | null
@@ -3577,21 +3583,9 @@ export type Database = {
         Args: { p_domain: string; p_nachname: string; p_vorname: string }
         Returns: string
       }
-      einladung_erstellen: {
-        Args: {
-          p_nachname: string
-          p_profil?: string
-          p_rolle?: string
-          p_team?: string
-          p_vorname: string
-        }
-        Returns: Json
-      }
       einladung_hash: { Args: { p_token: string }; Returns: string }
       einladung_lesen: { Args: { p_token: string }; Returns: Json }
-      einladung_neu: { Args: { p_id: string }; Returns: string }
       einladung_token: { Args: never; Returns: string }
-      einladung_zurueckziehen: { Args: { p_id: string }; Returns: undefined }
       fibu_uebergeben: {
         Args: {
           p_belege: string[]
@@ -3602,6 +3596,7 @@ export type Database = {
         }
         Returns: string
       }
+      firmen_link: { Args: { p_neu?: boolean }; Returns: string }
       ist_aktiv: { Args: never; Returns: boolean }
       ist_chef: { Args: never; Returns: boolean }
       kontakt_belege: {

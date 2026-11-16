@@ -16,7 +16,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, Karte, StatusPille } from "@/components/Bausteine";
 import { InstallAnleitung } from "@/components/Installieren";
-import { EinladenKarte, ZugangsLinkKnopf } from "@/components/einladung/Einladungen";
+import { EinladenKarte } from "@/components/einladung/Einladungen";
 import { LohnSaetze, WhatsAppVorlagenKarte } from "@/components/projekt/ProjektEinstellungen";
 import { InterneArten } from "@/components/zeiten/InterneArten";
 import { useNeuLaden } from "@/hooks/useDaten";
@@ -484,7 +484,6 @@ function Mitarbeiter() {
                   ))}
                 </div>
                 <div className="ml-auto flex flex-wrap gap-1">
-                  <ZugangsLinkKnopf p={p} />
                 {p.id !== ich?.id && (
                   <>
                     <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground" onClick={() => setPasswort({ p, neu: null })}>
