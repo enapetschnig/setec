@@ -283,7 +283,7 @@ export default function ProjektDetail() {
       {ordner === "material" && <ProjektMaterial projekt={projekt} />}
       {ordner === "regie" && <ProjektRegie projekt={projekt} />}
       {ordner === "termine" && (
-        <ProjektTermine projektId={projekt.id} onNeu={() => setDialog("termin")} onWahl={(t) => { setTermin(t); setDialog("termin"); }} />
+        <ProjektTermine projektId={projekt.id} darf={istChef} onNeu={() => setDialog("termin")} onWahl={(t) => { setTermin(t); setDialog("termin"); }} />
       )}
       {ordner === "belege" && istChef && <ProjektBelege projekt={projekt} />}
 
@@ -464,7 +464,7 @@ function ProjektStunden({ projektId, onNeu, onWahl }: { projektId: string; onNeu
   );
 }
 
-function ProjektTermine({ projektId, onNeu, onWahl }: { projektId: string; onNeu: () => void; onWahl: (t: Termin) => void }) {
+function ProjektTermine({ projektId, darf, onNeu, onWahl }: { projektId: string; darf: boolean; onNeu: () => void; onWahl: (t: Termin) => void }) {
   const heute = isoTag();
   const { data: termine = [], isLoading } = useQuery({
     queryKey: ["termine", "projekt", projektId],
@@ -476,10 +476,12 @@ function ProjektTermine({ projektId, onNeu, onWahl }: { projektId: string; onNeu
   });
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-2">
-        <Button onClick={onNeu} className="h-12 gap-2"><CalendarPlus className="h-4 w-4" /> Termin eintragen</Button>
-        <Button variant="outline" className="h-12" asChild><Link to="/plantafel">Zur Plantafel</Link></Button>
-      </div>
+      {darf && (
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={onNeu} className="h-12 gap-2"><CalendarPlus className="h-4 w-4" /> Termin eintragen</Button>
+          <Button variant="outline" className="h-12" asChild><Link to="/plantafel">Zur Plantafel</Link></Button>
+        </div>
+      )}
       {!isLoading && termine.length === 0 ? <Leer icon={CalendarDays} text="Keine Termine zu diesem Projekt." /> : (
         <ul className="divide-y rounded-lg border bg-card">
           {termine.map((t) => (

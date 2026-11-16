@@ -1,12 +1,17 @@
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Bus, FileText, FolderKanban, Mail, MapPin, Navigation, Phone, Users } from "lucide-react";
+import { AlertTriangle, Bus, Check, ChevronDown, FileText, FolderKanban, Mail, MapPin, Navigation, Package, Phone, ScanBarcode, Users } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Avatar } from "@/components/Bausteine";
 import { Button } from "@/components/ui/button";
+import { useAngebotMaterial } from "@/components/material/artikelDaten";
+import { ausfassVorschlag, verbrauchtKarte } from "@/components/material/artikelLogik";
+import { mengeText, useProjektMaterial } from "@/components/material/materialDaten";
 import { useFahrzeuge, useMitarbeiter, useProjekt, useTeams } from "@/hooks/useDaten";
 import { useSitzung } from "@/hooks/useSitzung";
 import { name, type Termin } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 const karte = (adresse: string) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(adresse)}`;
 const route = (adresse: string) => `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(adresse)}`;
@@ -114,10 +119,62 @@ export function EinsatzDetails({ t }: { t: Termin }) {
           {hinweise.map((h) => <li key={h} className="flex items-start gap-1.5"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />{h}</li>)}
         </ul>
       )}
+      {t.projekt_id && <MaterialLautAngebot projektId={t.projekt_id} buchbar={projekt?.status !== "angebot"} />}
       {t.projekt_id && (
         <Button asChild className="h-11 w-full sm:w-auto"><Link to={`/projekte/${t.projekt_id}`}><FolderKanban className="h-4 w-4" /> Ins Projekt</Link></Button>
       )}
       {!projekt && !adresse && !t.beschreibung && !kollegen.length && <p className="text-muted-foreground">Kein Projekt hinterlegt.</p>}
+    </div>
+  );
+}
+
+/**
+ * „Das Material brauche ich“: was laut Angebot noch mitzunehmen ist — ohne
+ * Preise, schon Ausgefasstes abgezogen (wie der Vorschlag beim Ausfassen).
+ */
+function MaterialLautAngebot({ projektId, buchbar }: { projektId: string; buchbar: boolean }) {
+  const [offen, setOffen] = useState(false);
+  const { data: angebot } = useAngebotMaterial(projektId);
+  const { data: projektMaterial } = useProjektMaterial(angebot ? projektId : null);
+  const liste = useMemo(
+    () => (angebot && projektMaterial ? ausfassVorschlag(angebot.bedarf, verbrauchtKarte(projektMaterial)) : []),
+    [angebot, projektMaterial],
+  );
+  if (!angebot || !liste.length) return null;
+  const nochOffen = liste.filter((v) => v.offen > 0).length;
+  return (
+    <div className="rounded-md border" data-einsatz-material>
+      <button type="button" onClick={() => setOffen(!offen)} aria-expanded={offen}
+        className="flex min-h-11 w-full items-center gap-2 px-3 text-left">
+        <Package className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <span className="min-w-0 flex-1 font-medium">Material laut Angebot ({liste.length})</span>
+        <span className="shrink-0 text-xs text-muted-foreground">{nochOffen ? `${nochOffen} offen` : "alles ausgefasst"}</span>
+        <ChevronDown className={cn("h-4 w-4 shrink-0 text-muted-foreground transition-transform", offen && "rotate-180")} />
+      </button>
+      {offen && (
+        <div className="border-t px-3 pb-3">
+          <ul className="divide-y">
+            {liste.map((v) => {
+              const a = angebot.artikel.get(v.artikel_id);
+              return (
+                <li key={v.artikel_id} className={cn("flex items-start gap-2 py-2", v.offen === 0 && "text-muted-foreground")}>
+                  <span className="min-w-0 flex-1">{a?.bezeichnung ?? "Artikel"}</span>
+                  <span className="shrink-0 text-right tabular-nums">
+                    {v.offen === 0
+                      ? <span className="inline-flex items-center gap-1"><Check className="h-3.5 w-3.5" />{mengeText(v.soll, a?.einheit)}</span>
+                      : <><span className="font-semibold">{mengeText(v.offen, a?.einheit)}</span>{v.schon > 0 && <span className="block text-xs text-muted-foreground">von {mengeText(v.soll, a?.einheit)}</span>}</>}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+          {buchbar && nochOffen > 0 && (
+            <Button asChild variant="outline" className="mt-2 h-11 w-full">
+              <Link to={`/scan?projekt=${projektId}&modus=ausfassung`}><ScanBarcode className="h-4 w-4" /> Jetzt ausfassen</Link>
+            </Button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

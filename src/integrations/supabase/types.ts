@@ -1730,6 +1730,8 @@ export type Database = {
           material_aufschlag: number
           name: string
           ort: string | null
+          plan_bis: number
+          plan_von: number
           plz: string | null
           rechnung_einleitung: string | null
           rechnung_schluss: string | null
@@ -1772,6 +1774,8 @@ export type Database = {
           material_aufschlag?: number
           name: string
           ort?: string | null
+          plan_bis?: number
+          plan_von?: number
           plz?: string | null
           rechnung_einleitung?: string | null
           rechnung_schluss?: string | null
@@ -1814,6 +1818,8 @@ export type Database = {
           material_aufschlag?: number
           name?: string
           ort?: string | null
+          plan_bis?: number
+          plan_von?: number
           plz?: string | null
           rechnung_einleitung?: string | null
           rechnung_schluss?: string | null

@@ -36,7 +36,7 @@ const ALLE: NeuAktion[] = [
   { art: "angebot", titel: "Angebot", text: "Am PC schreiben, mit Katalog und KI", icon: FileText, ziel: "/belege/neu?typ=angebot", nurChef: true },
   { art: "sprache", titel: "Angebot vor Ort", text: "„3 Steckdosen, 2 Schalter, 1 FI“ — sprechen, fertig", icon: Mic, ziel: "/belege/neu?typ=angebot&sprache=1", nurChef: true },
   { art: "rechnung", titel: "Rechnung", text: "Leer oder aus dem Projekt übernehmen", icon: FilePlus2, ziel: "/belege/neu?typ=rechnung", nurChef: true },
-  { art: "termin", titel: "Termin", text: "Einsatz in die Plantafel eintragen", icon: CalendarPlus },
+  { art: "termin", titel: "Termin", text: "Einsatz in die Plantafel eintragen", icon: CalendarPlus, nurChef: true },
   { art: "aufgabe", titel: "Aufgabe", text: "Wer muss was bis wann erledigen", icon: ListTodo },
   { art: "kontakt", titel: "Kontakt", text: "Kunde, Lieferant oder Partner", icon: UserPlus },
   { art: "zeit", titel: "Stunden", text: "Stunden auf ein Projekt buchen", icon: Clock },

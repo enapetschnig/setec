@@ -19,6 +19,7 @@ import { InstallAnleitung } from "@/components/Installieren";
 import { EinladenKarte } from "@/components/einladung/Einladungen";
 import { LohnSaetze, WhatsAppVorlagenKarte } from "@/components/projekt/ProjektEinstellungen";
 import { InterneArten } from "@/components/zeiten/InterneArten";
+import { PlanZeiten } from "@/components/plantafel/PlanZeiten";
 import { useNeuLaden } from "@/hooks/useDaten";
 import { useSitzung } from "@/hooks/useSitzung";
 import { useQuery } from "@tanstack/react-query";
@@ -333,6 +334,7 @@ function Betrieb() {
       </Karte>
 
       <InterneArten />
+      <PlanZeiten />
 
       <Karte titel="Mahnen">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">

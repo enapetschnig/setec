@@ -161,6 +161,48 @@ export function planVerschieben(
   };
 }
 
+/**
+ * Sichtbare Stunden aus den Betriebs-Einstellungen (firma.plan_von/plan_bis);
+ * Unsinn oder leer = 6–18 Uhr.
+ */
+export function planStunden(von: number | null | undefined, bis: number | null | undefined): [number, number] {
+  const v = Number.isInteger(von) ? (von as number) : 6;
+  const b = Number.isInteger(bis) ? (bis as number) : 18;
+  return v >= 0 && b <= 24 && v < b ? [v, b] : [6, 18];
+}
+
+/** Standardzeit eines Einsatzes über mehrere Tage */
+export const EINSATZ_VON = 7 * 60;
+export const EINSATZ_BIS = 15 * 60 + 30;
+
+/**
+ * Im Wochenplan aufgezogen (oder nur angetippt): von Punkt a bis Punkt b,
+ * je Tag und Minute. Antippen = halbe Stunde abgerundet, 2 Stunden lang;
+ * im Tag gezogen = genau diese Zeit (15-Min.-Raster); über mehrere Tage =
+ * Zeitraum, die Uhrzeit aus dem Ziehen, wenn sie mindestens eine Stunde
+ * ergibt, sonst 7:00–15:30.
+ */
+export function zeitraumAus(
+  a: { tag: string; minute: number },
+  b: { tag: string; minute: number },
+  tagAb: number,
+  tagBis: number,
+): { datum: string; bisDatum?: string; von: string; bis: string } {
+  const [erst, letzt] = a.tag <= b.tag ? [a, b] : [b, a];
+  const lo = Math.min(a.minute, b.minute), hi = Math.max(a.minute, b.minute);
+  if (a.tag === b.tag) {
+    if (hi - lo < 30) {
+      const von = Math.max(tagAb, Math.min(tagBis - 60, Math.floor(a.minute / 30) * 30));
+      return { datum: a.tag, von: zeitAus(von), bis: zeitAus(Math.min(tagBis, von + 120)) };
+    }
+    const von = Math.max(tagAb, einrasten(lo));
+    return { datum: a.tag, von: zeitAus(von), bis: zeitAus(Math.min(tagBis, Math.max(von + 15, einrasten(hi)))) };
+  }
+  const von = einrasten(lo), bis = einrasten(hi);
+  const passt = bis - von >= 60;
+  return { datum: erst.tag, bisDatum: letzt.tag, von: zeitAus(passt ? von : EINSATZ_VON), bis: zeitAus(passt ? bis : EINSATZ_BIS) };
+}
+
 /** Kalenderwoche nach ISO 8601 */
 export function kalenderwoche(iso: string): number {
   const [y, m, d] = iso.split("-").map(Number);

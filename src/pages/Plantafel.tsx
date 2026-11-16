@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { AlertTriangle, CalendarPlus, ChevronLeft, ChevronRight, MapPin, Settings2, Truck } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { PageHeader, Seite } from "@/components/PageHeader";
@@ -10,12 +11,15 @@ import { TerminDialog } from "@/components/dialoge/TerminDialog";
 import { TeamsDialog } from "@/components/plantafel/TeamsDialog";
 import { Gantt } from "@/components/plantafel/Gantt";
 import { Monat } from "@/components/plantafel/Monat";
-import { FilterWahl, gefiltert, MiniKalender, Terminplaner, TerminplanerHandy, useGruppen, type HandyModus, type PlanNeu } from "@/components/plantafel/Terminplaner";
+import { FilterWahl, gefiltert, MiniKalender, Terminplaner, TerminplanerHandy, useGruppen, type HandyModus, type PlanLeer } from "@/components/plantafel/Terminplaner";
+import { ZellWahl, type LeerWahl } from "@/components/plantafel/ZellWahl";
+import { AbwesenheitDialog } from "@/components/zeiten/AbwesenheitDialog";
 import { useKalenderAbwesenheit } from "@/components/zeiten/personalDaten";
+import { fehlerText } from "@/components/stamm/stammDaten";
 import { useFahrzeuge, useMitarbeiter, useNeuLaden, useProjekte, useTeams } from "@/hooks/useDaten";
 import { useSitzung } from "@/hooks/useSitzung";
 import { datum as datumText, isoTag, isoZuDatum, tageDazu, uhrzeit } from "@/lib/format";
-import { kalenderwoche } from "@/lib/terminplaner";
+import { kalenderwoche, planStunden } from "@/lib/terminplaner";
 import { amTag, ANSICHTEN, konflikte, projektFarbe, type Ansicht, type Konflikt, type Zeile } from "@/lib/plantafel";
 import { feiertagName } from "@/lib/zeitkonto";
 import { ABWESENHEIT_ART, name, type AbwesenheitArt, type Fahrzeug, type Profil, type Projekt, type Team, type Termin } from "@/lib/types";
@@ -23,8 +27,13 @@ import { cn } from "@/lib/utils";
 
 const WOCHENTAGE = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
 const ANSICHT_KEY = "elektro.plantafel.ansicht";
-/** Tafel (Zeilen = Teams/Leute, Spalten = Tage) oder Terminplaner (Spalten = Leute, Zeilen = Tage mit Stunden) */
+/**
+ * Gantt (Zeilen = Teams/Leute, Spalten = Tage) oder Wochenplan (Spalten = Leute,
+ * Zeilen = Tage mit Stunden). PC und Handy merken sich ihre Wahl getrennt:
+ * am PC zuerst das Gantt, am Handy zuerst der Tagesplan.
+ */
 const SICHT_KEY = "elektro.plantafel.sicht";
+const SICHT_HANDY_KEY = "elektro.plantafel.sicht.handy";
 const HANDY_KEY = "elektro.plantafel.handy";
 type Sicht = "tafel" | "leute";
 const lesen = (k: string) => { try { return localStorage.getItem(k); } catch { return null; } };
@@ -47,15 +56,18 @@ function monatsTage(bezug: string): string[] {
 
 /**
  * /plantafel — wer fährt wann mit wem wohin. Plantafel und Kalender sind eins:
- * beide zeigen dieselben Einsätze (Tabelle `termine`).
- * - PC: Gantt über die ganze Breite und Höhe (components/plantafel/Gantt.tsx),
- *   Woche bis 3 Monate, dazu „Kalender“ als Monatsblatt
- * - Handy: Tagesliste der Woche, Alle oder nur meine, mit Abwesenheiten
+ * alle Ansichten zeigen dieselben Einsätze (`termine`), Teams und Abwesenheiten.
+ * - PC: „Gantt“ über die ganze Breite (components/plantafel/Gantt.tsx), Woche
+ *   bis 3 Monate, dazu „Kalender“ als Monatsblatt — oder „Wochenplan“ wie der
+ *   alte Taifun-Kalender (Spalten = Leute, Zeilen = Tage mit Stunden)
+ * - Handy: „Tagesplan“ (ein Tag, Leute untereinander) oder „Liste“ der Woche
+ * - Leere Stelle (Chef): Wahl „Einsatz | Abwesenheit“ (ZellWahl)
  */
 export default function Plantafel() {
   const pc = useIstPc();
   const neuLaden = useNeuLaden();
-  const { istChef, profil } = useSitzung();
+  const { istChef, profil, firma } = useSitzung();
+  const stunden = useMemo(() => planStunden(firma?.plan_von, firma?.plan_bis), [firma?.plan_von, firma?.plan_bis]);
   const heute = isoTag();
   const [bezug, setBezug] = useState(heute);
   const [ansicht, setAnsichtState] = useState<PcAnsicht>(() => {
@@ -63,15 +75,21 @@ export default function Plantafel() {
   });
   const setAnsicht = (a: PcAnsicht) => { setAnsichtState(a); try { localStorage.setItem(ANSICHT_KEY, a); } catch { /* egal */ } };
   const [nurMeine, setNurMeine] = useState(!istChef);
-  const [sicht, setSichtState] = useState<Sicht>(() => (lesen(SICHT_KEY) === "leute" ? "leute" : "tafel"));
-  const setSicht = (s: Sicht) => { setSichtState(s); merken(SICHT_KEY, s); };
+  const sichtKey = pc ? SICHT_KEY : SICHT_HANDY_KEY;
+  const sichtLesen = (key: string, standard: Sicht): Sicht => { const w = lesen(key); return w === "leute" || w === "tafel" ? w : standard; };
+  const [sicht, setSichtState] = useState<Sicht>(() => sichtLesen(sichtKey, pc ? "tafel" : "leute"));
+  useEffect(() => { setSichtState(sichtLesen(sichtKey, pc ? "tafel" : "leute")); }, [sichtKey, pc]);
+  const setSicht = (s: Sicht) => { setSichtState(s); merken(sichtKey, s); };
+  const [springTag, setSpringTag] = useState<{ tag: string; n: number } | undefined>();
   const [handyModus, setHandyModusState] = useState<HandyModus>(() => (lesen(HANDY_KEY) === "person" ? "person" : "tag"));
   const setHandyModus = (m: HandyModus) => { setHandyModusState(m); merken(HANDY_KEY, m); };
   const [filter, setFilter] = useState("");
   const [tagIndex, setTagIndex] = useState(() => Math.min(6, (isoZuDatum(heute).getDay() + 6) % 7));
   const [person, setPerson] = useState(profil?.id ?? "");
-  const [dialog, setDialog] = useState<{ termin?: Termin | null; datum?: string; bisDatum?: string; mitarbeiterId?: string; teamId?: string; fahrzeugId?: string; von?: string; bis?: string } | null>(null);
+  const [dialog, setDialog] = useState<{ termin?: Termin | null; datum?: string; bisDatum?: string; mitarbeiterId?: string; teamId?: string; fahrzeugId?: string; projektId?: string; von?: string; bis?: string } | null>(null);
   const [teamsOffen, setTeamsOffen] = useState(false);
+  const [wahl, setWahl] = useState<(LeerWahl & { mitarbeiterId: string }) | null>(null);
+  const [abwDialog, setAbwDialog] = useState<{ userId?: string; von?: string; bis?: string; id?: string } | null>(null);
 
   const leute = sicht === "leute";
   const kalender = pc && ansicht === "kalender" && !leute;
@@ -140,24 +158,52 @@ export default function Plantafel() {
     ? isoZuDatum(bezug).toLocaleDateString("de-AT", { month: "long", year: "numeric" })
     : `${leute ? `KW ${kalenderwoche(von)} · ` : ""}${datumText(von).slice(0, 6)} – ${datumText(bis)}`;
 
-  const neuAus = (v: { datum: string; bisDatum?: string; zeile: Zeile }) => setDialog({
-    datum: v.datum, bisDatum: v.bisDatum,
-    mitarbeiterId: v.zeile.art === "person" ? v.zeile.id : undefined,
-    teamId: v.zeile.art === "team" ? v.zeile.id : undefined,
-    fahrzeugId: v.zeile.art === "fahrzeug" ? v.zeile.id : undefined,
-  });
-  const neuAusPlan = (v: PlanNeu) => setDialog({ datum: v.datum, von: v.von, bis: v.bis, mitarbeiterId: v.mitarbeiterId });
+  const wer = (id: string | null | undefined) => name(mitarbeiter.find((m) => m.id === id));
+  // Gantt: in einer Personenzeile aufgezogen = Wahl Einsatz/Abwesenheit, sonst gleich das Formular
+  const neuAus = (v: { datum: string; bisDatum?: string; zeile: Zeile; x: number; y: number }) => {
+    if (v.zeile.art === "person") {
+      setWahl({ x: v.x, y: v.y, wer: wer(v.zeile.id), datum: v.datum, bisDatum: v.bisDatum, mitarbeiterId: v.zeile.id, abwesenheit: null });
+      return;
+    }
+    setDialog({
+      datum: v.datum, bisDatum: v.bisDatum,
+      teamId: v.zeile.art === "team" ? v.zeile.id : undefined,
+      fahrzeugId: v.zeile.art === "fahrzeug" ? v.zeile.id : undefined,
+    });
+  };
+  const leerAusPlan = (v: PlanLeer) => { if (istChef) setWahl({ ...v, wer: wer(v.mitarbeiterId) }); };
   const planDaten = {
-    tage, termine, termineKey, teams, mitarbeiter, fahrzeuge, projekte, abwesend, konfliktIds, darf: istChef, heute,
-    onBearbeiten: (t: Termin) => setDialog({ termin: t }), onNeu: neuAusPlan,
+    tage, termine, termineKey, teams, mitarbeiter, fahrzeuge, projekte, abwesend, konfliktIds, darf: istChef, heute, stunden,
+    onBearbeiten: (t: Termin) => setDialog({ termin: t }), onLeer: leerAusPlan,
+  };
+  /** Aus dem Gantt: Tag angetippt → Wochenplan dieser Woche, an den Tag gerollt */
+  const zumTag = (tag: string) => {
+    setBezug(tag);
+    setSicht("leute");
+    setSpringTag((alt) => ({ tag, n: (alt?.n ?? 0) + 1 }));
+  };
+  const abwLoeschen = async (id: string) => {
+    setWahl(null);
+    const { data, error } = await supabase.from("abwesenheiten").delete().eq("id", id).select("id");
+    if (error || !data?.length) { toast.error("Nicht gelöscht", { description: error ? fehlerText(error) : undefined }); return; }
+    toast.success("Abwesenheit gelöscht");
+    void neuLaden("abwesenheiten", "zeiten");
   };
   const neuerEinsatz = () => setDialog({ datum: tage.includes(heute) ? heute : kalender ? bezug : von });
 
   const dialoge = (
     <>
       <TerminDialog open={!!dialog} onOpenChange={(o) => !o && setDialog(null)} termin={dialog?.termin} datum={dialog?.datum} bisDatum={dialog?.bisDatum}
-        mitarbeiterId={dialog?.mitarbeiterId} teamId={dialog?.teamId} fahrzeugId={dialog?.fahrzeugId} von={dialog?.von} bis={dialog?.bis} />
+        mitarbeiterId={dialog?.mitarbeiterId} teamId={dialog?.teamId} fahrzeugId={dialog?.fahrzeugId} projektId={dialog?.projektId} von={dialog?.von} bis={dialog?.bis} />
+      <AbwesenheitDialog open={!!abwDialog} onOpenChange={(o) => !o && setAbwDialog(null)} userId={abwDialog?.userId} von={abwDialog?.von} bis={abwDialog?.bis} abwesenheitId={abwDialog?.id} />
       <TeamsDialog open={teamsOffen} onOpenChange={setTeamsOffen} />
+      {wahl && istChef && (
+        <ZellWahl wahl={wahl} onZu={() => setWahl(null)}
+          onEinsatz={() => { setDialog({ datum: wahl.datum, bisDatum: wahl.bisDatum, von: wahl.von, bis: wahl.bis, mitarbeiterId: wahl.mitarbeiterId }); setWahl(null); }}
+          onAbwesenheit={() => { setAbwDialog({ userId: wahl.mitarbeiterId, von: wahl.datum, bis: wahl.bisDatum ?? wahl.datum }); setWahl(null); }}
+          onAbwBearbeiten={(id) => { setAbwDialog({ id }); setWahl(null); }}
+          onAbwLoeschen={(id) => void abwLoeschen(id)} />
+      )}
     </>
   );
 
@@ -175,7 +221,7 @@ export default function Plantafel() {
         aktionen={istChef ? <Button className="h-11 gap-1.5" onClick={neuerEinsatz}><CalendarPlus className="h-4 w-4" /> Einsatz</Button> : undefined}>
         <div className="flex flex-wrap items-center gap-2">
           {blaetterKnoepfe("h-11")}
-          <Segment werte={[["tafel", "Liste"], ["leute", "Leute"]]} wert={sicht} onChange={(w) => setSicht(w as Sicht)} />
+          <Segment werte={[["leute", "Tagesplan"], ["tafel", "Liste"]]} wert={sicht} onChange={(w) => setSicht(w as Sicht)} />
           {leute
             ? <Segment werte={[["tag", "Tag"], ["person", "Person"]]} wert={handyModus} onChange={(w) => setHandyModus(w as HandyModus)} />
             : <Segment werte={[["alle", "Alle"], ["meine", "Meine"]]} wert={nurMeine ? "meine" : "alle"} onChange={(w) => setNurMeine(w === "meine")} />}
@@ -205,10 +251,10 @@ export default function Plantafel() {
       <div className="flex flex-wrap items-center gap-2 border-b bg-card px-4 py-2">
         {blaetterKnoepfe("h-9")}
         <div className="flex rounded-md border bg-card p-0.5" role="group" aria-label="Ansicht">
-          {([["tafel", "Tafel"], ["leute", "Mitarbeiter"]] as [Sicht, string][]).map(([w, t]) => (
+          {([["tafel", "Gantt"], ["leute", "Wochenplan"]] as [Sicht, string][]).map(([w, t]) => (
             <button key={w} type="button" aria-pressed={sicht === w} onClick={() => setSicht(w)}
-              title={w === "leute" ? "Spalten = Mitarbeiter, Zeilen = Tage mit Uhrzeit" : "Zeilen = Teams und Leute, Spalten = Tage"}
-              className={cn("h-8 rounded px-3 text-sm font-medium", sicht === w ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground")}>{t}</button>
+              title={w === "leute" ? "Wochenplan: Spalten = Mitarbeiter, Zeilen = Tage mit Stunden" : "Gantt: Zeilen = Teams, Leute und Geräte, Spalten = Tage"}
+              className={cn("h-8 rounded px-4 text-sm font-semibold", sicht === w ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground")}>{t}</button>
           ))}
         </div>
         {leute && <FilterWahl gruppen={gruppen} wert={filter} onChange={setFilter} className="h-9" />}
@@ -222,14 +268,14 @@ export default function Plantafel() {
           ))}
         </div>}
         {kalender && <Segment klein werte={[["alle", "Alle"], ["meine", "Meine"]]} wert={nurMeine ? "meine" : "alle"} onChange={(w) => setNurMeine(w === "meine")} />}
-        <label className="flex items-center gap-1.5 text-sm text-muted-foreground">Gehe zu
+        <label className="flex items-center gap-1.5 text-sm text-muted-foreground" title="Gehe zu Datum"><span className="hidden 2xl:inline">Gehe zu</span>
           <input type="date" className="h-9 rounded-md border bg-card px-2 text-base text-foreground [@media(pointer:fine)]:text-sm" onChange={(e) => e.target.value && setBezug(e.target.value)} />
         </label>
         {liste.length > 0 && <KonfliktKnopf liste={liste} termine={termine} mitarbeiter={mitarbeiter} fahrzeuge={fahrzeuge} onTermin={(t) => setDialog({ termin: t })} />}
       </div>
 
       {leute ? (
-        <Terminplaner className="flex-1" {...planDaten} gruppen={sichtbar}
+        <Terminplaner className="flex-1" {...planDaten} gruppen={sichtbar} springTag={springTag}
           seite={<MiniKalender bezug={bezug} woche={tage} heute={heute} onTag={setBezug} />} />
       ) : kalender ? (
         <Monat tage={tage} bezug={bezug} heute={heute} termine={meine} mitarbeiter={mitarbeiter} projekte={projekte} darf={istChef}
@@ -237,7 +283,9 @@ export default function Plantafel() {
       ) : (
         <Gantt className="flex-1" start={start} ansicht={a.wert} termine={termine} termineKey={termineKey} teams={teams} mitarbeiter={mitarbeiter} fahrzeuge={fahrzeuge}
           projekte={projekte} eingeplant={eingeplant} abwesend={abwesend} konfliktIds={konfliktIds} darf={istChef} heute={heute}
-          onBearbeiten={(t) => setDialog({ termin: t })} onNeu={neuAus} />
+          onBearbeiten={(t) => setDialog({ termin: t })} onNeu={neuAus} onTag={zumTag}
+          onAbwesenheit={(x, tag, px, py) => x.user_id && setWahl({ x: px, y: py, wer: wer(x.user_id), datum: tag, mitarbeiterId: x.user_id, abwesenheit: x })}
+          onProjekt={(id) => setDialog({ projektId: id, datum: tage.includes(heute) ? heute : von })} />
       )}
       {dialoge}
     </div>
@@ -303,7 +351,7 @@ function KonfliktListe(p: { liste: Konflikt[]; termine: Termin[]; mitarbeiter: P
     <section className="rounded-lg border border-status-rot-fg/40 bg-status-rot/30 px-3 py-1.5" role="status">
       <button type="button" onClick={() => setOffen(!offen)} aria-expanded={offen} className="flex min-h-9 w-full items-center gap-1.5 text-left text-sm">
         <AlertTriangle className="h-4 w-4 shrink-0" />
-        <span className="font-semibold">{p.liste.length === 1 ? "1 Konflikt" : `${p.liste.length} Konflikte`}</span>
+        <span className="shrink-0 whitespace-nowrap font-semibold">{p.liste.length === 1 ? "1 Konflikt" : `${p.liste.length} Konflikte`}</span>
         {!offen && <span className="truncate text-muted-foreground">· {konfliktText(p.liste[0], p.mitarbeiter, p.fahrzeuge)}{p.liste.length > 1 ? " …" : ""}</span>}
         <span className="ml-auto shrink-0 text-xs font-medium text-primary">{offen ? "zuklappen" : "zeigen"}</span>
       </button>

@@ -10,7 +10,7 @@ import type { ProjektMitKunde } from "@/hooks/useDaten";
 import { datum as datumText, isoTag, isoZuDatum, tageDazu, uhrzeit } from "@/lib/format";
 import { projektFarbe, tageZwischen, textAuf } from "@/lib/plantafel";
 import {
-  abwesenheitTon, einrasten, gruppenBilden, kalenderwoche, nebeneinander, planVerschieben, stundenBereich, zeitAus, zeitLage, type Gruppe,
+  abwesenheitTon, einrasten, gruppenBilden, kalenderwoche, minuten, nebeneinander, planVerschieben, stundenBereich, zeitAus, zeitLage, zeitraumAus, type Gruppe,
 } from "@/lib/terminplaner";
 import { feiertagName } from "@/lib/zeitkonto";
 import { ABWESENHEIT_ART, name, type AbwesenheitArt, type Fahrzeug, type Profil, type Team, type Termin } from "@/lib/types";
@@ -22,7 +22,9 @@ import { cn } from "@/lib/utils";
  * Zeilen = Tage mit den Stunden. Einsätze als Blöcke über die Zeit (Farbe des
  * Projekts, Termine ohne Projekt blau), Urlaub/ZA grün, Krank rot, Schule gelb.
  * - PC: alle Leute nebeneinander; rechts Monatskalender zum Springen
- * - Antippen = kleines Fenster (wie in der Tafel); leere Zelle = neuer Einsatz
+ * - Antippen = kleines Fenster (wie in der Tafel); leere Zelle = Wahl „Einsatz |
+ *   Abwesenheit“ (auf einer Abwesenheit: bearbeiten/löschen); am PC leere Zellen
+ *   aufziehen = Uhrzeit bzw. Zeitraum über mehrere Tage
  * - Ziehen = andere Uhrzeit, anderer Tag, andere Person; unterer Rand = länger
  * - Handy: ein Tag (Leute untereinander, Zeit quer) oder eine Person (Mo–Fr)
  */
@@ -36,7 +38,11 @@ const STD = 24;
 const ZEIT = 84;
 
 export type Abwesend = { id: string | null; user_id: string | null; von: string | null; bis: string | null; art: string | null };
-export type PlanNeu = { datum: string; von?: string; bis?: string; mitarbeiterId?: string };
+/** Leere Stelle angetippt oder aufgezogen: Person, Tag(e), Uhrzeit — und wo am Bildschirm */
+export type PlanLeer = {
+  datum: string; bisDatum?: string; von?: string; bis?: string; mitarbeiterId: string;
+  x: number; y: number; abwesenheit?: Abwesend | null;
+};
 
 const ABW_KLASSE = {
   rot: "bg-status-rot text-status-rot-fg border-status-rot-fg/30",
@@ -56,8 +62,10 @@ type Gemeinsam = {
   konfliktIds: Set<string>;
   darf: boolean;
   heute: string;
+  /** Sichtbare Stunden laut Betrieb (z. B. [6, 18]) — Einsätze außerhalb erweitern sie */
+  stunden: [number, number];
   onBearbeiten: (t: Termin) => void;
-  onNeu: (v: PlanNeu) => void;
+  onLeer: (v: PlanLeer) => void;
 };
 
 /** Spaltengruppen aus Leuten und Teams */
@@ -189,7 +197,7 @@ type Zug = {
 
 /* ───────────────────────────────────────────────────────────── PC ── */
 
-export function Terminplaner(p: Gemeinsam & { gruppen: Gruppe<Profil>[]; seite?: ReactNode; className?: string }) {
+export function Terminplaner(p: Gemeinsam & { gruppen: Gruppe<Profil>[]; seite?: ReactNode; className?: string; springTag?: { tag: string; n: number } }) {
   const { tage, termine, gruppen, abwesend, projekte, darf, heute } = p;
   const { aendern, loeschen } = useAendern(p.termineKey);
   const [info, setInfo] = useState<{ id: string; x: number; y: number } | null>(null);
@@ -205,7 +213,7 @@ export function Terminplaner(p: Gemeinsam & { gruppen: Gruppe<Profil>[]; seite?:
 
   const leute = gruppen.flatMap((g) => g.leute);
   const breite = Math.max(118, Math.floor((platz - ZEIT - 2) / Math.max(1, leute.length)));
-  const [ab, bis] = useMemo(() => stundenBereich(termine, tage), [termine, tage]);
+  const [ab, bis] = useMemo(() => stundenBereich(termine, tage, p.stunden[0], p.stunden[1]), [termine, tage, p.stunden]);
   const tagHoehe = ((bis - ab) / 60) * STD;
   const sichtbarIds = new Set(leute.map((m) => m.id));
   const weg = (pid: string, tag: string) => abwesend.find((a) => a.user_id === pid && a.von && a.bis && a.von <= tag && a.bis >= tag);
@@ -218,6 +226,62 @@ export function Terminplaner(p: Gemeinsam & { gruppen: Gruppe<Profil>[]; seite?:
   const [jetzt, setJetzt] = useState(() => new Date());
   useEffect(() => { const i = window.setInterval(() => setJetzt(new Date()), 60_000); return () => window.clearInterval(i); }, []);
   const jetztMin = jetzt.getHours() * 60 + jetzt.getMinutes();
+
+  // Aus dem Gantt: ein Tag angetippt → hierher rollen
+  useEffect(() => {
+    const box = boxRef.current, tag = p.springTag?.tag;
+    if (!box || !tag) return;
+    const el = box.querySelector<HTMLElement>(`[data-tagzeile="${tag}"]`);
+    if (el) box.scrollTop = Math.max(0, el.offsetTop - 66);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [p.springTag?.n, zeilenTage.length]);
+
+  // ------------------------------------------------------------- Aufziehen (leere Zellen)
+  type Auf = { person: string; start: { tag: string; minute: number }; ende: { tag: string; minute: number }; bewegt: boolean; x: number; y: number };
+  const [auf, setAufState] = useState<Auf | null>(null);
+  const aufRef = useRef<Auf | null>(null);
+  const setAuf = (a: Auf | null) => { aufRef.current = a; setAufState(a); };
+  const minuteIn = (zelle: Element, y: number) => Math.max(ab, Math.min(bis, ab + ((y - zelle.getBoundingClientRect().top) / STD) * 60));
+  const leerFertig = (a: Auf) => {
+    const z = zeitraumAus(a.start, a.ende, ab, bis);
+    p.onLeer({ ...z, mitarbeiterId: a.person, x: a.x, y: a.y, abwesenheit: a.bewegt ? null : weg(a.person, a.start.tag) ?? null });
+  };
+
+  useEffect(() => {
+    if (!auf) return;
+    const bewegen = (e: PointerEvent) => {
+      const a = aufRef.current;
+      if (!a) return;
+      const zelle = (document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null)?.closest("[data-zelle]") as HTMLElement | null;
+      const bewegt = a.bewegt || Math.abs(e.clientX - a.x) + Math.abs(e.clientY - a.y) > 6;
+      setAuf({ ...a, bewegt, ende: zelle ? { tag: zelle.dataset.tag!, minute: minuteIn(zelle, e.clientY) } : a.ende, ...(bewegt ? { x: e.clientX, y: e.clientY } : {}) });
+    };
+    const los = () => { const a = aufRef.current; setAuf(null); if (a) leerFertig(a); };
+    const abbrechen = () => setAuf(null);
+    const taste = (e: KeyboardEvent) => { if (e.key === "Escape") abbrechen(); };
+    let rollen = 0;
+    const rand = () => {
+      const a = aufRef.current, box = boxRef.current;
+      if (a?.bewegt && box) {
+        const r = box.getBoundingClientRect();
+        const vy = a.y < r.top + 90 && a.y > r.top - 20 ? -12 : a.y > r.bottom - 30 && a.y < r.bottom + 20 ? 12 : 0;
+        if (vy) box.scrollTop += vy;
+      }
+      rollen = requestAnimationFrame(rand);
+    };
+    rollen = requestAnimationFrame(rand);
+    window.addEventListener("pointermove", bewegen);
+    window.addEventListener("pointerup", los);
+    window.addEventListener("pointercancel", abbrechen);
+    window.addEventListener("keydown", taste);
+    return () => {
+      cancelAnimationFrame(rollen);
+      window.removeEventListener("pointermove", bewegen); window.removeEventListener("pointerup", los);
+      window.removeEventListener("pointercancel", abbrechen); window.removeEventListener("keydown", taste);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auf !== null]);
+  const aufRaum = auf?.bewegt ? zeitraumAus(auf.start, auf.ende, ab, bis) : null;
 
   // ------------------------------------------------------------- Ziehen
   const [zug, setZugState] = useState<Zug | null>(null);
@@ -309,10 +373,10 @@ export function Terminplaner(p: Gemeinsam & { gruppen: Gruppe<Profil>[]; seite?:
     if (e.target !== e.currentTarget || e.button !== 0) return;
     setInfo(null);
     if (!darf) return;
-    const r = e.currentTarget.getBoundingClientRect();
-    const von = Math.max(ab, Math.min(bis - 60, Math.floor((ab + ((e.clientY - r.top) / STD) * 60) / 30) * 30));
-    const neu = () => p.onNeu({ datum: tag, von: zeitAus(von), bis: zeitAus(Math.min(bis, von + 120)), mitarbeiterId: person });
-    if (e.pointerType !== "touch") { neu(); return; }
+    const punkt = { tag, minute: minuteIn(e.currentTarget, e.clientY) };
+    const a0: Auf = { person, start: punkt, ende: punkt, bewegt: false, x: e.clientX, y: e.clientY };
+    const neu = () => leerFertig(a0);
+    if (e.pointerType !== "touch") { setAuf(a0); return; }
     // Tablet: erst beim Loslassen ohne Wischen — sonst öffnete jedes Rollen der Tafel ein Formular
     const x0 = e.clientX, y0 = e.clientY;
     const weg = () => { window.removeEventListener("pointermove", bew); window.removeEventListener("pointerup", auf); window.removeEventListener("pointercancel", weg); };
@@ -334,7 +398,7 @@ export function Terminplaner(p: Gemeinsam & { gruppen: Gruppe<Profil>[]; seite?:
       <div key={m.id} data-zelle={m.id} data-tag={tag} onPointerDown={(e) => zelleDown(m.id, tag, e)}
         className={cn("relative shrink-0 border-r", letzteInGruppe && "border-r-2 border-r-foreground/20", darf && "cursor-cell")}
         style={{ width: breite, height: tagHoehe }}
-        title={darf ? `${name(m)} · ${kurz(tag)} — antippen = neuer Einsatz` : undefined}>
+        title={darf ? `${name(m)} · ${kurz(tag)} — antippen = Einsatz oder Abwesenheit · ziehen = Uhrzeit oder mehrere Tage` : undefined}>
         {a && ton && (
           <div className={cn("pointer-events-none absolute inset-0.5 rounded-sm border px-1.5 py-1 text-xs font-semibold", ABW_KLASSE[ton])}>
             {ABWESENHEIT_ART[a.art as AbwesenheitArt]?.text ?? "Abwesend"}
@@ -362,6 +426,12 @@ export function Terminplaner(p: Gemeinsam & { gruppen: Gruppe<Profil>[]; seite?:
             </div>
           );
         })}
+        {aufRaum && auf?.person === m.id && tag >= aufRaum.datum && tag <= (aufRaum.bisDatum ?? aufRaum.datum) && (
+          <div className="pointer-events-none absolute inset-x-1 z-[3] rounded border-2 border-dashed border-primary bg-primary/15 px-1 text-[11px] font-semibold text-primary"
+            style={{ top: ((minuten(aufRaum.von)! - ab) / 60) * STD + 1, height: Math.max(12, ((minuten(aufRaum.bis)! - minuten(aufRaum.von)!) / 60) * STD - 2) }}>
+            {aufRaum.von}–{aufRaum.bis}
+          </div>
+        )}
         {geist && (
           <div className="pointer-events-none absolute inset-x-1 z-[3] rounded border-2 border-dashed border-primary bg-primary/15 px-1 text-[11px] font-semibold text-primary"
             style={{ top: ((geist.oben - ab) / 60) * STD + 1, height: ((geist.unten - geist.oben) / 60) * STD - 2 }}>
@@ -376,7 +446,7 @@ export function Terminplaner(p: Gemeinsam & { gruppen: Gruppe<Profil>[]; seite?:
   for (let h = ab; h < bis; h += 60) stunden.push(h);
 
   return (
-    <div className={cn("flex min-h-0", zug && "select-none", p.className)}>
+    <div className={cn("flex min-h-0", (zug || auf) && "select-none", p.className)}>
       <div ref={boxRef} className="relative min-h-0 min-w-0 flex-1 overflow-auto border-t bg-card" onScroll={() => info && setInfo(null)}>
         <div style={{ width: ZEIT + breite * leute.length }}>
           {/* Kopf: Gruppen, darunter die Leute */}
@@ -402,7 +472,7 @@ export function Terminplaner(p: Gemeinsam & { gruppen: Gruppe<Profil>[]; seite?:
             const fei = feiertagName(tag);
             const frei = wochentag(tag) >= 5 || !!fei;
             return (
-              <div key={tag} className="border-b-2 border-foreground/15">
+              <div key={tag} className="border-b-2 border-foreground/15" data-tagzeile={tag}>
                 <div className={cn("sticky top-[66px] z-20 flex h-6 items-center border-b text-xs", tag === heute ? "bg-primary-soft" : "bg-muted")}>
                   <div className={cn("sticky left-0 px-2 font-semibold", tag === heute && "text-primary")}>
                     {tag === heute ? "Heute, " : `${["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"][wochentag(tag)]}, `}{datumText(tag)}
@@ -435,6 +505,12 @@ export function Terminplaner(p: Gemeinsam & { gruppen: Gruppe<Profil>[]; seite?:
       {p.seite}
 
       {info && <Info info={info} p={{ ...p, aendern, loeschen }} onZu={() => setInfo(null)} />}
+      {auf?.bewegt && aufRaum && (
+        <div className="pointer-events-none fixed z-50 whitespace-nowrap rounded-md border-2 border-primary bg-card px-2 py-1 text-xs font-semibold"
+          style={{ left: auf.x + 14, top: auf.y + 12 }}>
+          {kurz(aufRaum.datum)}{aufRaum.bisDatum ? ` – ${kurz(aufRaum.bisDatum)}` : ""} · {aufRaum.von}–{aufRaum.bis} · {name(p.mitarbeiter.find((x) => x.id === auf.person))}
+        </div>
+      )}
       {zug?.bewegt && vorschau && (
         <div className="pointer-events-none fixed z-50 whitespace-nowrap rounded-md border-2 border-primary bg-card px-2 py-1 text-xs font-semibold"
           style={{ left: zug.x + 14, top: zug.y + 12 }}>
@@ -520,7 +596,7 @@ export function TerminplanerHandy(p: Gemeinsam & {
   const { aendern, loeschen } = useAendern(p.termineKey);
   const [info, setInfo] = useState<{ id: string; x: number; y: number } | null>(null);
   const leute = gruppen.flatMap((g) => g.leute);
-  const [ab, bis] = useMemo(() => stundenBereich(termine, tage), [termine, tage]);
+  const [ab, bis] = useMemo(() => stundenBereich(termine, tage, p.stunden[0], p.stunden[1]), [termine, tage, p.stunden]);
   const weg = (pid: string, tag: string) => abwesend.find((a) => a.user_id === pid && a.von && a.bis && a.von <= tag && a.bis >= tag);
   const wisch = useRef<{ x: number; y: number } | null>(null);
 
@@ -591,8 +667,8 @@ export function TerminplanerHandy(p: Gemeinsam & {
                     onClick={(e) => {
                       if (e.target !== e.currentTarget || !darf) return;
                       const r = e.currentTarget.getBoundingClientRect();
-                      const von = Math.max(ab, Math.min(bis - 60, Math.floor((ab + ((e.clientX - r.left) / r.width) * (bis - ab)) / 30) * 30));
-                      p.onNeu({ datum: tag, von: zeitAus(von), bis: zeitAus(Math.min(bis, von + 120)), mitarbeiterId: m.id });
+                      const pkt = { tag, minute: ab + ((e.clientX - r.left) / r.width) * (bis - ab) };
+                      p.onLeer({ ...zeitraumAus(pkt, pkt, ab, bis), mitarbeiterId: m.id, x: e.clientX, y: e.clientY, abwesenheit: a ?? null });
                     }}>
                     {a && ton && <div className={cn("pointer-events-none absolute inset-0.5 rounded-sm border px-1.5 py-0.5 text-[11px] font-semibold", ABW_KLASSE[ton])}>{ABWESENHEIT_ART[a.art as AbwesenheitArt]?.text ?? "Abwesend"}</div>}
                     {liste.map(({ t, lage }) => {
@@ -638,8 +714,8 @@ export function TerminplanerHandy(p: Gemeinsam & {
                 onClick={(e) => {
                   if (e.target !== e.currentTarget || !darf) return;
                   const r = e.currentTarget.getBoundingClientRect();
-                  const von = Math.max(ab, Math.min(bis - 60, Math.floor((ab + ((e.clientY - r.top) / H) * 60) / 30) * 30));
-                  p.onNeu({ datum: tag, von: zeitAus(von), bis: zeitAus(Math.min(bis, von + 120)), mitarbeiterId: m.id });
+                  const pkt = { tag, minute: ab + ((e.clientY - r.top) / H) * 60 };
+                  p.onLeer({ ...zeitraumAus(pkt, pkt, ab, bis), mitarbeiterId: m.id, x: e.clientX, y: e.clientY, abwesenheit: a ?? null });
                 }}>
                 {a && ton && <div className={cn("pointer-events-none absolute inset-0.5 rounded-sm border px-0.5 py-1 text-[10px] font-semibold [writing-mode:vertical-rl]", ABW_KLASSE[ton])}>{ABWESENHEIT_ART[a.art as AbwesenheitArt]?.text ?? "Abwesend"}</div>}
                 {liste.map(({ t, lage }) => {
@@ -683,10 +759,11 @@ export function TerminplanerHandy(p: Gemeinsam & {
       )}
       {inhalt}
       <p className="flex flex-wrap gap-x-3 gap-y-1 px-1 text-[11px] text-muted-foreground">
-        <span><span className="mr-1 inline-block h-2.5 w-2.5 rounded-sm bg-status-blau align-middle" />Termin</span>
+        <span><span className="mr-1 inline-block h-2.5 w-2.5 rounded-sm bg-status-blau align-middle" />ohne Projekt</span>
         <span><span className="mr-1 inline-block h-2.5 w-2.5 rounded-sm bg-status-gruen align-middle" />Urlaub/ZA</span>
         <span><span className="mr-1 inline-block h-2.5 w-2.5 rounded-sm bg-status-rot align-middle" />Krank</span>
-        <span>Wischen = {p.modus === "tag" ? "nächster Tag" : "nächste Person"}</span>
+        <span><span className="mr-1 inline-block h-2.5 w-2.5 rounded-sm bg-status-gelb align-middle" />Schule/Arzt</span>
+        <span>Wischen = {p.modus === "tag" ? "nächster Tag" : "nächste Person"}{darf ? " · leer antippen = eintragen" : ""}</span>
       </p>
       {info && <Info info={info} p={{ ...p, aendern, loeschen }} onZu={() => setInfo(null)} />}
     </div>

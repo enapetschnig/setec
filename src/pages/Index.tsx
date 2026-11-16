@@ -371,10 +371,10 @@ export default function Index() {
 
         {/* PC: was man am häufigsten neu anlegt, gleich unter dem Gruß */}
         {pc && (
-          <div className={cn("grid gap-3", istChef ? "grid-cols-3" : "grid-cols-2")}>
+          <div className={cn("grid gap-3", istChef ? "grid-cols-3" : "grid-cols-1")}>
             <SchnellAktion icon={FolderPlus} titel="Neues Projekt" onClick={() => setProjektOffen(true)} />
             {istChef && <SchnellAktion icon={FilePlus2} titel="Neue Rechnung" onClick={() => navigate("/belege/neu?typ=rechnung")} />}
-            <SchnellAktion icon={CalendarPlus} titel="Termin eintragen" onClick={() => setTerminOffen(true)} />
+            {istChef && <SchnellAktion icon={CalendarPlus} titel="Termin eintragen" onClick={() => setTerminOffen(true)} />}
           </div>
         )}
 

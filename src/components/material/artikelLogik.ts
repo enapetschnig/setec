@@ -198,6 +198,15 @@ export function ausfassVorschlag(bedarf: Map<string, number>, verbraucht: Map<st
   return [...liste.filter((v) => v.offen > 0), ...liste.filter((v) => v.offen === 0)];
 }
 
+/** Je Artikel, was schon aufs Projekt gebracht ist (View projekt_material, Spalte verbraucht). */
+export function verbrauchtKarte(zeilen: { artikel_id: string | null; verbraucht: number | null }[] | undefined): Map<string, number> {
+  const m = new Map<string, number>();
+  (zeilen ?? []).forEach((z) => {
+    if (z.artikel_id) m.set(z.artikel_id, runden3((m.get(z.artikel_id) ?? 0) + Number(z.verbraucht ?? 0)));
+  });
+  return m;
+}
+
 /** Aufschlag in %, der aus EK und VK folgt (für „VK fest“ als Hinweis). */
 export function aufschlagAus(ek: number | null | undefined, vk: number | null | undefined): number | null {
   if (ek == null || vk == null || !(Number(ek) > 0)) return null;

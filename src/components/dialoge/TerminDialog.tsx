@@ -155,7 +155,12 @@ export function TerminDialog({
     }));
   };
 
+  // Einteilen, verschieben, löschen: nur der Chef. Wer eingeteilt ist, meldet erledigt.
+  const nurLesen = !istChef;
+  const darfStatus = istChef || (!!termin && !!profil && termin.mitarbeiter.includes(profil.id));
+
   const speichern = async () => {
+    if (nurLesen) return;
     const fehler = terminFehler(w);
     if (fehler) return toast.error(fehler);
     setSpeichert(true);
@@ -202,7 +207,7 @@ export function TerminDialog({
     const { data: weg, error } = await supabase.from("termine").delete().eq("id", termin.id).select("id");
     setSpeichert(false);
     if (error) return toast.error("Nicht gelöscht", { description: fehlerText(error) });
-    if (!weg?.length) return toast.error("Nicht gelöscht", { description: "Löschen kann nur, wer den Termin eingetragen hat, oder der Chef." });
+    if (!weg?.length) return toast.error("Nicht gelöscht", { description: "Termine löscht nur der Chef." });
     toast.success("Termin gelöscht");
     await neuLaden("termine");
     onOpenChange(false);
@@ -212,20 +217,22 @@ export function TerminDialog({
     <FormularDialog
       open={open}
       onOpenChange={onOpenChange}
-      titel={termin ? "Termin bearbeiten" : "Neuer Termin"}
+      titel={nurLesen ? "Termin" : termin ? "Termin bearbeiten" : "Neuer Termin"}
       gesperrt={speichert}
       ungespeichert={JSON.stringify(w) !== JSON.stringify(basis)}
       fuss={
         <>
-          {termin && (istChef || termin.user_id === profil?.id) && (
+          {termin && istChef && (
             <Button variant="ghost" className="text-destructive sm:mr-auto" onClick={() => setLoeschFrage(true)} disabled={speichert}>
               <Trash2 className="mr-2 h-4 w-4" /> Löschen
             </Button>
           )}
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={speichert}>Abbrechen</Button>
-          <Button onClick={speichern} disabled={speichert} className="min-w-32 gap-2">
-            {speichert && <Loader2 className="h-4 w-4 animate-spin" />} Speichern
-          </Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={speichert}>{nurLesen ? "Schließen" : "Abbrechen"}</Button>
+          {!nurLesen && (
+            <Button onClick={speichern} disabled={speichert} className="min-w-32 gap-2">
+              {speichert && <Loader2 className="h-4 w-4 animate-spin" />} Speichern
+            </Button>
+          )}
         </>
       }
     >
@@ -235,10 +242,12 @@ export function TerminDialog({
             <StatusPille eintrag={EINSATZ_STATUS[termin.status]} />
             {termin.erledigt_am && <span className="text-xs text-muted-foreground">{new Date(termin.erledigt_am).toLocaleString("de-AT", { dateStyle: "short", timeStyle: "short" })}</span>}
             <span className="flex-1" />
-            {termin.status !== "erledigt" && <Button variant="outline" className="h-11 bg-card" disabled={speichert} onClick={() => void statusSetzen("erledigt")}>Erledigt</Button>}
-            {termin.status !== "geplant" && <Button variant="ghost" className="h-11" disabled={speichert} onClick={() => void statusSetzen("geplant")}>Zurücksetzen</Button>}
+            {darfStatus && termin.status !== "erledigt" && <Button variant="outline" className="h-11 bg-card" disabled={speichert} onClick={() => void statusSetzen("erledigt")}>Erledigt</Button>}
+            {darfStatus && termin.status !== "geplant" && <Button variant="ghost" className="h-11" disabled={speichert} onClick={() => void statusSetzen("geplant")}>Zurücksetzen</Button>}
           </div>
         )}
+        {nurLesen && <p className="text-sm text-muted-foreground">Die Einteilung ändert nur der Chef.</p>}
+        <fieldset disabled={nurLesen} className="min-w-0 space-y-5">
         <div className="space-y-2">
           <Label htmlFor="t-projekt">Projekt <span className="font-normal text-muted-foreground">(optional)</span></Label>
           <ProjektWahl id="t-projekt" wert={w.projektId} onChange={projektWaehlen} leerText="Kein Projekt" />
@@ -251,7 +260,7 @@ export function TerminDialog({
 
         <div className="space-y-2">
           <Label htmlFor="t-titel">Titel</Label>
-          <Input id="t-titel" className="h-12" value={w.titel} onChange={(e) => setze({ titel: e.target.value })} placeholder="z. B. Abnahme, Baubesprechung, Urlaub" />
+          <Input id="t-titel" className="h-12" value={w.titel} onChange={(e) => setze({ titel: e.target.value })} placeholder="z. B. Montage, Abnahme, Baubesprechung" />
         </div>
 
         <div className="grid grid-cols-2 gap-2">
@@ -359,6 +368,7 @@ export function TerminDialog({
           <Label htmlFor="t-beschr">Notiz</Label>
           <Textarea id="t-beschr" rows={3} value={w.beschreibung} onChange={(e) => setze({ beschreibung: e.target.value })} />
         </div>
+        </fieldset>
       </div>
 
       <AlertDialog open={loeschFrage} onOpenChange={setLoeschFrage}>

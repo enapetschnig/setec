@@ -662,14 +662,27 @@ Migration `20261110100000_fuhrpark_teams_plantafel.sql`, Logik in
   Tanken); Monteure melden Schäden und Tanken, alles andere der Chef.
 - `teams`: Name, Farbe, Leitung, Mitglieder, Stamm-Bus. Ein Einsatz
   (`termine`) hat `team_id`, `mitarbeiter[]` und `fahrzeuge[]`.
-- Plantafel und Kalender sind eins (beide zeigen `termine`; `/kalender`
-  leitet auf `/plantafel`). Am PC füllt die Seite Breite und Höhe
-  (`PageHeader voll`), Ansicht Woche, 2 Wochen, Monat, 3 Monate als Gantt
-  (`components/plantafel/Gantt.tsx`) oder „Kalender“ als Monatsblatt mit
-  Tagesliste (`components/plantafel/Monat.tsx`, Alle/Meine).
+- Plantafel und Kalender sind eins: ein Menüpunkt „Plantafel“ (nur Chef; Suche findet
+  auch „Kalender“, „Wochenplan“, „Gantt“), alle Ansichten auf denselben Daten
+  (`termine`, Teams, Abwesenheiten; `/kalender` leitet auf `/plantafel`). Umschalter
+  oben **„Gantt | Wochenplan“** (PC, gemerkt in `elektro.plantafel.sicht`, Standard
+  Gantt), am Handy **„Tagesplan | Liste“** (eigener Schlüssel
+  `elektro.plantafel.sicht.handy`, Standard Tagesplan). Am PC füllt die Seite Breite
+  und Höhe (`PageHeader voll`); das Gantt zeigt Woche, 2 Wochen, Monat, 3 Monate
+  (`components/plantafel/Gantt.tsx`) oder „Kalender“ als Monatsblatt mit Tagesliste
+  (`components/plantafel/Monat.tsx`, Alle/Meine).
+- **Leere Stelle antippen oder aufziehen** (Chef, Gantt-Personenzeile, Wochenplan,
+  Tagesplan): kleine Wahl `ZellWahl` „Einsatz | Abwesenheit“ an der Stelle. Einsatz →
+  `TerminDialog` mit Person, Tag(en) und Uhrzeit; Abwesenheit → `AbwesenheitDialog` mit
+  Person und Tag(en) vorbelegt (Chef-Eintrag gilt sofort). Auf einer Abwesenheit:
+  Bearbeiten (Dialog lädt die ganze Zeile per `abwesenheitId`), Löschen (zweistufig)
+  oder „Trotzdem Einsatz“. Gantt-Zeilen von Teams/Geräten öffnen gleich das Formular.
 - Gantt nach Vorbild Steinbrecher: Kopf mit Monat, KW und Tag (darunter
   „x frei“, Namen im Tooltip), Wochenende/Feiertag gelb bzw. rosa, rote
-  Heute-Linie. Jeder Balken trägt die Farbe seines Projekts (`projektFarbe`,
+  Heute-Linie. **Tag im Kopf antippen** = Wochenplan dieser Woche, an den Tag
+  gerollt (`springTag`). Abwesenheiten als Fläche in der Personenzeile in den
+  Farben des Wochenplans (Urlaub/ZA grün, Krank rot, Schule/Arzt gelb), antippen =
+  bearbeiten/löschen. Zeilen 32/34 px hoch, damit man am Tablet trifft. Jeder Balken trägt die Farbe seines Projekts (`projektFarbe`,
   12 kräftige Farben, Schrift per `textAuf`), Wochenenden sind Lücken
   (`arbeitsStuecke`). Zeilen: je Team ein Kopf (zuklappbar, Bus als Auswahl —
   der Bus eines Teams hat keine eigene Zeile) mit seinen Leuten, „+ Neues
@@ -681,9 +694,10 @@ Migration `20261110100000_fuhrpark_teams_plantafel.sql`, Logik in
 - Balken antippen = kleines Fenster am Balken (`BalkenInfo`: Projekt, Zeit,
   Ort, Leute herausnehmen, Geräte an/ab, Erledigt, Löschen); erst
   „Bearbeiten“ öffnet das große Formular.
-- Oben „Noch nicht eingeplant“: laufende Projekte ohne Einsatz ab heute (Suche
-  findet alle laufenden) — auf eine Zeile ziehen = Einsatz bis Freitag
-  7:00–15:30. Ziehen (Maus, am Tablet langer Druck): Balken = verschieben,
+- Rechts die Seitenliste „Noch nicht eingeplant“ (zuklappbar, `elektro.plantafel.streifen`):
+  Projekte „In Arbeit“ ohne Einsatz ab heute mit Kunde und Ort (Suche findet alle
+  laufenden, auch die noch im Angebot) — auf eine Zeile ziehen = Einsatz bis Freitag
+  7:00–15:30, antippen = Formular mit dem Projekt. Ziehen (Maus, am Tablet langer Druck): Balken = verschieben,
   auch in eine andere Zeile (`ablegen`); mit Strg/Alt = kopieren; Ränder =
   länger/kürzer; leere Tage aufziehen = neuer Einsatz; Person am Griff ⋮⋮ auf
   einen Balken (`zuweisen`) oder ein Team (Mitglied wechseln); Gerät am Griff
@@ -695,24 +709,35 @@ Migration `20261110100000_fuhrpark_teams_plantafel.sql`, Logik in
   Strg+Z). Konflikte (doppelt, abwesend) als roter Knopf in der Leiste.
 - Am Handy eine Liste je Tag der Woche, Alle oder Meine (Monteur: Meine),
   mit Abwesenheiten, Farbstreifen je Projekt.
-- **Terminplaner** (Umschalter „Tafel | Mitarbeiter“, am Handy „Liste | Leute“,
-  gemerkt in `elektro.plantafel.sicht`; `components/plantafel/Terminplaner.tsx`,
+- **Wochenplan** (früher „Terminplaner“; `components/plantafel/Terminplaner.tsx`,
   Logik `lib/terminplaner.ts`, getestet) — Achsen getauscht wie SETECs alter
-  Terminplaner: Spalten = Leute nach Gruppen, Zeilen = Tage der Woche mit
-  den Stunden 6–18 (weiter, wenn ein Einsatz früher/später liegt), Sa/So nur
-  mit Einträgen. Gruppen (`gruppenBilden`): Geschäftsführung, eigene Gruppen
+  Taifun-Kalender: Spalten = Leute nach Gruppen, Zeilen = Tage der Woche mit
+  den Stunden laut Betrieb (Einstellungen → „Plantafel“, `firma.plan_von/plan_bis`,
+  Standard 6–18, `planStunden`; weiter, wenn ein Einsatz früher/später liegt), Sa/So
+  nur mit Einträgen. Gruppen (`gruppenBilden`): Geschäftsführung, eigene Gruppen
   (`profiles.gruppe`, z. B. „Büro“, im Teams-Dialog pflegbar), Teams in ihrer
   Reihenfolge, „Ohne Team“; eigene Gruppe geht vor Team, ein Chef ohne beides
   ist Geschäftsführung (Migration `20261113112000_profil_gruppe.sql`).
   Einsätze als Blöcke (Kunde, Titel, Zeit; Projektfarbe, ohne Projekt blau),
   Überlappendes nebeneinander (`nebeneinander`), Abwesenheit als Fläche:
   Urlaub/ZA grün, Krank rot, Schule/Arzt gelb. Filter Alle/Gruppe/Person,
-  rechts (ab 1280 px) Monatskalender zum Springen. Leere Zelle = neuer
-  Einsatz für Person und Uhrzeit (`TerminDialog` mit `von`/`bis`), Block =
-  `BalkenInfo`; ziehen = andere Zeit/Tag/Person (`planVerschieben`, 15-Min.-
+  rechts (ab 1280 px) Monatskalender zum Springen. Leere Zelle antippen = Wahl
+  (halbe Stunde, 2 h lang); am PC aufziehen (`zeitraumAus`): im Tag = genau diese
+  Uhrzeit, über mehrere Tage = Zeitraum (Uhrzeit aus dem Ziehen, sonst 7:00–15:30),
+  gestrichelte Vorschau; Block = `BalkenInfo`; ziehen = andere Zeit/Tag/Person (`planVerschieben`, 15-Min.-
   Raster, Person wird getauscht), unterer Rand = Ende; „Rückgängig“ im Hinweis.
   Handy: „Tag“ (Leute untereinander, Zeit quer) oder „Person“ (Mo–Fr,
   Stunden nach unten), wischen = nächster Tag bzw. nächste Person.
+- **Rechte** (Migration `20261116150000_termine_nur_chef.sql`): Einsätze legt nur der
+  Chef an, verschiebt und löscht sie (RLS `termine_anlegen/_aendern/_loeschen`). Ein
+  Monteur darf bei Einsätzen, in denen er eingeteilt ist, nur den Status setzen
+  (Trigger `termin_nur_status` vergleicht die Zeile ohne Status-Spalten). In der
+  Oberfläche: „+ Neu → Termin“, „Termin eintragen“ (Start, Projekt) nur Chef;
+  `TerminDialog` für Monteure nur lesend mit „Erledigt“, wenn er dabei ist.
+- **Material im Einsatz** (`EinsatzDetails`, aufklappbar): „Material laut Angebot (n)“
+  ohne Preise aus `useAngebotMaterial`, schon Ausgefasstes abgezogen
+  (`ausfassVorschlag` + `verbrauchtKarte`, wie beim Ausfassen), Knopf „Jetzt ausfassen“
+  → `/scan?projekt=…&modus=ausfassung` (nicht, solange das Projekt im Angebot ist).
 - Fuhrpark: oben je Art eine Kachel zum Filtern (Anzahl, wie viele unterwegs)
   plus „Fällig & Schäden“, darunter je Art ein Block mit Kacheln (im Einsatz
   oder frei, Team, heute, Fälligkeiten).

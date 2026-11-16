@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
-  Check, ChevronDown, ChevronsDownUp, ChevronsUpDown, Clock, FolderKanban, GripVertical, HelpCircle, MapPin, Pencil, Plus, Search, Trash2, Truck, Undo2, Users, X,
+  Check, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, Clock, FolderKanban, GripVertical, HelpCircle, MapPin, PanelRightClose, Pencil, Plus, Search, Trash2, Truck, Undo2, Users, X,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Avatar } from "@/components/Bausteine";
@@ -11,10 +11,13 @@ import { Button } from "@/components/ui/button";
 import { fehlerText } from "@/components/stamm/stammDaten";
 import { FahrzeugDialog } from "@/components/fuhrpark/FahrzeugDialog";
 import { FAHRZEUG_ICON } from "@/components/fuhrpark/fuhrparkDaten";
+import type { ProjektMitKunde } from "@/hooks/useDaten";
 import { datum as datumText, isoZuDatum, tageDazu, uhrzeit } from "@/lib/format";
 import {
   ablegen, amTag, ANSICHTEN, arbeitsStuecke, bahnen, balkenLage, inZeile, projektFarbe, tageZwischen, textAuf, verschieben, type Ansicht, type Griff, type Zeile,
 } from "@/lib/plantafel";
+import { projekteSuchen } from "@/lib/projektSuche";
+import { abwesenheitTon } from "@/lib/terminplaner";
 import { feiertagName } from "@/lib/zeitkonto";
 import {
   ABWESENHEIT_ART, FAHRZEUG_ART, TEAM_FARBEN, name, type AbwesenheitArt, type Fahrzeug, type FahrzeugArt, type Profil, type Projekt, type Team, type Termin,
@@ -30,7 +33,11 @@ import { cn } from "@/lib/utils";
  * - Antippen = kleines Fenster am Balken (Bearbeiten, Projekt, erledigt, löschen)
  * - Ziehen = verschieben, auch in eine andere Zeile (Strg/Alt = kopieren)
  * - Ränder ziehen = früher anfangen / länger; leere Tage aufziehen = neuer Einsatz
- * - Oben „Noch nicht eingeplant“: Projekt auf eine Zeile ziehen = bis Freitag eingeplant
+ *   (in einer Personenzeile: Wahl „Einsatz | Abwesenheit“)
+ * - Abwesenheiten farbig (Urlaub/ZA grün, Krank rot, Schule/Arzt gelb), antippen = bearbeiten
+ * - Tag im Kopf antippen = Wochenplan dieses Tages (Stunden)
+ * - Rechts „Noch nicht eingeplant“: Projekt auf eine Zeile ziehen = bis Freitag
+ *   eingeplant, antippen = Formular mit dem Projekt
  * - Person am Griff ⋮⋮ auf einen Balken = dazuholen, auf ein Team = ins Team,
  *   auf „Neues Team“ = eigenes Team; „+ Neues Team“ legt eines mit Namen an
  * - Gerät am Griff ⋮⋮ auf einen Balken = mitnehmen; Bus/PKW auf ein Team = Bus des Teams
@@ -47,6 +54,12 @@ const zeileAus = (s: string): Zeile => (s === "offen" ? { art: "offen" } : { art
 const kurz = (iso: string) => `${WT[wochentag(iso)]} ${datumText(iso).slice(0, 6)}`;
 const ZU_KEY = "elektro.plantafel.zu";
 const STREIFEN_KEY = "elektro.plantafel.streifen";
+const ABW_KLASSE = {
+  rot: "bg-status-rot text-status-rot-fg border-status-rot-fg/40",
+  gruen: "bg-status-gruen text-status-gruen-fg border-status-gruen-fg/40",
+  gelb: "bg-status-gelb text-status-gelb-fg border-status-gelb-fg/40",
+} as const;
+type Abw = { id: string | null; user_id: string | null; von: string | null; bis: string | null; art: string | null };
 const GERAETE = "geraete";
 const ART_FOLGE: FahrzeugArt[] = ["steiger", "anhaenger", "maschine", "messgeraet", "bus", "pkw"];
 
@@ -68,7 +81,7 @@ type Felder = Pick<Termin, (typeof FELDER)[number]>;
 const felderVon = (t: Termin): Felder => ({ datum: t.datum, bis_datum: t.bis_datum, mitarbeiter: t.mitarbeiter, fahrzeuge: t.fahrzeuge, team_id: t.team_id });
 
 export function Gantt({
-  start, ansicht, termine, termineKey, teams, mitarbeiter, fahrzeuge, projekte, eingeplant, abwesend, konfliktIds, darf, heute, onBearbeiten, onNeu, className,
+  start, ansicht, termine, termineKey, teams, mitarbeiter, fahrzeuge, projekte, eingeplant, abwesend, konfliktIds, darf, heute, onBearbeiten, onNeu, onAbwesenheit, onTag, onProjekt, className,
 }: {
   start: string;
   ansicht: Ansicht;
@@ -77,15 +90,21 @@ export function Gantt({
   teams: Team[];
   mitarbeiter: Profil[];
   fahrzeuge: Fahrzeug[];
-  projekte: Projekt[];
+  projekte: ProjektMitKunde[];
   /** Projekte mit einem Einsatz ab heute */
   eingeplant: Set<string>;
-  abwesend: { id: string | null; user_id: string | null; von: string | null; bis: string | null; art: string | null }[];
+  abwesend: Abw[];
   konfliktIds: Set<string>;
   darf: boolean;
   heute: string;
   onBearbeiten: (t: Termin) => void;
-  onNeu: (v: { datum: string; bisDatum?: string; zeile: Zeile }) => void;
+  onNeu: (v: { datum: string; bisDatum?: string; zeile: Zeile; x: number; y: number }) => void;
+  /** Abwesenheit angetippt (Chef): bearbeiten/löschen */
+  onAbwesenheit: (a: Abw, tag: string, x: number, y: number) => void;
+  /** Tag im Kopf angetippt: in den Wochenplan dieses Tages */
+  onTag: (tag: string) => void;
+  /** Projekt aus der Seitenliste angetippt: Formular mit dem Projekt */
+  onProjekt: (projektId: string) => void;
   className?: string;
 }) {
   const qc = useQueryClient();
@@ -314,7 +333,7 @@ export function Gantt({
       if (!darf) return;
       const ende = tagBei(z.x) ?? i.tag;
       const [von, bis] = i.tag <= ende ? [i.tag, ende] : [ende, i.tag];
-      onNeu({ datum: von, bisDatum: bis > von ? bis : undefined, zeile: i.zeile });
+      onNeu({ datum: von, bisDatum: bis > von ? bis : undefined, zeile: i.zeile, x: z.x, y: z.y });
       return;
     }
     if (i.art === "balken") {
@@ -342,6 +361,7 @@ export function Gantt({
       if (!gleich) await aendern(t, neu, `${t.titel} → ${zeileSchluessel(ziel) === zeileSchluessel(i.zeile) ? kurz(neu.datum) : zeileName(ziel)}`);
       return;
     }
+    if (i.art === "projekt" && !z.bewegt) { if (darf) onProjekt(i.id); return; }
     if (!darf || !z.bewegt) return;
     if (i.art === "fahrzeug") { await geraetAblegen(i.id, z); return; }
     if (i.art === "person") {
@@ -484,7 +504,7 @@ export function Gantt({
     const liste = alle.filter((t) => !mitTeam(t));
     const striche = alle.filter(mitTeam);
     const { bahn, anzahl } = bahnen(liste);
-    const hoch = r.art === "team" ? 30 : 26;
+    const hoch = r.art === "team" ? 34 : 32;
     const hoehe = Math.max(1, anzahl) * hoch + 6;
     const weg = r.zeile.art === "person" ? abwesend.filter((x) => x.user_id === (r.zeile as { id: string }).id) : [];
     const istZiel = zielZeile === s;
@@ -500,9 +520,14 @@ export function Gantt({
             if (!lage) return null;
             const art = ABWESENHEIT_ART[x.art as AbwesenheitArt];
             return arbeitsStuecke(lage, freiIndex).map((st) => (
-              <div key={`${x.id}${st.links}`} className="pointer-events-none absolute inset-y-[3px] z-[5] flex items-center overflow-hidden rounded border border-dashed border-slate-400 bg-[repeating-linear-gradient(135deg,hsl(var(--muted))_0_6px,hsl(var(--card))_6px_12px)] px-1.5 text-[11px] font-semibold text-slate-600"
+              <div key={`${x.id}${st.links}`} data-abwesenheit={x.id ?? undefined}
+                onPointerDown={darf ? (e) => e.stopPropagation() : undefined}
+                onClick={darf ? (e) => { setInfo(null); onAbwesenheit(x, tagBei(e.clientX) ?? x.von!, e.clientX, e.clientY); } : undefined}
+                title={`${art?.text ?? "Abwesend"} · ${kurz(x.von!)}${x.bis !== x.von ? ` – ${kurz(x.bis!)}` : ""}${darf ? " — antippen = bearbeiten" : ""}`}
+                className={cn("absolute inset-y-[3px] z-[5] flex items-center overflow-hidden rounded border px-1.5 text-xs font-semibold", ABW_KLASSE[abwesenheitTon(x.art)],
+                  darf ? "cursor-pointer hover:brightness-95" : "pointer-events-none")}
                 style={{ left: st.links * breite + 1, width: st.laenge * breite - 2 }}>
-                {st.laenge * breite > 60 ? art?.text ?? "Abwesend" : art?.kurz ?? "–"}
+                <span className="truncate">{st.laenge * breite > 60 ? art?.text ?? "Abwesend" : art?.kurz ?? "–"}</span>
               </div>
             ));
           })}
@@ -593,23 +618,25 @@ export function Gantt({
 
   return (
     <div className={cn("flex min-h-0 flex-col", ziehen && "select-none", className)}>
-      <Streifen projekte={projekte} eingeplant={eingeplant} darf={darf} onZiehen={(id, e) => beginne({ art: "projekt", id }, e)}
-        rechts={(
-          <div className="flex shrink-0 items-center gap-1">
-            <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-muted-foreground" onClick={() => zuSetzen(alleZu ? [] : teams.map((t) => t.id))}>
-              {alleZu ? <ChevronsUpDown className="h-4 w-4" /> : <ChevronsDownUp className="h-4 w-4" />}{alleZu ? "Leute zeigen" : "Nur Teams"}
-            </Button>
-            {darf && (
-              <Button variant="ghost" size="sm" className="h-8 gap-1.5" disabled={!rueck.length} onClick={() => void rueckgaengig()} title={rueck.length ? `${rueck.at(-1)?.text} (Strg+Z)` : "Nichts zurückzunehmen"}>
-                <Undo2 className="h-4 w-4" /> Rückgängig
-              </Button>
-            )}
-            <span className="text-muted-foreground" title="Balken antippen = Details · ziehen = verschieben (mit Strg: kopieren) · Ränder = länger/kürzer · leere Tage aufziehen = neuer Einsatz · Projekt von oben auf ein Team ziehen · Person am Griff ⋮⋮ auf einen Einsatz, ein Team oder „Neues Team“ ziehen · Gerät am Griff ⋮⋮ auf einen Einsatz ziehen (Bus auf ein Team = Bus des Teams)">
-              <HelpCircle className="h-4 w-4" aria-label="Bedienung" />
-            </span>
-          </div>
-        )} />
-      <div ref={bahnRef} className="relative min-h-0 flex-1 overflow-auto border-t bg-card" data-plantafel onScroll={() => info && setInfo(null)}>
+      <div className="flex min-h-11 flex-wrap items-center gap-1 bg-card px-3 py-1">
+        <span className="mr-2 text-xs text-muted-foreground">
+          {darf ? "Leere Tage aufziehen = einteilen · Balken ziehen = verschieben · Rand ziehen = länger · Tag oben antippen = Stunden" : "Balken antippen = Details · Tag oben antippen = Stunden"}
+        </span>
+        <span className="flex-1" />
+        <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-muted-foreground" onClick={() => zuSetzen(alleZu ? [] : teams.map((t) => t.id))}>
+          {alleZu ? <ChevronsUpDown className="h-4 w-4" /> : <ChevronsDownUp className="h-4 w-4" />}{alleZu ? "Leute zeigen" : "Nur Teams"}
+        </Button>
+        {darf && (
+          <Button variant="ghost" size="sm" className="h-8 gap-1.5" disabled={!rueck.length} onClick={() => void rueckgaengig()} title={rueck.length ? `${rueck.at(-1)?.text} (Strg+Z)` : "Nichts zurückzunehmen"}>
+            <Undo2 className="h-4 w-4" /> Rückgängig
+          </Button>
+        )}
+        <span className="text-muted-foreground" title="Balken antippen = Details · ziehen = verschieben (mit Strg: kopieren) · Ränder = länger/kürzer · leere Tage aufziehen = neuer Einsatz oder Abwesenheit · Projekt von rechts auf ein Team oder eine Person ziehen · Person am Griff ⋮⋮ auf einen Einsatz, ein Team oder „Neues Team“ ziehen · Gerät am Griff ⋮⋮ auf einen Einsatz ziehen (Bus auf ein Team = Bus des Teams) · Abwesenheit antippen = bearbeiten · Tag oben antippen = Wochenplan mit Stunden">
+          <HelpCircle className="h-4 w-4" aria-label="Bedienung" />
+        </span>
+      </div>
+      <div className="flex min-h-0 flex-1">
+      <div ref={bahnRef} className="relative min-h-0 min-w-0 flex-1 overflow-auto border-t bg-card" data-plantafel onScroll={() => info && setInfo(null)}>
         <div className="relative" style={{ width: LINKS + gesamt }}>
           {/* Kopf */}
           <div className="sticky top-0 z-30 border-b-2 border-foreground/15 bg-card">
@@ -627,8 +654,9 @@ export function Gantt({
                 {tage.map((t, i) => {
                   const f = freiAm(t);
                   return (
-                    <div key={t} title={[feiertagName(t), !frei(t) && f.length ? `Frei: ${f.map((m) => m.vorname || name(m)).join(", ")}` : ""].filter(Boolean).join(" · ") || undefined}
-                      className={cn("relative shrink-0 border-r py-0.5 text-center leading-tight", frei(t) && "bg-amber-50 text-amber-900/70", wochentag(t) === 6 && "border-r-foreground/25")}
+                    <button type="button" key={t} onClick={() => onTag(t)} data-gantt-tag={t}
+                      title={[feiertagName(t), !frei(t) && f.length ? `Frei: ${f.map((m) => m.vorname || name(m)).join(", ")}` : "", "Antippen = Wochenplan mit Stunden"].filter(Boolean).join(" · ")}
+                      className={cn("relative shrink-0 border-r py-0.5 text-center leading-tight hover:bg-primary-soft", frei(t) && "bg-amber-50 text-amber-900/70", wochentag(t) === 6 && "border-r-foreground/25")}
                       style={{ width: breite }}>
                       <span className={cn("block text-[10px] uppercase", t === heute && "font-bold text-red-600")}>{breite >= 40 ? WT[wochentag(t)] : WT[wochentag(t)][0]}</span>
                       <span className={cn("block text-sm font-semibold", t === heute && "mx-auto w-7 rounded-full bg-red-600 text-white")}>{Number(t.slice(8))}</span>
@@ -639,7 +667,7 @@ export function Gantt({
                       )}
                       {frei(t) && breite >= 28 && <span className="block text-[10px]">&nbsp;</span>}
                       {i === heuteIndex && <span className="absolute -bottom-0.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-red-600" />}
-                    </div>
+                    </button>
                   );
                 })}
               </div>
@@ -674,6 +702,8 @@ export function Gantt({
             ) : reiheZeichnen(r)))}
           </div>
         </div>
+      </div>
+      {darf && <Seitenliste projekte={projekte} eingeplant={eingeplant} onZiehen={(id, e) => beginne({ art: "projekt", id }, e)} />}
       </div>
 
       {infoTermin && info && (
@@ -924,51 +954,74 @@ function NeuesTeam({ ziehen, onAnlegen }: { ziehen: boolean; onAnlegen: (titel: 
   );
 }
 
-/** Oben: Projekte ohne Einsatz ab heute — zum Hereinziehen. Suche findet alle laufenden. */
-function Streifen({ projekte, eingeplant, darf, onZiehen, rechts }: {
-  projekte: Projekt[]; eingeplant: Set<string>; darf: boolean; onZiehen: (id: string, e: React.PointerEvent) => void; rechts: ReactNode;
+/**
+ * Rechts: laufende Projekte ohne Einsatz ab heute — auf eine Zeile ziehen oder
+ * antippen. Die Suche findet alle laufenden, auch die noch im Angebot.
+ */
+function Seitenliste({ projekte, eingeplant, onZiehen }: {
+  projekte: ProjektMitKunde[]; eingeplant: Set<string>; onZiehen: (id: string, e: React.PointerEvent) => void;
 }) {
   const [offen, setOffen] = useState(() => { try { return localStorage.getItem(STREIFEN_KEY) !== "zu"; } catch { return true; } });
   const [suche, setSuche] = useState("");
   const umschalten = () => { setOffen(!offen); try { localStorage.setItem(STREIFEN_KEY, offen ? "zu" : "auf"); } catch { /* egal */ } };
-  const laufend = projekte.filter((p) => p.status === "aktiv" || p.status === "angebot");
-  const q = suche.trim().toLowerCase();
-  const liste = (q ? laufend.filter((p) => `${p.nummer} ${p.name} ${p.ort ?? ""}`.toLowerCase().includes(q)) : laufend.filter((p) => !eingeplant.has(p.id))).slice(0, 30);
-  const ungeplant = laufend.filter((p) => !eingeplant.has(p.id)).length;
+  const ungeplant = projekte.filter((p) => p.status === "aktiv" && !eingeplant.has(p.id));
+  const q = suche.trim();
+  const liste = (q ? projekteSuchen(projekte.filter((p) => p.status === "aktiv" || p.status === "angebot"), q) : ungeplant).slice(0, 60);
+  const zahl = (
+    <span className={cn("rounded-full px-1.5 text-xs font-semibold", ungeplant.length ? "bg-status-gelb text-status-gelb-fg" : "bg-muted text-muted-foreground")}>{ungeplant.length}</span>
+  );
+  if (!offen) {
+    return (
+      <button type="button" onClick={umschalten} aria-expanded={false} data-seitenliste
+        className="flex w-10 shrink-0 flex-col items-center gap-2 border-l border-t bg-card py-3 text-xs font-semibold hover:bg-muted" title="Noch nicht eingeplant — aufklappen">
+        <FolderKanban className="h-4 w-4 text-muted-foreground" />
+        {zahl}
+        <span className="[writing-mode:vertical-rl]">Noch nicht eingeplant</span>
+      </button>
+    );
+  }
   return (
-    <div className="flex min-h-11 items-center gap-2 bg-card px-3 py-1.5" data-streifen>
-      {darf && (
-        <button type="button" onClick={umschalten} aria-expanded={offen} className="flex shrink-0 items-center gap-1.5 text-sm font-semibold">
-          <FolderKanban className="h-4 w-4 text-muted-foreground" />
-          Noch nicht eingeplant
-          <span className={cn("rounded-full px-1.5 text-xs", ungeplant ? "bg-status-gelb text-status-gelb-fg" : "bg-muted text-muted-foreground")}>{ungeplant}</span>
-          <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", !offen && "-rotate-90")} />
-        </button>
-      )}
-      {darf && offen ? (
-        <div className="flex min-w-0 flex-1 items-center gap-2">
-          <label className="relative shrink-0">
-            <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-            <input value={suche} onChange={(e) => setSuche(e.target.value)} placeholder="Projekt suchen …" aria-label="Projekt suchen"
-              className="h-8 w-40 rounded-md border bg-background pl-7 pr-2 text-base [@media(pointer:fine)]:text-sm" />
-          </label>
-          <div className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto py-0.5">
-            {liste.map((p) => {
-              const farbe = projektFarbe(p);
-              return (
-                <span key={p.id} onPointerDown={(e) => onZiehen(p.id, e)} data-projekt-ziehen={p.id} title={`${p.nummer} ${p.name} — auf ein Team oder eine Person ziehen`}
-                  className="flex h-8 shrink-0 cursor-grab touch-none items-center gap-1.5 rounded-md border bg-card px-2 text-xs hover:border-foreground/40"
-                  style={{ borderLeft: `4px solid ${farbe}` }}>
-                  <span className="font-semibold">{p.nummer.slice(-4)}</span>
-                  <span className="max-w-[12rem] truncate">{p.name}</span>
+    <aside className="flex w-64 shrink-0 flex-col border-l border-t bg-card xl:w-72" aria-label="Noch nicht eingeplant" data-seitenliste>
+      <div className="flex items-center gap-2 border-b px-3 py-2">
+        <FolderKanban className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <span className="min-w-0 flex-1 text-sm font-semibold">Noch nicht eingeplant</span>
+        {zahl}
+        <button type="button" onClick={umschalten} className="rounded p-1 text-muted-foreground hover:bg-muted" aria-label="Seitenliste zuklappen"><PanelRightClose className="h-4 w-4" /></button>
+      </div>
+      <label className="relative mx-3 mt-2 block">
+        <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <input value={suche} onChange={(e) => setSuche(e.target.value)} placeholder="Projekt, Kunde, Ort …" aria-label="Projekt suchen"
+          className="h-10 w-full rounded-md border bg-background pl-8 pr-2 text-base [@media(pointer:fine)]:text-sm" />
+      </label>
+      <p className="px-3 pb-1 pt-2 text-[11px] text-muted-foreground">
+        {q ? "Laufende Projekte" : "In Arbeit, ohne Einsatz ab heute"} — auf eine Zeile ziehen oder antippen
+      </p>
+      <ul className="min-h-0 flex-1 space-y-1.5 overflow-y-auto px-3 pb-3">
+        {liste.map((p) => {
+          const ort = p.ort ?? p.kunden?.ort;
+          return (
+            <li key={p.id}>
+              <div onPointerDown={(e) => onZiehen(p.id, e)} data-projekt-ziehen={p.id}
+                title={`${p.nummer} ${p.name} — auf ein Team oder eine Person ziehen, antippen = Formular`}
+                className="flex cursor-grab touch-none items-stretch gap-2 rounded-md border bg-card py-1.5 pl-1.5 pr-2 hover:border-foreground/40">
+                <span className="w-1.5 shrink-0 rounded-full" style={{ background: projektFarbe(p) }} />
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-1.5 text-xs">
+                    <span className="font-mono font-semibold">{p.nummer}</span>
+                    {p.status === "angebot" && <span className="rounded-full bg-muted px-1.5 text-[10px] font-semibold text-muted-foreground">Angebot</span>}
+                    {eingeplant.has(p.id) && <span className="text-[10px] text-muted-foreground">eingeplant</span>}
+                  </span>
+                  <span className="block truncate text-sm font-medium">{p.name}</span>
+                  {(p.kunden?.name || ort) && <span className="block truncate text-xs text-muted-foreground">{[p.kunden?.name, ort].filter(Boolean).join(" · ")}</span>}
                 </span>
-              );
-            })}
-            {!liste.length && <span className="self-center text-xs text-muted-foreground">{q ? "Kein Projekt gefunden." : "Alle laufenden Projekte sind eingeplant."}</span>}
-          </div>
-        </div>
-      ) : <div className="flex-1" />}
-      {rechts}
-    </div>
+                <ChevronRight className="h-4 w-4 shrink-0 self-center text-muted-foreground/50" />
+              </div>
+            </li>
+          );
+        })}
+        {!liste.length && <li className="py-4 text-center text-xs text-muted-foreground">{q ? "Kein Projekt gefunden." : "Alle Projekte in Arbeit sind eingeplant."}</li>}
+      </ul>
+    </aside>
   );
 }
+

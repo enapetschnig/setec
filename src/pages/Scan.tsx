@@ -27,7 +27,7 @@ import {
   type ProjektMaterialZeile,
 } from "@/components/material/materialDaten";
 import { platzSchluessel, useAngebotMaterial, useHauptbilder, useLagerplaetze } from "@/components/material/artikelDaten";
-import { ausfassVorschlag } from "@/components/material/artikelLogik";
+import { ausfassVorschlag, verbrauchtKarte } from "@/components/material/artikelLogik";
 import { ArtikelVorschau } from "@/components/material/ArtikelVorschau";
 import { alleZeilen } from "@/lib/abfrage";
 import { aufBestellungenVerteilen, type OffenePosition } from "@/components/bestellung/bestellLogik";
@@ -159,14 +159,6 @@ function mengeFehler(text: string, inventur: boolean): string | null {
 }
 
 /** Rückgabe: je Artikel, was auf dem Projekt verbraucht ist (ausgefasst + direkt − zurück, ohne Regieberichte) */
-function verbrauchtKarte(zeilen: ProjektMaterialZeile[] | undefined): Map<string, number> {
-  const m = new Map<string, number>();
-  (zeilen ?? []).forEach((z) => {
-    if (z.artikel_id) m.set(z.artikel_id, runden3((m.get(z.artikel_id) ?? 0) + Number(z.verbraucht ?? 0)));
-  });
-  return m;
-}
-
 type Differenz = { zeile: Zeile; ist: number; gezaehlt: number; diff: number };
 
 const ungezaehltText = (n: number) => (n === 1 ? "1 nicht gezählter Artikel bleibt unverändert." : `${n} nicht gezählte Artikel bleiben unverändert.`);

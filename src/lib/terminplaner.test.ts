@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { tageDazu } from "./format";
-import { abwesenheitTon, einrasten, kalenderwoche, gruppenBilden, minuten, nebeneinander, planVerschieben, stundenBereich, teamTitel, zeitAus, zeitLage } from "./terminplaner";
+import { abwesenheitTon, einrasten, kalenderwoche, gruppenBilden, minuten, nebeneinander, planStunden, planVerschieben, stundenBereich, teamTitel, zeitAus, zeitLage, zeitraumAus } from "./terminplaner";
 import { normal, projektPasst, projekteSuchen } from "./projektSuche";
 
 const p = (id: string, rolle = "monteur", gruppe: string | null = null) => ({ id, rolle, gruppe });
@@ -146,5 +146,36 @@ describe("Projektsuche", () => {
     expect(projekteSuchen(liste, "17").map((x) => x.nummer)).toEqual(["2026-0017", "2026-0170"]);
     expect(projekteSuchen(liste, "7").map((x) => x.nummer)).toEqual(["2026-0007", "2026-0017", "2026-0170"]);
     expect(projekteSuchen(liste, "spei").map((x) => x.nummer)).toEqual(["2026-0170"]);
+  });
+});
+
+describe("planStunden", () => {
+  it("Betriebs-Einstellung oder 6–18", () => {
+    expect(planStunden(7, 17)).toEqual([7, 17]);
+    expect(planStunden(null, undefined)).toEqual([6, 18]);
+    expect(planStunden(18, 6)).toEqual([6, 18]);
+    expect(planStunden(0, 25)).toEqual([6, 18]);
+  });
+});
+
+describe("zeitraumAus (Wochenplan aufziehen)", () => {
+  const A = 6 * 60, B = 18 * 60;
+  it("antippen = halbe Stunde abgerundet, 2 Stunden", () => {
+    expect(zeitraumAus({ tag: "2026-11-17", minute: 8 * 60 + 20 }, { tag: "2026-11-17", minute: 8 * 60 + 25 }, A, B))
+      .toEqual({ datum: "2026-11-17", von: "08:00", bis: "10:00" });
+    // ganz unten: bleibt im sichtbaren Tag
+    expect(zeitraumAus({ tag: "2026-11-17", minute: 17 * 60 + 50 }, { tag: "2026-11-17", minute: 17 * 60 + 50 }, A, B))
+      .toEqual({ datum: "2026-11-17", von: "17:00", bis: "18:00" });
+  });
+  it("im Tag gezogen = genau diese Zeit, auch nach oben", () => {
+    expect(zeitraumAus({ tag: "2026-11-17", minute: 13 * 60 + 2 }, { tag: "2026-11-17", minute: 9 * 60 + 8 }, A, B))
+      .toEqual({ datum: "2026-11-17", von: "09:15", bis: "13:00" });
+  });
+  it("über mehrere Tage = Zeitraum, rückwärts sortiert", () => {
+    expect(zeitraumAus({ tag: "2026-11-19", minute: 15 * 60 }, { tag: "2026-11-17", minute: 7 * 60 }, A, B))
+      .toEqual({ datum: "2026-11-17", bisDatum: "2026-11-19", von: "07:00", bis: "15:00" });
+    // kaum Zeit gezogen: Standard 7:00–15:30
+    expect(zeitraumAus({ tag: "2026-11-17", minute: 10 * 60 }, { tag: "2026-11-18", minute: 10 * 60 + 10 }, A, B))
+      .toEqual({ datum: "2026-11-17", bisDatum: "2026-11-18", von: "07:00", bis: "15:30" });
   });
 });
