@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { authFehler, benutzerFehler, benutzername, vorlaeufigesPasswort, zuEmail } from "./konto";
+import { authFehler, benutzerFehler, benutzername, emailFehler, emailVorschlag, vorlaeufigesPasswort, zuEmail } from "./konto";
 
 describe("benutzername", () => {
   it("macht aus Namen mit Umlauten und Leerzeichen einen Benutzernamen", () => {
@@ -37,8 +37,8 @@ describe("benutzerFehler", () => {
 
 describe("authFehler", () => {
   it("übersetzt die häufigen Meldungen", () => {
-    expect(authFehler("Invalid login credentials")).toBe("Benutzername oder Passwort falsch.");
-    expect(authFehler("User already registered")).toBe("Diesen Benutzer gibt es schon.");
+    expect(authFehler("Invalid login credentials")).toBe("E-Mail (bzw. Benutzername) oder Passwort falsch.");
+    expect(authFehler("User already registered")).toBe("Mit dieser E-Mail-Adresse gibt es schon ein Konto.");
     expect(authFehler("Unable to validate email address: invalid format")).toMatch(/ungültig/);
     expect(authFehler("New password should be different from the old password.")).toMatch(/unterscheiden/);
     expect(authFehler("Failed to fetch")).toMatch(/Keine Verbindung/);
@@ -53,5 +53,22 @@ describe("vorlaeufigesPasswort", () => {
     const pw = vorlaeufigesPasswort(() => 0.5);
     expect(pw).toMatch(/^[A-Za-z]+-\d{4}$/);
     expect(pw.length).toBeGreaterThanOrEqual(6);
+  });
+});
+
+describe("E-Mail bei der Registrierung", () => {
+  it("prüft die Adresse", () => {
+    expect(emailFehler("")).toMatch(/eintragen/);
+    expect(emailFehler("max")).toMatch(/stimmt so nicht/);
+    expect(emailFehler("max@gmail")).toMatch(/stimmt so nicht/);
+    expect(emailFehler(" Max.Muster@GMAIL.com ")).toBeNull();
+  });
+  it("schlägt bei Tippfehlern den Anbieter vor", () => {
+    expect(emailVorschlag("max@gmial.com")).toBe("max@gmail.com");
+    expect(emailVorschlag("max@gmai.com")).toBe("max@gmail.com");
+    expect(emailVorschlag("max@gmx.ta")).toBe("max@gmx.at");
+    expect(emailVorschlag("max@gmail.com")).toBeNull();
+    expect(emailVorschlag("s.sattler@setec-gmbh.at")).toBeNull();
+    expect(emailVorschlag("max@")).toBeNull();
   });
 });

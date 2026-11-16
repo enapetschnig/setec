@@ -47,7 +47,8 @@ const BestellungDetail = lazy(() => import("./pages/BestellungDetail"));
 // Öffentlich, ohne Anmeldung: Kunde bestätigt ein Angebot über den Link
 const AngebotBestaetigen = lazy(() => import("./pages/AngebotBestaetigen"));
 // Öffentlich: der Firmen-Link (Aushang/QR) — installieren und selbst registrieren
-const Einladung = lazy(() => import("./pages/Einladung"));
+const Start = lazy(() => import("./pages/Start"));
+const PasswortNeu = lazy(() => import("./pages/PasswortNeu"));
 const Aushang = lazy(() => import("./pages/Aushang"));
 const Aufgaben = lazy(() => import("./pages/Aufgaben"));
 const Dokumente = lazy(() => import("./pages/Dokumente"));
@@ -81,7 +82,10 @@ const App = () => (
             <Routes>
               <Route path="/auth" element={<Auth />} />
               <Route path="/angebot/:token" element={<Suspense fallback={<Laedt />}><AngebotBestaetigen /></Suspense>} />
-              <Route path="/einladung/:token" element={<Suspense fallback={<Laedt />}><Einladung /></Suspense>} />
+              <Route path="/start" element={<Suspense fallback={<Laedt />}><Start /></Suspense>} />
+              <Route path="/passwort-neu" element={<Suspense fallback={<Laedt />}><PasswortNeu /></Suspense>} />
+              {/* alte Firmen-Links und QR-Codes führen zum einen Link */}
+              <Route path="/einladung/:token" element={<Navigate to="/start" replace />} />
               <Route path="/aushang" element={<Suspense fallback={<Laedt />}><Aushang /></Suspense>} />
               <Route element={<AppLayout />}>
                 <Route path="/" element={<S><Index /></S>} />

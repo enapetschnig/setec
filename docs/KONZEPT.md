@@ -32,7 +32,7 @@ Software für Elektriker — am Handy auf der Baustelle bedienbar.
 | Eingangsrechnungen erfassen, zuordnen, weiterverrechnen | ✓ | – (Einkaufspreise; Tabellen und Speicher per RLS gesperrt) |
 | Artikelstamm pflegen, Datanorm-Import, Leistungskatalog | ✓ | nur neuen Artikel anlegen (unbekannter Strichcode) |
 | Lager: Wareneingang, Inventur, Lagerorte | ✓ | Bestand sehen |
-| Einstellungen Betrieb, Mitarbeiter freischalten / sperren, vorläufiges Passwort | ✓ | – |
+| Einstellungen Betrieb, Mitarbeiter einladen (Link/QR/SMS) / sperren, vorläufiges Passwort | ✓ | – |
 
 `useSitzung().istChef` im Frontend, `public.ist_chef()` in der Datenbank.
 Was die Oberfläche einem Monteur nicht zeigt, verbietet auch die Datenbank —
@@ -46,47 +46,51 @@ Gruppe im Terminplaner (`profiles.gruppe`) nur der Chef.
 SETEC-Pakete (Lohnkosten, Angebot online als anon, Lager, Aufgaben, Dokumente).
 
 **Konten** (`lib/konto.ts`, Migration `20261025150000_konten.sql`):
-- Anmelden mit Benutzername: „Jürgen Maier“ → `juergen.maier@<loginDomain>`;
-  Anmelden und Registrieren rechnen gleich (`zuEmail`). Meldungen von
-  Supabase Auth übersetzt `authFehler`.
-- **Ein Registrierungsformular** (`components/einladung/KontoAnlegen.tsx`):
-  auf der Anmeldeseite („Registrieren“) und hinter dem Firmen-Link. Mit Link
-  sofort aktiv; ohne Link `aktiv = false` („Wartet auf Freischaltung“), der
-  Chef sieht es auf der Startseite und schaltet unter Einstellungen →
-  Mitarbeiter mit einem Tipp frei. **Sperren** setzt `gesperrt = true` (der Trigger nimmt
-  `aktiv` weg); Freischalten hebt die Sperre auf. Gesperrte sehen „Zugang
-  gesperrt“, nicht „Wartet auf Freischaltung“, und zählen auf der Startseite
-  nicht als wartend.
-- **Passwort vergessen** gibt es ohne E-Mail: der Chef vergibt unter
-  Einstellungen → Mitarbeiter ein vorläufiges Passwort
-  (`passwort_setzen()`, bcrypt wie Supabase Auth) und sagt es weiter;
-  `passwort_neu` lässt die App beim nächsten Anmelden ein eigenes verlangen
-  (`ProtectedRoute` → `ChangePasswordDialog forced`). Das vorläufige Passwort
-  wird nirgends gespeichert.
-- **Firmen-Link** (16.11.2026, Christoph: „Mitarbeiter registrieren sich
-  selbst … nur EIN Prozess“; Migrationen `20261114100000_einladungen.sql`,
-  `20261116110000_firmen_link.sql`, `components/einladung/`, Seiten
-  `pages/Einladung.tsx`, `pages/Aushang.tsx`): Der Chef hat genau EINEN
-  gültigen Link `/einladung/<token>` (`firmen_link()`, Zeile `mehrfach`,
-  Token im Klartext nur für den Chef lesbar, weil er am Aushang hängt).
-  Einstellungen → Mitarbeiter zeigt ihn mit QR-Code, WhatsApp, Mail,
-  Kopieren und „Aushang drucken“ (`/aushang`, eine A4-Seite: QR, drei
-  Schritte, Firmendaten). Der Link zeigt immer auf `KUNDE.appAdresse`.
-  „Neuen Link erzeugen“ macht den alten sofort ungültig (Registrierte merken
-  nichts). Wer registriert (Vor-/Nachname, Benutzername aus dem Vornamen
-  vorgeschlagen, Passwort), ist sofort aktiver Monteur (`handle_new_user`
-  prüft Token + Namen); Chef-Rolle, Team, Farbe danach in den Einstellungen.
-  Abgelöst: persönliche Einladungen und Zugangslinks.
-- **Einladungsseite**: Handy im Browser → erst „App auf den Startbildschirm“
-  (Anleitung je Gerät/Browser aus `lib/installieren.ts`, Bedienzeichen als
-  Bild, iOS 26 über `Version/NN`; Android/PC-Chrome/Edge ein Knopf
-  „App installieren“, `beforeinstallprompt` schon in `index.html`
-  aufgefangen; Samsung/Firefox/In-App-Browser → „In Chrome öffnen“), dann
-  „App öffnen“ und darin registrieren. iPhone: Manifest wird auf der
-  Seite entfernt → die Home-App startet mit dem Link (eigener Speicher).
-  Android/PC: Merker `einladung.offen` im geteilten Speicher führt die auf
-  `/` startende App zurück zur Einladung (`Auth.tsx`). In der App und am PC
-  gleich das Formular.
+- **Anmelden mit E-Mail** (Neue registrieren sich mit E-Mail). Alte Konten
+  mit Benutzername gehen weiter: „Jürgen Maier“ → `juergen.maier@<loginDomain>`
+  (`zuEmail`). Meldungen von Supabase Auth übersetzt `authFehler`.
+- **Der EINE Link `/start`** (16.11.2026, Christoph: „nur einen Link zur
+  Anmeldung bzw. Registrierung … nicht zu kompliziert … am Anfang soll jeder
+  sich registrieren können“; Migration `20261116120000_ein_link_alle_aktiv.sql`,
+  `pages/Start.tsx`). Ziel des QR-Codes, der WhatsApp-/Mail-/SMS-Einladung
+  UND `start_url` im Manifest (`id` bleibt `/`). Handy im Browser → „1. App
+  auf den Startbildschirm“ (Anleitung je Gerät/Browser aus
+  `lib/installieren.ts`, Bedienzeichen als Bild, iOS 26 über `Version/NN`;
+  Android/PC-Chrome/Edge ein Knopf „App installieren“, `beforeinstallprompt`
+  schon in `index.html`; Samsung/Firefox/In-App-Browser → „In Chrome
+  öffnen“), „2. App öffnen und registrieren“, klein „Ohne Installation im
+  Browser weiter“ / „Anmelden“. In der installierten App und am PC groß
+  „Registrieren“ (`/auth?modus=registrieren`), darunter „Anmelden“; mit
+  Sitzung gleich weiter auf `/`. Alte Links `/einladung/<token>` → `/start`.
+- **Ein Registrierungsformular** (`components/einladung/KontoAnlegen.tsx`,
+  auf `/auth`): Vorname, Nachname, E-Mail (`emailFehler`, Tippfehler-Vorschlag
+  `emailVorschlag` „Meintest du …@gmail.com?“), Passwort mit Augen-Knopf.
+  `signUp` (`mailer_autoconfirm`), sofort angemeldet; schon registriert →
+  mit demselben Passwort anmelden (Doppeltipp). **Jedes neue Konto ist sofort
+  aktiver Monteur** (`handle_new_user`; die Bootstrap-Adressen werden Chef) —
+  die Freischaltung kommt später wieder. Chef-Rolle, Team, Farbe danach unter
+  Einstellungen → Mitarbeiter. **Sperren** setzt `gesperrt = true` (der
+  Trigger nimmt `aktiv` weg); „Freischalten“ hebt die Sperre auf.
+- **Passwort vergessen** (`/auth?modus=vergessen`): E-Mail eintragen →
+  `resetPasswordForEmail` mit `redirectTo = <origin>/passwort-neu`. Gleiche
+  Antwort, ob es das Konto gibt oder nicht. Versand über Resend-SMTP
+  (Absender `noreply@handwerkapp.at`, Name „SETEC GmbH“, deutsche Vorlage
+  in Supabase Auth: Link `{{ .RedirectTo }}?token_hash=…&type=recovery`).
+  `pages/PasswortNeu.tsx` löst den Link erst beim Speichern ein
+  (`verifyOtp`, dann `updateUser`) — Link-Scanner im Postfach verbrauchen ihn
+  nicht; benutzt/abgelaufen → „Neuen Link anfordern“. Konten ohne echte
+  E-Mail (Benutzername): der Chef vergibt ein vorläufiges Passwort
+  (`passwort_setzen()`), `passwort_neu` verlangt beim nächsten Anmelden ein
+  eigenes (`ProtectedRoute` → `ChangePasswordDialog forced`).
+- **Einladen** (Einstellungen → Mitarbeiter, `components/einladung/Einladungen.tsx`):
+  Link `KUNDE.appAdresse + /start` mit QR-Code, „Aushang drucken“
+  (`/aushang`, eine A4-Seite), WhatsApp, E-Mail, Kopieren, Teilen und
+  **per SMS**: Edge Function `einladung-sms` (nur Chef, fester Text ohne
+  Umlaute + Link, Twilio von der Nummer `TWILIO_FROM` — Absendername
+  „SETEC“ lehnt Twilio für das Konto ab; Drossel 3 je Nummer/40 je Tag,
+  Protokoll `sms_einladungen`; Secrets `TWILIO_ACCOUNT_SID`,
+  `TWILIO_AUTH_TOKEN`, `TWILIO_FROM`, `APP_URL`). Abgelöst: Firmen-Link
+  mit Token, persönliche Einladungen, Freischaltung.
 
 ## Datenmodell (supabase/migrations/20261025100000_elektriker_grundschema.sql)
 
@@ -921,9 +925,8 @@ Projekt- und Regienummer vergibt ein Trigger beim Anlegen, Belegnummern
    je Projekt: geleistet (Stunden × Satz der Person + Material-VK, Regie getrennt) gegen Angebot und
    Verrechnetes, sortiert nach „noch nicht verrechnet“.
 7. **Neuer Mitarbeiter**: scannt den QR-Code am Aushang (oder öffnet den
-   Firmen-Link aus der WhatsApp-Gruppe) → installiert die App → registriert
-   sich darin selbst und ist sofort drin. Ohne Link: auf der Anmeldeseite
-   „Registrieren“ (dasselbe Formular), der Chef schaltet mit einem Tipp frei.
+   Link `/start` aus WhatsApp, Mail oder SMS) → legt die App auf den
+   Startbildschirm → registriert sich darin mit E-Mail und ist sofort drin.
    Chef-Rolle, Team und Farbe gibt der Chef danach.
 
 ## Code-Konventionen

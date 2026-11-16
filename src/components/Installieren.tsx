@@ -17,7 +17,7 @@ const GEZEIGT = "setec.installhinweis";
 
 /**
  * Anleitung passend zu Gerät und Browser — im Hinweis nach dem Anmelden, in
- * den Einstellungen (Handy) und auf der Einladungsseite. Gibt es das
+ * den Einstellungen (Handy) und auf /start (dem einen Link). Gibt es das
  * Installations-Angebot des Browsers (Chrome/Edge am Android und am PC), ist
  * es EIN Knopf „App installieren“. Jedes Zeichen, das man antippen muss,
  * steht als Bild im Satz (Bedienzeichen.tsx).

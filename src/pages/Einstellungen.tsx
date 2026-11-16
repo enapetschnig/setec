@@ -424,8 +424,6 @@ function Mitarbeiter() {
     await refetch();
   };
 
-  const wartend = alle.filter((p) => zugang(p) === "neu");
-
   return (
     <div className="space-y-4">
       <EinladenKarte />
@@ -498,7 +496,6 @@ function Mitarbeiter() {
           </section>
         ))}
       </div>
-      {wartend.length === 0 && <p className="px-1 text-xs text-muted-foreground">Niemand wartet auf Freischaltung.</p>}
 
       <AlertDialog open={!!sperren} onOpenChange={(o) => { if (!o && !laeuft) setSperren(null); }}>
         <AlertDialogContent>

@@ -60,7 +60,8 @@ export default defineConfig(({ mode }) => ({
         id: '/',
         scope: '/',
         display: 'standalone',
-        start_url: '/',
+        // /start: ohne Anmeldung Registrieren/Anmelden, mit Sitzung gleich weiter
+        start_url: '/start',
         lang: 'de',
         orientation: 'any',
         categories: ['business', 'productivity'],

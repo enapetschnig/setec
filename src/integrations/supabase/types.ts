@@ -3010,6 +3010,44 @@ export type Database = {
           },
         ]
       }
+      sms_einladungen: {
+        Row: {
+          created_at: string
+          fehler: string | null
+          gesendet_von: string | null
+          id: string
+          nummer: string
+          status: string
+          twilio_sid: string | null
+        }
+        Insert: {
+          created_at?: string
+          fehler?: string | null
+          gesendet_von?: string | null
+          id?: string
+          nummer: string
+          status?: string
+          twilio_sid?: string | null
+        }
+        Update: {
+          created_at?: string
+          fehler?: string | null
+          gesendet_von?: string | null
+          id?: string
+          nummer?: string
+          status?: string
+          twilio_sid?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sms_einladungen_gesendet_von_fkey"
+            columns: ["gesendet_von"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       teams: {
         Row: {
           aktiv: boolean
@@ -3584,7 +3622,6 @@ export type Database = {
         Returns: string
       }
       einladung_hash: { Args: { p_token: string }; Returns: string }
-      einladung_lesen: { Args: { p_token: string }; Returns: Json }
       einladung_token: { Args: never; Returns: string }
       fibu_uebergeben: {
         Args: {
@@ -3596,7 +3633,6 @@ export type Database = {
         }
         Returns: string
       }
-      firmen_link: { Args: { p_neu?: boolean }; Returns: string }
       ist_aktiv: { Args: never; Returns: boolean }
       ist_chef: { Args: never; Returns: boolean }
       kontakt_belege: {

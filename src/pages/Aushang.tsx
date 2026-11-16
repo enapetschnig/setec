@@ -2,18 +2,18 @@ import { Link, Navigate } from "react-router-dom";
 import { ArrowLeft, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { mitZeichen } from "@/components/Bedienzeichen";
-import { useFirmenLink, useQr } from "@/components/einladung/Einladungen";
+import { appLink, useQr } from "@/components/einladung/Einladungen";
 import { useSitzung } from "@/hooks/useSitzung";
 import { KUNDE } from "@/kunde.config";
 
 /**
  * /aushang (nur Chef): EINE A4-Seite zum Aufhängen oder Verteilen — großer
- * QR-Code auf den Firmen-Link, drei Schritte, Firmendaten. Drucken bzw.
+ * QR-Code auf den einen Link /start, drei Schritte, Firmendaten. Drucken bzw.
  * „Als PDF speichern“ über den Browser. Auf Papier feste helle Farben.
  */
 export default function Aushang() {
   const { laden, session, istChef } = useSitzung();
-  const { data: link } = useFirmenLink();
+  const link = appLink();
   const qr = useQr(link, 900);
 
   if (laden) return null;
@@ -62,11 +62,11 @@ export default function Aushang() {
                 <p className="mt-1"><b>Android:</b> in Chrome auf „App installieren“ tippen.</p>
               </>
             ))}
-            {schritt(3, "App öffnen und registrieren", "Vorname, Nachname, Benutzername und Passwort eintragen — fertig, du bist gleich drin.")}
+            {schritt(3, "App öffnen und „Registrieren“ antippen", "Vorname, Nachname, E-Mail-Adresse und Passwort eintragen — fertig, du bist gleich drin.")}
           </div>
 
           <div className="mt-[8mm] rounded-xl border-2 border-neutral-300 px-5 py-3 text-[0.95rem]">
-            <b>Passwort vergessen?</b> Beim Chef melden — er gibt dir ein vorläufiges Passwort.
+            <b>Passwort vergessen?</b> Beim Anmelden auf „Passwort vergessen?“ tippen — du bekommst einen Link per E-Mail.
           </div>
         </div>
 

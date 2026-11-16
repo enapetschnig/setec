@@ -1,23 +1,21 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { CheckCircle2, Eye, EyeOff, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { authFehler, benutzerFehler, benutzername, zuEmail } from "@/lib/konto";
-import { offeneEinladungMerken, offeneEinladungVergessen } from "@/lib/einladung";
-import { KUNDE } from "@/kunde.config";
+import { authFehler, emailFehler, emailVorschlag } from "@/lib/konto";
 
 /**
- * Das EINE Registrierungsformular — auf der Anmeldeseite („Registrieren“)
- * und hinter dem Firmen-Link/QR-Code (pages/Einladung.tsx). Mit Link ist
- * das Konto sofort freigeschaltet, ohne Link bestätigt es der Chef mit einem
- * Tipp (Startseite / Einstellungen → Mitarbeiter) — Trigger handle_new_user.
+ * Das EINE Registrierungsformular — auf /start und auf der Anmeldeseite
+ * („Registrieren“). Vorname, Nachname, E-Mail (damit meldet man sich an und
+ * bekommt „Passwort vergessen“), Passwort. Am Anfang ist jedes Konto sofort
+ * freigeschaltet (Trigger handle_new_user); Chef-Rechte und Team gibt der
+ * Chef unter Einstellungen → Mitarbeiter.
  */
 
-function PasswortFeld({ id, autoComplete, autoFocus }: { id: string; autoComplete: string; autoFocus?: boolean }) {
+export function PasswortFeld({ id, autoComplete, autoFocus }: { id: string; autoComplete: string; autoFocus?: boolean }) {
   const [zeigen, setZeigen] = useState(false);
   return (
     <div className="relative">
@@ -31,54 +29,43 @@ function PasswortFeld({ id, autoComplete, autoFocus }: { id: string; autoComplet
   );
 }
 
-/** onStart(true) vor dem Anlegen, onStart(false) bei einem Fehler — mit der Sitzung leitet die Seite weiter */
-export function KontoAnlegen({ token, onStart, zurAnmeldung }: {
-  token: string | null; onStart?: (an: boolean) => void; zurAnmeldung?: () => void;
-}) {
+/** Mit der neuen Sitzung leitet die Seite selbst weiter */
+export function KontoAnlegen({ zurAnmeldung }: { zurAnmeldung: () => void }) {
   const [laeuft, setLaeuft] = useState(false);
   const [vorname, setVorname] = useState("");
   const [nachname, setNachname] = useState("");
-  // Benutzername folgt dem Vornamen, bis man ihn selbst ändert
-  const [benutzer, setBenutzer] = useState<string | null>(null);
-  const vorschlag = benutzername(vorname);
+  const [email, setEmail] = useState("");
+  const vorschlag = emailVorschlag(email);
 
   const absenden = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (laeuft) return;
-    const fd = new FormData(e.currentTarget);
+    const passwort = String(new FormData(e.currentTarget).get("passwort") ?? "");
     const v = vorname.trim(), n = nachname.trim();
     if (!v || !n) return toast.error("Bitte Vor- und Nachnamen eintragen.");
-    const benutzer = String(fd.get("benutzer") ?? "");
-    const passwort = String(fd.get("passwort") ?? "");
-    const falsch = benutzerFehler(benutzer);
-    if (falsch) return toast.error("Benutzername geht so nicht", { description: falsch });
+    const falsch = emailFehler(email);
+    if (falsch) return toast.error(falsch);
     if (passwort.length < 6) return toast.error("Das Passwort braucht mindestens 6 Zeichen.");
-    const email = zuEmail(benutzer, KUNDE.loginDomain);
+    const adresse = email.trim().toLowerCase();
     setLaeuft(true);
-    onStart?.(true);
-    offeneEinladungVergessen();
     const { data, error } = await supabase.auth.signUp({
-      email,
+      email: adresse,
       password: passwort,
-      options: { data: { ...(token ? { einladung: token } : {}), vorname: v, nachname: n } },
+      options: { data: { vorname: v, nachname: n } },
     });
     if (error) {
       // Doppelt getippt oder Funkloch nach dem Anlegen: mit demselben Passwort klappt die Anmeldung
       if (/already (been )?registered/i.test(error.message)) {
-        const { error: e2 } = await supabase.auth.signInWithPassword({ email, password: passwort });
+        const { error: e2 } = await supabase.auth.signInWithPassword({ email: adresse, password: passwort });
         if (!e2) return;
         setLaeuft(false);
-        onStart?.(false);
-        if (token) offeneEinladungMerken(token);
-        return toast.error("Diesen Benutzernamen gibt es schon", { description: "Bitte einen anderen wählen, z. B. vorname.nachname. Hast du schon ein Konto? Dann unten „Anmelden“." });
+        return toast.error("Mit dieser E-Mail gibt es schon ein Konto", { description: "Dann unten „Anmelden“ — oder dort „Passwort vergessen?“." });
       }
       setLaeuft(false);
-      onStart?.(false);
-      if (token) offeneEinladungMerken(token);
       return toast.error("Hat nicht geklappt", { description: authFehler(error.message) });
     }
     if (!data.session) {
-      const { error: e2 } = await supabase.auth.signInWithPassword({ email, password: passwort });
+      const { error: e2 } = await supabase.auth.signInWithPassword({ email: adresse, password: passwort });
       if (e2) { setLaeuft(false); return toast.error("Konto angelegt — bitte jetzt anmelden", { description: authFehler(e2.message) }); }
     }
     toast.success(`Willkommen, ${v}!`);
@@ -99,10 +86,16 @@ export function KontoAnlegen({ token, onStart, zurAnmeldung }: {
         </div>
       </div>
       <div className="space-y-2">
-        <Label htmlFor="ein-benutzer">Dein Benutzername</Label>
-        <Input id="ein-benutzer" name="benutzer" value={benutzer ?? vorschlag} onChange={(e) => setBenutzer(e.target.value)}
-          autoComplete="username" autoCapitalize="none" autoCorrect="off" spellCheck={false} required className="h-12 text-base md:text-base" />
-        <p className="text-xs text-muted-foreground">Damit meldest du dich an. Du kannst ihn ändern oder deine E-Mail-Adresse nehmen.</p>
+        <Label htmlFor="ein-email">Deine E-Mail-Adresse</Label>
+        <Input id="ein-email" type="email" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)}
+          autoComplete="email" autoCapitalize="none" autoCorrect="off" spellCheck={false} required className="h-12 text-base md:text-base" />
+        {vorschlag ? (
+          <button type="button" onClick={() => setEmail(vorschlag)} className="text-left text-sm text-primary" data-pruef="email-vorschlag">
+            Meintest du <b>{vorschlag}</b>? Antippen zum Übernehmen.
+          </button>
+        ) : (
+          <p className="text-xs text-muted-foreground">Damit meldest du dich an — und bekommst einen Link, falls du das Passwort vergisst.</p>
+        )}
       </div>
       <div className="space-y-2">
         <Label htmlFor="ein-passwort">Dein Passwort</Label>
@@ -111,12 +104,9 @@ export function KontoAnlegen({ token, onStart, zurAnmeldung }: {
       <Button type="submit" className="h-14 w-full text-base" disabled={laeuft} data-pruef="los">
         {laeuft ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <CheckCircle2 className="mr-2 h-5 w-5" />} Fertig — App starten
       </Button>
-      {!token && <p className="text-center text-xs text-muted-foreground">Der Chef bestätigt neue Konten mit einem Tipp — danach geht es los.</p>}
       <p className="text-center text-sm text-muted-foreground">
         Schon ein Konto?{" "}
-        {zurAnmeldung
-          ? <button type="button" onClick={zurAnmeldung} className="font-medium text-primary">Anmelden</button>
-          : <Link to="/auth" onClick={offeneEinladungVergessen} className="font-medium text-primary">Anmelden</Link>}
+        <button type="button" onClick={zurAnmeldung} className="font-medium text-primary">Anmelden</button>
       </p>
     </form>
   );

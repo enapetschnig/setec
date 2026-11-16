@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { anleitungFuer, chromeLink, geraetErkennen, inAppBrowser, safariVersion } from "./installieren";
-import { einladungsAdresse, einladungsText, mailAdresse, tokenAusPfad, whatsAppAdresse } from "./einladung";
+import { einladungsText, handyNummer, mailAdresse, startAdresse, whatsAppAdresse } from "./einladung";
 
 const UA = {
   iphone26: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Mobile/15E148 Safari/604.1",
@@ -50,18 +50,24 @@ describe("anleitungFuer", () => {
   it("Firefox am PC sagt ehrlich, dass es keine App wird", () => {
     expect(anleitungFuer("pc-firefox", false).schritte[0]).toMatch(/kann die App nicht installieren/);
   });
-  it("Chrome-Link behält die Einladung", () => {
-    expect(chromeLink("https://setec.handwerkapp.at/einladung/abcDEF123_-xyzabcdefghij"))
-      .toBe("intent://setec.handwerkapp.at/einladung/abcDEF123_-xyzabcdefghij#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=https%3A%2F%2Fsetec.handwerkapp.at%2Feinladung%2FabcDEF123_-xyzabcdefghij;end");
+  it("Chrome-Link behält die Adresse", () => {
+    expect(chromeLink("https://setec.handwerkapp.at/start"))
+      .toBe("intent://setec.handwerkapp.at/start#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=https%3A%2F%2Fsetec.handwerkapp.at%2Fstart;end");
   });
 });
 
 describe("einladung", () => {
-  const link = einladungsAdresse("https://setec.handwerkapp.at/", "AbC_-123456789012345678");
-  it("Adresse und Token", () => {
-    expect(link).toBe("https://setec.handwerkapp.at/einladung/AbC_-123456789012345678");
-    expect(tokenAusPfad("/einladung/AbC_-123456789012345678")).toBe("AbC_-123456789012345678");
-    expect(tokenAusPfad("/einladung/<script>")).toBeNull();
+  const link = startAdresse("https://setec.handwerkapp.at/");
+  it("der eine Link", () => {
+    expect(link).toBe("https://setec.handwerkapp.at/start");
+  });
+  it("Handynummer in jeder Schreibweise", () => {
+    for (const n of ["0664 1234567", "0664/123 45 67", "+43 664 1234567", "0043 664 1234567", "+43 (0) 664 123-45-67", "664 1234567"]) {
+      expect(handyNummer(n)).toBe("+436641234567");
+    }
+    expect(handyNummer("+49 151 12345678")).toBe("+4915112345678");
+    expect(handyNummer("0664")).toBeNull();
+    expect(handyNummer("abc")).toBeNull();
   });
   it("Text, WhatsApp und Mail", () => {
     const t = einladungsText({ firma: "SETEC", link });
