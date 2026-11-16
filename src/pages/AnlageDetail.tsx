@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { KUNDE } from "@/kunde.config";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { ChevronRight, ClipboardCheck, Loader2, Pencil, QrCode, Receipt, ShieldCheck } from "lucide-react";
@@ -80,7 +81,7 @@ export default function AnlageDetail() {
     if (!firma) return toast.error("Firmendaten fehlen — bitte in den Einstellungen eintragen.");
     setLaeuft("etikett");
     try {
-      const d = await anlagenEtikett(anlage, firma, `${window.location.origin}/anlagen/${anlage.id}`);
+      const d = await anlagenEtikett(anlage, firma, `${KUNDE.appAdresse.replace(/\/+$/, "")}/anlagen/${anlage.id}`);
       if (pc) setVorschau(d);
       else await pdfTeilenOderLaden(d.blob, d.dateiname);
     } catch (e) {

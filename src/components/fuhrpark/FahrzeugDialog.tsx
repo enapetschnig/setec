@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { Loader2, Plus, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import FormularDialog from "@/components/FormularDialog";
+import { Rueckfrage, type Frage } from "@/components/Rueckfrage";
 import { Gruppentitel, StatusPille } from "@/components/Bausteine";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -92,13 +93,16 @@ export function FahrzeugDialog({
     const km = w.km_stand.trim() ? dezimalLesen(w.km_stand) : null;
     if (km !== null && km < 0) return toast.error("Der Kilometerstand kann nicht negativ sein.");
     setSpeichert(true);
+    // km-Stand nur schreiben, wenn er hier geändert wurde — ein Bordbuch-
+    // Eintrag kann ihn inzwischen erhöht haben
+    const kmGeaendert = !fahrzeug || w.km_stand !== (JSON.parse(basis || "{}") as Partial<Werte>).km_stand;
     const daten = {
       name: w.name.trim(),
       art: w.art,
       kennzeichen: mitKennzeichen ? leerNull(w.kennzeichen)?.toUpperCase() ?? null : null,
       typ: leerNull(w.typ),
       baujahr,
-      km_stand: km === null ? null : Math.round(km),
+      ...(kmGeaendert ? { km_stand: km === null ? null : Math.round(km) } : {}),
       pickerl_bis: mitKennzeichen ? w.pickerl_bis || null : null,
       service_bis: w.service_bis || null,
       pruefung_bis: w.pruefung_bis || null,
@@ -260,7 +264,13 @@ export function FahrzeugDialog({
       </div>
 
       {fahrzeug && (
-        <EintragDialog open={eintrag !== null} onOpenChange={(o) => !o && setEintrag(null)} fahrzeug={fahrzeug} />
+        <EintragDialog open={eintrag !== null} onOpenChange={(o) => !o && setEintrag(null)} fahrzeug={fahrzeug}
+          onKm={(km) => {
+            // Formular nachziehen, sonst schriebe „Speichern“ den alten Stand zurück
+            const neu = String(km);
+            setW((x) => (x.km_stand === (JSON.parse(basis || "{}") as Partial<Werte>).km_stand ? { ...x, km_stand: neu } : x));
+            setBasis((b) => JSON.stringify({ ...(JSON.parse(b || "{}") as Werte), km_stand: neu }));
+          }} />
       )}
     </FormularDialog>
   );
@@ -273,6 +283,7 @@ function EintragZeile({ e, von, istChef }: { e: FahrzeugEintrag; von: string; is
     if (error) return toast.error("Nicht gespeichert", { description: fehlerText(error) });
     await neuLaden("fahrzeuge");
   };
+  const [frage, setFrage] = useState<Frage | null>(null);
   const loeschen = async () => {
     const { error } = await supabase.from("fahrzeug_eintraege").delete().eq("id", e.id);
     if (error) return toast.error("Nicht gelöscht", { description: fehlerText(error) });
@@ -294,15 +305,17 @@ function EintragZeile({ e, von, istChef }: { e: FahrzeugEintrag; von: string; is
           {e.art === "schaden" && (
             <Button variant="outline" className="h-9 px-2.5 text-xs" onClick={umschalten}>{e.erledigt ? "Wieder offen" : "Behoben"}</Button>
           )}
-          <Button variant="ghost" size="icon" className="h-9 w-9" aria-label="Eintrag löschen" onClick={loeschen}><Trash2 className="h-4 w-4" /></Button>
+          <Button variant="ghost" size="icon" className="h-9 w-9" aria-label="Eintrag löschen"
+            onClick={() => setFrage({ titel: "Eintrag löschen?", text: `${FAHRZEUG_EINTRAG[e.art]?.text ?? "Eintrag"} vom ${datum(e.datum)} wird aus dem Bordbuch gelöscht.`, knopf: "Löschen", gefahr: true, aktion: loeschen })}><Trash2 className="h-4 w-4" /></Button>
         </span>
       )}
+      <Rueckfrage frage={frage} onClose={() => setFrage(null)} />
     </li>
   );
 }
 
 /** Neuer Bordbuch-Eintrag. Monteure: nur Schaden oder Tanken. */
-function EintragDialog({ open, onOpenChange, fahrzeug }: { open: boolean; onOpenChange: (o: boolean) => void; fahrzeug: Fahrzeug }) {
+function EintragDialog({ open, onOpenChange, fahrzeug, onKm }: { open: boolean; onOpenChange: (o: boolean) => void; fahrzeug: Fahrzeug; onKm?: (km: number) => void }) {
   const neuLaden = useNeuLaden();
   const { istChef, profil } = useSitzung();
   const arten = istChef ? Object.keys(FAHRZEUG_EINTRAG) : ["schaden", "tanken"];
@@ -333,7 +346,8 @@ function EintragDialog({ open, onOpenChange, fahrzeug }: { open: boolean; onOpen
     });
     // km-Stand mitziehen, wenn er höher ist (nur Chef darf das Fahrzeug ändern)
     if (!error && istChef && kmZahl !== null && kmZahl > (fahrzeug.km_stand ?? 0)) {
-      await supabase.from("fahrzeuge").update({ km_stand: Math.round(kmZahl) }).eq("id", fahrzeug.id);
+      const { error: kmFehler } = await supabase.from("fahrzeuge").update({ km_stand: Math.round(kmZahl) }).eq("id", fahrzeug.id);
+      if (!kmFehler) onKm?.(Math.round(kmZahl));
     }
     setSpeichert(false);
     if (error) return toast.error("Nicht gespeichert", { description: fehlerText(error) });

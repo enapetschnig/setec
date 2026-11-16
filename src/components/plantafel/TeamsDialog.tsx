@@ -15,6 +15,26 @@ import { GESCHAEFTSFUEHRUNG, gruppeVon } from "@/lib/terminplaner";
 import { TEAM_FARBEN, name, type Team } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
+/**
+ * Welche dieser Konten gibt es noch? Gelöschte Konten bleiben in
+ * `teams.mitglieder` (uuid[] ohne Fremdschlüssel) stehen; als Partieführer
+ * (`leiter_id` → profiles) lehnt die Datenbank sie ab.
+ */
+async function vorhandeneKonten(ids: string[]): Promise<Set<string>> {
+  const eindeutig = [...new Set(ids)];
+  if (!eindeutig.length) return new Set();
+  const { data, error } = await supabase.from("profiles").select("id").in("id", eindeutig);
+  if (error) throw error;
+  return new Set((data ?? []).map((p) => p.id as string));
+}
+
+/** Mitglieder ohne Konto weg, Partieführer nur aus den übrigen. */
+function teamBereinigen<T extends { leiter_id: string | null; mitglieder: string[] }>(t: T, gibt: Set<string>): T {
+  const mitglieder = t.mitglieder.filter((m) => gibt.has(m));
+  const leiter_id = t.leiter_id && mitglieder.includes(t.leiter_id) ? t.leiter_id : mitglieder[0] ?? null;
+  return { ...t, mitglieder, leiter_id };
+}
+
 type Entwurf = Pick<Team, "name" | "farbe" | "leiter_id" | "mitglieder" | "fahrzeug_id"> & { id: string | null; schluessel: string };
 
 /**
@@ -38,6 +58,13 @@ export function TeamsDialog({ open, onOpenChange }: { open: boolean; onOpenChang
     const l = teams.map((t) => ({ id: t.id, schluessel: t.id, name: t.name, farbe: t.farbe, leiter_id: t.leiter_id, mitglieder: t.mitglieder, fahrzeug_id: t.fahrzeug_id }));
     setListe(l);
     setBasis(JSON.stringify(l));
+    // Mitglieder mit gelöschtem Konto ausblenden — sie hätten keinen Knopf
+    // und ließen sich sonst nie mehr entfernen.
+    vorhandeneKonten(l.flatMap((t) => t.mitglieder)).then((gibt) => {
+      const sauber = l.map((t) => ({ ...t, mitglieder: t.mitglieder.filter((m) => gibt.has(m)), leiter_id: t.leiter_id && gibt.has(t.leiter_id) ? t.leiter_id : null }));
+      setListe((jetzt) => (JSON.stringify(jetzt) === JSON.stringify(l) ? sauber : jetzt));
+      setBasis(JSON.stringify(sauber));
+    }).catch(() => { /* beim Speichern wird nochmals geprüft */ });
     const g = Object.fromEntries(mitarbeiter.map((m) => [m.id, m.gruppe ?? ""]));
     setGruppen(g);
     setGruppenBasis(JSON.stringify(g));
@@ -57,11 +84,14 @@ export function TeamsDialog({ open, onOpenChange }: { open: boolean; onOpenChang
         if (error) throw error;
       }
       if (liste.length) {
-        const { error } = await supabase.from("teams").upsert(liste.map((t, i) => ({
-          id: t.id ?? crypto.randomUUID(), name: t.name.trim(), farbe: t.farbe,
-          leiter_id: t.leiter_id && t.mitglieder.includes(t.leiter_id) ? t.leiter_id : t.mitglieder[0] ?? null,
-          mitglieder: t.mitglieder, fahrzeug_id: t.fahrzeug_id, aktiv: true, reihenfolge: i,
-        })), { onConflict: "id" });
+        const gibt = await vorhandeneKonten(liste.flatMap((t) => t.mitglieder));
+        const { error } = await supabase.from("teams").upsert(liste.map((t, i) => {
+          const s = teamBereinigen(t, gibt);
+          return {
+            id: t.id ?? crypto.randomUUID(), name: t.name.trim(), farbe: t.farbe,
+            leiter_id: s.leiter_id, mitglieder: s.mitglieder, fahrzeug_id: t.fahrzeug_id, aktiv: true, reihenfolge: i,
+          };
+        }), { onConflict: "id" });
         if (error) throw error;
       }
       for (const m of mitarbeiter) {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { CheckCheck, Loader2, PackageCheck, ScanLine } from "lucide-react";
 import { FormularDialog } from "@/components/FormularDialog";
@@ -32,6 +32,8 @@ export function WareneingangDialog({ open, onOpenChange, bestellung: b }: {
   const [lieferschein, setLieferschein] = useState("");
   const [scan, setScan] = useState(false);
   const [laeuft, setLaeuft] = useState(false);
+  /** Sofort-Sperre gegen Doppelklick (`laeuft` greift erst nach dem Rendern) */
+  const laeuftRef = useRef(false);
   const positionen = b.bestell_positionen;
 
   useEffect(() => {
@@ -70,6 +72,8 @@ export function WareneingangDialog({ open, onOpenChange, bestellung: b }: {
   };
 
   const buchen = async () => {
+    if (laeuftRef.current) return;
+    laeuftRef.current = true;
     setLaeuft(true);
     try {
       await wareneingangBuchen(b, positionen.map((p) => ({ position: p, menge: menge(p.id) })), lieferschein);
@@ -79,6 +83,7 @@ export function WareneingangDialog({ open, onOpenChange, bestellung: b }: {
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
+      laeuftRef.current = false;
       setLaeuft(false);
     }
   };

@@ -46,7 +46,7 @@ function MonatsKopf({ monat, setMonat }: { monat: string; setMonat: (m: string) 
  * zeigt dessen Buchungen.
  */
 export function MonatsAnsicht({ person, onBuchen, onWahl }: {
-  person: Pick<Profil, "id" | "wochenstunden">;
+  person: Pick<Profil, "id" | "wochenstunden" | "konto_ab">;
   onBuchen: (datum: string) => void;
   onWahl: (z: ZeitMitInfo) => void;
 }) {
@@ -56,8 +56,8 @@ export function MonatsAnsicht({ person, onBuchen, onWahl }: {
   const { von, bis } = monatsGrenzen(monat);
   const { data: zeiten = [] } = useZeitenListe({ von, bis, userId: person.id });
   const { data: abwesenheiten = [] } = useAbwesenheiten(person.id);
-  const m = useMemo(() => monatsKalender(monat, zeiten, abwesenheiten, Number(person.wochenstunden ?? 38.5), heute),
-    [monat, zeiten, abwesenheiten, person.wochenstunden, heute]);
+  const m = useMemo(() => monatsKalender(monat, zeiten, abwesenheiten, Number(person.wochenstunden ?? 38.5), heute, person.konto_ab),
+    [monat, zeiten, abwesenheiten, person.wochenstunden, heute, person.konto_ab]);
   const tagZeiten = zeiten.filter((z) => z.datum === tag);
   const gewaehlt = m.wochen.flatMap((w) => w.tage).find((t) => t?.iso === tag) ?? null;
 
@@ -151,7 +151,7 @@ export function MonatAlle({ mitarbeiter, onPerson }: { mitarbeiter: Profil[]; on
   const { data: zeiten = [] } = useZeitenListe({ von, bis });
   const { data: abwesend = [] } = useKalenderAbwesenheit(von, bis);
   const zeilen = mitarbeiter.map((p) => ({
-    p, m: monatsKalender(monat, zeiten.filter((z) => z.user_id === p.id), abwesend.filter((a) => a.user_id === p.id), Number(p.wochenstunden ?? 38.5), heute),
+    p, m: monatsKalender(monat, zeiten.filter((z) => z.user_id === p.id), abwesend.filter((a) => a.user_id === p.id), Number(p.wochenstunden ?? 38.5), heute, p.konto_ab),
   }));
   return (
     <section className="space-y-3">

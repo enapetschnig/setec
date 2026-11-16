@@ -74,6 +74,8 @@ export function monatsKalender(
   abwesenheiten: AbwesenheitKurz[],
   wochenstunden: number,
   heute: string,
+  /** Beginn des Zeitkontos (`profiles.konto_ab`): davor kein Soll — wie „Mein Konto“ */
+  kontoAb?: string | null,
 ): Monat {
   const { von, bis } = monatsGrenzen(monat);
   const jeTag = new Map<string, { ist: number; intern: number }>();
@@ -89,7 +91,7 @@ export function monatsKalender(
   const tage: KalenderTag[] = [];
   for (let iso = von; iso <= bis; iso = tageDazu(iso, 1)) {
     const g = jeTag.get(iso) ?? { ist: 0, intern: 0 };
-    const soll = sollTag(iso, wochenstunden);
+    const soll = kontoAb && iso < kontoAb ? 0 : sollTag(iso, wochenstunden);
     const a = genehmigt.find((x) => x.von <= iso && x.bis >= iso);
     const abw = a && soll > 0 ? { art: a.art, stunden: a.art === "zeitausgleich" ? 0 : abwesenheitStunden(a, iso, wochenstunden) } : null;
     const ist = r2(g.ist);
@@ -115,8 +117,10 @@ export function monatsKalender(
 
   const ist = r2(tage.reduce((s, t) => s + t.ist, 0));
   const abwesend = r2(tage.reduce((s, t) => s + (t.abwesend?.stunden ?? 0), 0));
-  const sollBisHeute = r2(tage.filter((t) => t.iso < heute).reduce((s, t) => s + t.soll, 0));
-  const bisHeute = r2(tage.filter((t) => t.iso < heute).reduce((s, t) => s + t.ist + (t.abwesend?.stunden ?? 0), 0));
+  // Stand wie im Konto: nur Tage ab Kontobeginn bis gestern
+  const imStand = (t: KalenderTag) => t.iso < heute && (!kontoAb || t.iso >= kontoAb);
+  const sollBisHeute = r2(tage.filter(imStand).reduce((s, t) => s + t.soll, 0));
+  const bisHeute = r2(tage.filter(imStand).reduce((s, t) => s + t.ist + (t.abwesend?.stunden ?? 0), 0));
   return {
     wochen,
     ist,

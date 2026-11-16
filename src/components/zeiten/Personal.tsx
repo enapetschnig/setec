@@ -4,6 +4,7 @@ import { CalendarOff, Check, Loader2, Trash2, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Avatar, Karte, StatusPille } from "@/components/Bausteine";
 import FormularDialog from "@/components/FormularDialog";
+import { Rueckfrage, type Frage } from "@/components/Rueckfrage";
 import { fehlerText } from "@/components/stamm/stammDaten";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -114,6 +115,7 @@ export function AntraegeKarte() {
   const { istChef } = useSitzung();
   const { data: antraege = [] } = useAntraege(istChef);
   const [laeuft, setLaeuft] = useState<string | null>(null);
+  const [frage, setFrage] = useState<Frage | null>(null);
   if (!antraege.length) return null;
   const entscheiden = async (id: string, status: "genehmigt" | "abgelehnt") => {
     setLaeuft(id);
@@ -131,10 +133,13 @@ export function AntraegeKarte() {
             <Avatar profil={a.profiles} />
             <div className="min-w-0 flex-1">
               <p className="text-sm font-medium">{name(a.profiles)} · {artText(a.art)}</p>
-              <p className="text-xs text-muted-foreground">{zeitraum(a.von, a.bis)} · {tageText(abwesenheitsTage(a).length)}{a.notiz && ` · ${a.notiz}`}</p>
+              <p className="text-xs text-muted-foreground">{zeitraum(a.von, a.bis)} · {tageText(abwesenheitsTage(a).length)}{a.stunden ? ` · ${stunden(Number(a.stunden))}` : ""}{a.notiz && ` · ${a.notiz}`}</p>
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" className="h-11 gap-1.5" disabled={!!laeuft} onClick={() => void entscheiden(a.id, "abgelehnt")}><X className="h-4 w-4" /> Ablehnen</Button>
+              <Button variant="outline" className="h-11 gap-1.5" disabled={!!laeuft} onClick={() => setFrage({
+                titel: "Antrag ablehnen?", text: `${artText(a.art)} von ${name(a.profiles)} (${zeitraum(a.von, a.bis)}) wird abgelehnt.`,
+                knopf: "Ablehnen", gefahr: true, aktion: () => entscheiden(a.id, "abgelehnt"),
+              })}><X className="h-4 w-4" /> Ablehnen</Button>
               <Button className="h-11 gap-1.5" disabled={!!laeuft} onClick={() => void entscheiden(a.id, "genehmigt")}>
                 {laeuft === a.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} Genehmigen
               </Button>
@@ -142,6 +147,7 @@ export function AntraegeKarte() {
           </li>
         ))}
       </ul>
+      <Rueckfrage frage={frage} onClose={() => setFrage(null)} />
     </Karte>
   );
 }
@@ -152,6 +158,7 @@ export function AbwesenheitListe({ userId }: { userId: string }) {
   const { istChef } = useSitzung();
   const { data: liste = [] } = useAbwesenheiten(userId);
   const heute = isoTag();
+  const [frage, setFrage] = useState<Frage | null>(null);
   const relevant = liste.filter((a) => a.bis >= heute || a.status === "beantragt").reverse();
   if (!relevant.length) return null;
   const weg = async (id: string) => {
@@ -171,13 +178,18 @@ export function AbwesenheitListe({ userId }: { userId: string }) {
             </div>
             <StatusPille eintrag={ABWESENHEIT_STATUS[a.status] ?? { ton: "grau", text: a.status }} />
             {(istChef || a.status === "beantragt") && (
-              <Button variant="ghost" size="icon" className="h-11 w-11" aria-label={`${artText(a.art)} ${zeitraum(a.von, a.bis)} löschen`} onClick={() => void weg(a.id)}>
+              <Button variant="ghost" size="icon" className="h-11 w-11" aria-label={`${artText(a.art)} ${zeitraum(a.von, a.bis)} löschen`} onClick={() => setFrage({
+                  titel: a.status === "beantragt" ? "Antrag zurückziehen?" : `${artText(a.art)} löschen?`,
+                  text: `${artText(a.art)} ${zeitraum(a.von, a.bis)} wird gelöscht.${a.status === "genehmigt" ? " Der genehmigte Eintrag verschwindet aus Kalender und Konto." : ""}`,
+                  knopf: "Löschen", gefahr: true, aktion: () => weg(a.id),
+                })}>
                 <Trash2 className="h-4 w-4" />
               </Button>
             )}
           </li>
         ))}
       </ul>
+      <Rueckfrage frage={frage} onClose={() => setFrage(null)} />
     </Karte>
   );
 }

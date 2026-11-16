@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { Loader2, Trash2 } from "lucide-react";
 import FormularDialog from "@/components/FormularDialog";
 import { Gruppentitel } from "@/components/Bausteine";
+import { Rueckfrage, type Frage } from "@/components/Rueckfrage";
 import { KundeWahl } from "@/components/KundeWahl";
 import { ProjektWahl } from "@/components/ProjektWahl";
 import { Feld, leerNull, useBeimOeffnen, zahlFeld, Zusatz } from "@/components/stamm/Felder";
@@ -159,6 +160,7 @@ export function AnlageDialog({
     }
   };
 
+  const [frage, setFrage] = useState<Frage | null>(null);
   const loeschen = async () => {
     if (!anlage) return;
     setSpeichert(true);
@@ -191,7 +193,8 @@ export function AnlageDialog({
       fuss={(
         <>
           {anlage && istChef && (
-            <Button variant="ghost" className="h-11 text-destructive sm:mr-auto" onClick={loeschen} disabled={speichert}>
+            <Button variant="ghost" className="h-11 text-destructive sm:mr-auto" disabled={speichert}
+              onClick={() => setFrage({ titel: "Anlage löschen?", text: `Anlage ${anlage.nummer} wird endgültig gelöscht.`, knopf: "Löschen", gefahr: true, aktion: loeschen })}>
               <Trash2 className="h-4 w-4" /> Löschen
             </Button>
           )}
@@ -366,6 +369,7 @@ export function AnlageDialog({
           </Feld>
         </section>
       </div>
+      <Rueckfrage frage={frage} onClose={() => setFrage(null)} />
     </FormularDialog>
   );
 }

@@ -11,8 +11,8 @@ import { authFehler, emailFehler, emailVorschlag } from "@/lib/konto";
  * Das EINE Registrierungsformular — auf /start und auf der Anmeldeseite
  * („Registrieren“). Vorname, Nachname, E-Mail (damit meldet man sich an und
  * bekommt „Passwort vergessen“), Passwort. Am Anfang ist jedes Konto sofort
- * freigeschaltet (Trigger handle_new_user); Chef-Rechte und Team gibt der
- * Chef unter Einstellungen → Mitarbeiter.
+ * freigeschaltet (Trigger handle_new_user); Chef-Rechte gibt der
+ * Chef unter Einstellungen → Mitarbeiter, das Team in der Plantafel → Teams.
  */
 
 export function PasswortFeld({ id, autoComplete, autoFocus }: { id: string; autoComplete: string; autoFocus?: boolean }) {

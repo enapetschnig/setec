@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { kw, monatDazu, monatsGrenzen, monatsKalender } from "./monatsKalender";
+import { kontoRechnen } from "./zeitkonto";
 
 describe("Monatskalender", () => {
   it("Grenzen und Blättern über den Jahreswechsel", () => {
@@ -50,5 +51,22 @@ describe("Monatskalender", () => {
     // bis gestern: 9 Arbeitstage × 8 = 72 Soll; Ist 15 + 16 Urlaub
     expect(m.sollBisHeute).toBe(72);
     expect(m.differenz).toBe(-41);
+  });
+  it("Neuer Mitarbeiter: Stand erst ab Kontobeginn, gleich wie „Mein Konto“", () => {
+    // Konto ab Mo 16.11., heute Mi 18.11., Montag 8 h gearbeitet, Dienstag 6 h
+    const zeiten = [
+      { datum: "2026-11-16", stunden: 8, projekt_id: "p" },
+      { datum: "2026-11-17", stunden: 6, projekt_id: "p" },
+    ];
+    const ohne = monatsKalender("2026-11", zeiten, [], 38.5, "2026-11-18");
+    expect(ohne.differenz).toBeLessThan(-70); // der alte Fehler: Soll ab Monatsbeginn
+    const m = monatsKalender("2026-11", zeiten, [], 38.5, "2026-11-18", "2026-11-16");
+    const tag = (iso: string) => m.wochen.flatMap((w) => w.tage).find((t) => t?.iso === iso)!;
+    expect(tag("2026-11-13")).toMatchObject({ soll: 0, ton: "frei" }); // vor Kontobeginn nicht rot
+    expect(m.sollBisHeute).toBe(15.4);
+    expect(m.soll).toBe(84.7); // 11 Arbeitstage ab 16.11.
+    const konto = kontoRechnen({ wochenstunden: 38.5, urlaub_tage: 25, konto_ab: "2026-11-16" }, zeiten, [], [], "2026-11-18");
+    expect(m.differenz).toBe(-1.4);
+    expect(m.differenz).toBe(konto.saldo);
   });
 });

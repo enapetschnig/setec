@@ -244,6 +244,8 @@ export default function Scan() {
   const [wechselZu, setWechselZu] = useState<Modus | null>(null);
   const [vorschau, setVorschau] = useState<{ diffs: Differenz[]; gleich: number; ungezaehlt: number } | null>(null);
   const [bucht, setBucht] = useState(false);
+  /** Sofort-Sperre gegen Doppelklick: `bucht` greift erst nach dem nächsten Rendern */
+  const buchtRef = useRef(false);
   const [laedtBestand, setLaedtBestand] = useState(false);
 
   const codeCache = useRef(new Map<string, { artikel: ArtikelKurz; menge: number }>());
@@ -732,8 +734,19 @@ export default function Scan() {
   };
 
   const buchen = async (trotzdem = false) => {
-    if (bucht || !pruefen()) return;
+    if (buchtRef.current || bucht || !pruefen()) return;
     if (modus === "korrektur") return inventurPruefen();
+    buchtRef.current = true;
+    setBucht(true);
+    try {
+      await buchenOhneSperre(trotzdem);
+    } finally {
+      buchtRef.current = false;
+      setBucht(false);
+    }
+  };
+
+  const buchenOhneSperre = async (trotzdem: boolean) => {
     // Der Bestand in der App kann abweichen, darum keine Sperre — aber ein Tippfehler (999 statt 9) fällt auf
     if (!trotzdem && (modus === "ausfassung" || modus === "umbuchung") && bestand) {
       const auffaellig = listeRef.current.find((z) => {
@@ -826,7 +839,16 @@ export default function Scan() {
   };
 
   const inventurBuchen = async () => {
-    if (!vorschau || bucht) return;
+    if (!vorschau || bucht || buchtRef.current) return;
+    buchtRef.current = true;
+    try {
+      await inventurBuchenOhneSperre(vorschau);
+    } finally {
+      buchtRef.current = false;
+    }
+  };
+
+  const inventurBuchenOhneSperre = async (vorschau: { diffs: Differenz[]; gleich: number; ungezaehlt: number }) => {
     const text = notiz.trim() || null;
     const diffJeZeile = new Map(vorschau.diffs.map((d) => [d.zeile.schluessel, d.diff]));
     // Korrektur = gezählt − Bestand, mit Vorzeichen; nur Zeilen mit Differenz

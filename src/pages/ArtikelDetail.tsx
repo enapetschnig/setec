@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState, type ReactNode } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -42,6 +42,7 @@ export default function ArtikelDetail() {
   const { id } = useParams<{ id: string }>();
   const { firma, istChef, profil } = useSitzung();
   const neuLaden = useNeuLaden();
+  const navigate = useNavigate();
   const [bearbeiten, setBearbeiten] = useState(false);
 
   const { data: artikel, isLoading, error } = useQuery({
@@ -125,7 +126,7 @@ export default function ArtikelDetail() {
         </div>
       </div>
 
-      <ArtikelDialog open={bearbeiten} onOpenChange={setBearbeiten} artikel={a} />
+      <ArtikelDialog open={bearbeiten} onOpenChange={setBearbeiten} artikel={a} onGeloescht={() => navigate("/artikel", { replace: true })} />
     </Seite>
   );
 }

@@ -83,7 +83,7 @@ type Verwendung = { buchungen: number; positionen: number; leistungen: number };
  * nicht (RLS: update/delete nur Chef).
  */
 export function ArtikelDialog({
-  open, onOpenChange, artikel, vorgabe, onGespeichert,
+  open, onOpenChange, artikel, vorgabe, onGespeichert, onGeloescht,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
@@ -91,6 +91,8 @@ export function ArtikelDialog({
   /** Startwerte für einen neuen Artikel (z. B. gescannter Code) */
   vorgabe?: Partial<Artikel>;
   onGespeichert?: (a: Artikel) => void;
+  /** nach dem endgültigen Löschen (z. B. zurück zur Artikelliste) */
+  onGeloescht?: () => void;
 }) {
   const neuLaden = useNeuLaden();
   const { firma, istChef } = useSitzung();
@@ -324,6 +326,7 @@ export function ArtikelDialog({
     await neuLaden("artikel", "leistungen", "lager");
     toast.success("Artikel gelöscht");
     onOpenChange(false);
+    onGeloescht?.();
   };
 
   const deaktivieren = async () => {

@@ -112,7 +112,7 @@ export function ArtikelSuche({
         {treffer.length === 0 && !isFetching && (
           <div className="flex flex-col items-center gap-1 py-8 text-sm text-muted-foreground">
             <Package className="h-8 w-8 opacity-40" />
-            {text.trim() ? "Nichts gefunden" : "Artikelstamm ist leer"}
+            {text.trim() ? "Nichts gefunden" : "Name, Nummer oder Hersteller eintippen"}
           </div>
         )}
         {treffer.map((a) => (
