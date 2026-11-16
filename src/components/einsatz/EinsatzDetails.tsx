@@ -99,7 +99,7 @@ export function EinsatzDetails({ t }: { t: Termin }) {
             <ul className="space-y-1">
               {kollegen.map((m) => (
                 <li key={m.id} className="flex min-h-11 items-center gap-2">
-                  <Avatar profil={m} className="h-7 w-7 text-[10px]" />
+                  <Avatar profil={m} className="h-7 w-7 text-[0.625rem]" />
                   <span className="min-w-0 flex-1 truncate">{name(m)}</span>
                   {m.telefon && <a href={tel(m.telefon)} aria-label={`${name(m)} anrufen`} className="flex h-11 w-11 items-center justify-center rounded-md border text-primary"><Phone className="h-4 w-4" /></a>}
                 </li>

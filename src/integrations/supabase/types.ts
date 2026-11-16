@@ -530,6 +530,7 @@ export type Database = {
           id: string
           name: string | null
           pfad: string
+          sichtbar: string
         }
         Insert: {
           art: string
@@ -538,6 +539,7 @@ export type Database = {
           id?: string
           name?: string | null
           pfad: string
+          sichtbar?: string
         }
         Update: {
           art?: string
@@ -546,6 +548,7 @@ export type Database = {
           id?: string
           name?: string | null
           pfad?: string
+          sichtbar?: string
         }
         Relationships: [
           {
@@ -2799,6 +2802,65 @@ export type Database = {
           },
         ]
       }
+      push_abos: {
+        Row: {
+          auth: string
+          created_at: string
+          endpoint: string
+          geraet: string | null
+          id: string
+          p256dh: string
+          user_id: string
+          zuletzt_ok_am: string | null
+        }
+        Insert: {
+          auth: string
+          created_at?: string
+          endpoint: string
+          geraet?: string | null
+          id?: string
+          p256dh: string
+          user_id: string
+          zuletzt_ok_am?: string | null
+        }
+        Update: {
+          auth?: string
+          created_at?: string
+          endpoint?: string
+          geraet?: string | null
+          id?: string
+          p256dh?: string
+          user_id?: string
+          zuletzt_ok_am?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "push_abos_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      push_verbindung: {
+        Row: {
+          einzig: boolean
+          secret: string
+          url: string
+        }
+        Insert: {
+          einzig?: boolean
+          secret: string
+          url: string
+        }
+        Update: {
+          einzig?: boolean
+          secret?: string
+          url?: string
+        }
+        Relationships: []
+      }
       rabatte: {
         Row: {
           created_at: string
@@ -3596,6 +3658,15 @@ export type Database = {
         Returns: undefined
       }
       personal_dokument_gelesen: { Args: { p_id: string }; Returns: undefined }
+      push_abo_registrieren: {
+        Args: {
+          p_auth: string
+          p_endpoint: string
+          p_geraet: string
+          p_p256dh: string
+        }
+        Returns: undefined
+      }
       rabatte_anwenden: {
         Args: { p_lieferant: string; p_max?: number }
         Returns: number

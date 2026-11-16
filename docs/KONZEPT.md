@@ -657,11 +657,28 @@ Bewusst einfach, kein eigenes Kalkulationsblatt:
   werden Name, Zeit, Betrag, Unterschrift — keine IP. Alles landet in `angebot_verlauf`;
   Annahmen und Rückfragen sind ungelesen → Startseite „Zu erledigen“, bis der Chef das
   Angebot öffnet.
-- **Datenblätter**: aus `artikel_dateien` (art `datenblatt`, Bucket `dateien`, Tabelle
-  aus Paket F) zu allen Artikeln des Angebots inkl. Material der Leistungen. Im Angebot
-  ankreuzen → „Angebot + n Datenblätter“ (Handy: Teilen, PC: ZIP). Der Kunde sieht sie
-  auf der Bestätigungsseite (Lesen für anon nur für Artikel in Angeboten mit gültigem
-  Link). Fehlt die Tabelle, bleibt alles still leer.
+- **Datenblätter**: aus `artikel_dateien` (art `datenblatt`, Speicher `projekt-dateien/artikel/…`)
+  zu allen Artikeln des Angebots inkl. Material der Leistungen. **Sichtbarkeit je Datei**
+  am Artikel (`artikel_dateien.sichtbar`, Migration `20261116170000`, Wunsch SETEC
+  16.11.2026): „Nur intern“ (nie nach außen), „Mit dem Angebot“ (Standard, auch für alle
+  alten), „Erst nach Auftrag“ (erst wenn das Angebot angenommen ist). Gleiche Regel an drei
+  Stellen: App (`fuerKunden` in `datenblattLogik.ts`), Datenbank (`angebot_datenblaetter` →
+  Liste auf der Bestätigungsseite; `datenblatt_oeffentlich` → Storage-Lesen für anon) und
+  Edge Function `beleg-mail`. Im Angebot sind die erlaubten vorab angekreuzt — Abhaken =
+  Überschreibung → „Angebot + n Datenblätter“ (Handy: Teilen, PC: ZIP) bzw. Mailanhang.
+- **Per E-Mail mit PDF** (`BelegMailDialog`, `mail.ts`, Edge Function `beleg-mail`, Resend,
+  Secrets `RESEND_API_KEY`/`RESEND_FROM`): Knopf „Per E-Mail“ in der Status-Karte (beim offenen
+  Angebot/Rechnung die Hauptaktion) und im Menü, beim Angebot auch „E-Mail“ neben dem Link.
+  Empfänger (aus `empf_email`, sonst Kunde; bis 3), Betreff und Text vorbelegt und änderbar —
+  beim Angebot mit Bestätigungslink und Gültigkeit. Absender „SETEC GmbH
+  <noreply@handwerkapp.at>“, Antwort an `firma.email`. Nur der Chef (Function prüft Rolle),
+  nur fertige Belege. Rechnung: die Function hängt **immer das abgelegte Original** aus
+  `beleg-archiv` an (fehlt es, legt die App es vorher ab); Angebot: das PDF wie beim
+  Herunterladen (≤ 8 MB) plus Datenblätter, die die Function gegen `angebot_datenblaetter`
+  prüft. Vermerk in `angebot_verlauf` (art `gesendet`, name = Empfänger, text = Betreff) —
+  beim Angebot im Verlauf, bei der Rechnung als Zeile in der Status-Karte. Drossel 30/Stunde.
+  `nur_pruefen: true` baut alles zusammen, sendet aber nicht (für Tests). „Mail-App öffnen
+  (ohne Anhang)“ = `mailto:` bleibt als Ausweichweg.
 - Demo: `supabase/demo/04-angebote.sql` (6 PV-Vorlagen, AN „Brunner“ offen mit Link
   `/angebot/DEMO-pv-brunner-angebot-bestaetigen-2026`, AN „Reisinger“ online angenommen);
   die Demo-Unterschrift lädt `unterschriften.py` hoch.
@@ -857,6 +874,15 @@ Migration `20261113114000_projekte_foerderung_planung_saetze.sql`, Bausteine in 
   `firma.kostensatz`. Verrechnungssatz: Person, sonst Lohnart, sonst Projekt-/Betriebssatz — so auch in
   „Aus dem Projekt übernehmen“ (Rechnung, Regie); wer einen eigenen Satz hat, bekommt eine eigene Zeile
   „Arbeitszeit <Name>“. Monteure lesen die Tabelle nicht (RLS `saetze_chef`).
+
+### Schriftgröße (Einstellungen → Mein Konto, `lib/schrift.ts`)
+
+- Wunsch SETEC 16.11.2026 („Wurstfinger“), Vorbild Steinbrecher: Normal 16 px, Groß 17,
+  Sehr groß 18,5, Extra groß 20 — als Grundschrift (`data-schrift` am `<html>`, Regeln in
+  `index.css`), alles in rem wächst mit. Je Gerät in localStorage (`setec.schrift`, mit
+  try/catch); `index.html` setzt sie vor dem Start. Eingaben `max(16px, 1rem)`. Kleine
+  Pixel-Schriften auf den Handy-Seiten (Start, Stunden, Scanner, Regie, Pillen) sind in rem
+  umgestellt. Geprüft auf 390 px mit „Extra groß“: kein waagrechtes Scrollen.
 
 ### Betrieb (Einstellungen)
 

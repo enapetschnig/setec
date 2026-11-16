@@ -38,7 +38,7 @@ export function StartListe({ gruppen, monteur }: { gruppen: StartGruppe[]; monte
         const mehrOffen = offen.includes(g.titel);
         return (
           <section key={g.titel}>
-            <h2 className="px-1 pb-2 text-[11px] font-medium uppercase tracking-[0.06em] text-muted-foreground">{g.titel}</h2>
+            <h2 className="px-1 pb-2 text-[0.6875rem] font-medium uppercase tracking-[0.06em] text-muted-foreground">{g.titel}</h2>
             <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {gross.map((e) => (
                 <li key={e.pfad}>

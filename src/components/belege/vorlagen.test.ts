@@ -5,7 +5,7 @@ import {
   type PreisArtikel, type VorlagePosition,
 } from "./vorlagen";
 import { inAppBrowser, linkAdresse, mailAdresse, teilenText, telefonFuerWhatsapp, tokenGueltig, unterschriftPfad, whatsappAdresse } from "./bestaetigung";
-import { artikelIdsVon, datenblaetterOrdnen, paketNamen } from "./datenblattLogik";
+import { artikelIdsVon, datenblaetterOrdnen, fuerKunden, paketNamen, sichtbarkeitLesen } from "./datenblattLogik";
 
 const firma = { material_aufschlag: 30, stundensatz: 72 };
 
@@ -174,6 +174,15 @@ describe("Datenblätter", () => {
     expect(l.map((d) => d.artikel)).toEqual(["Modul", "Wechselrichter"]);
     expect(paketNamen(l)).toEqual(["Datenblatt.pdf", "Datenblatt (2).pdf"]);
     expect(paketNamen([{ name: "a/b:c.pdf", pfad: "x" }])).toEqual(["a-b-c.pdf"]);
+  });
+  it("Sichtbarkeit: intern nie, mit dem Angebot immer, nach Auftrag erst bei Annahme", () => {
+    expect(fuerKunden("intern", "angenommen")).toBe(false);
+    expect(fuerKunden("angebot", "offen")).toBe(true);
+    expect(fuerKunden(undefined, "offen")).toBe(true);
+    expect(fuerKunden("auftrag", "offen")).toBe(false);
+    expect(fuerKunden("auftrag", "angenommen")).toBe(true);
+    expect(sichtbarkeitLesen("quatsch")).toBe("angebot");
+    expect(sichtbarkeitLesen("intern")).toBe("intern");
   });
 });
 

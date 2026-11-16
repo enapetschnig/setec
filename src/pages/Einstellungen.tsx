@@ -34,6 +34,7 @@ import { authFehler, vorlaeufigesPasswort } from "@/lib/konto";
 import { name, type Firma, type Profil, type Rolle } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { KUNDE } from "@/kunde.config";
+import { SCHRIFTGROESSEN, schriftLesen, schriftSetzen, type Schriftgroesse } from "@/lib/schrift";
 
 type Bereich = "betrieb" | "konto" | "app";
 
@@ -591,6 +592,27 @@ function Mitarbeiter() {
   );
 }
 
+/** Schriftgröße für dieses Gerät — wirkt sofort, alles wächst mit (lib/schrift.ts) */
+function SchriftKarte() {
+  const [wahl, setWahl] = useState<Schriftgroesse>(schriftLesen);
+  const waehlen = (w: Schriftgroesse) => { schriftSetzen(w); setWahl(w); };
+  return (
+    <Karte titel="Schriftgröße">
+      <p className="mb-3 text-sm text-muted-foreground">Größer = Schrift und Knöpfe wachsen mit. Gilt nur für dieses Gerät.</p>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" role="group" aria-label="Schriftgröße">
+        {SCHRIFTGROESSEN.map((s) => (
+          <button key={s.wert} type="button" aria-pressed={wahl === s.wert} onClick={() => waehlen(s.wert)}
+            className={cn("flex min-h-[3.5rem] flex-col items-center justify-center rounded-lg border px-2 py-2 font-medium transition-colors",
+              wahl === s.wert ? "border-primary bg-primary-soft text-primary" : "bg-card hover:bg-muted")}>
+            <span aria-hidden className="leading-none" style={{ fontSize: `${s.px * 1.25}px` }}>Aa</span>
+            <span className="mt-1 text-sm">{s.name}</span>
+          </button>
+        ))}
+      </div>
+    </Karte>
+  );
+}
+
 function Konto() {
   const navigate = useNavigate();
   const { profil, neuLaden } = useSitzung();
@@ -628,6 +650,8 @@ function Konto() {
 
   return (
     <div className="space-y-4">
+      <SchriftKarte />
+
       <Karte titel="Meine Daten">
         <div className="grid gap-3 sm:grid-cols-3">
           <Feld label="Vorname"><Input className="h-11" value={vorname} onChange={(e) => setVorname(e.target.value)} /></Feld>

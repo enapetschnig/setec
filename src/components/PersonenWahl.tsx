@@ -44,7 +44,7 @@ export function PersonenWahl({
         const an = gewaehlt.includes(p.id);
         return (
           <button key={p.id} type="button" className={cn(chip(an), "pl-1.5")} aria-pressed={an} onClick={() => umschalten(p.id)}>
-            <Avatar profil={p} className="h-7 w-7 text-[11px]" />
+            <Avatar profil={p} className="h-7 w-7 text-[0.6875rem]" />
             {p.vorname || p.nachname}{p.id === ich ? " (ich)" : ""}
           </button>
         );

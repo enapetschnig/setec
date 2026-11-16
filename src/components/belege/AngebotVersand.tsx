@@ -3,18 +3,20 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   CheckCircle2, Copy, ExternalLink, FileDown, FileText, Link2, Loader2, Mail, MessageCircle, MessageSquareText, MoreVertical, Paperclip,
-  RefreshCw, Share2, ShieldOff,
+  RefreshCw, Send, Share2, ShieldOff,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useSitzung } from "@/hooks/useSitzung";
 import { datum, euro } from "@/lib/format";
-import { pdfTeilenOderLaden } from "@/lib/pdfBasis";
+import { pdfDateiname, pdfTeilenOderLaden } from "@/lib/pdfBasis";
 import { TON_KLASSE, type Beleg } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { linkAdresse, mailAdresse, teilenText, VERLAUF_TEXT, whatsappAdresse, type VerlaufArt } from "./bestaetigung";
-import { artikelIdsVon, datenblattLaden, paketNamen, paketZip, useDatenblaetter } from "./datenblaetter";
+import { linkAdresse, teilenText, VERLAUF_TEXT, whatsappAdresse, type VerlaufArt } from "./bestaetigung";
+import { BelegMailDialog } from "./BelegMailDialog";
+import { artikelIdsVon, datenblattLaden, fuerKunden, paketNamen, paketZip, useDatenblaetter } from "./datenblaetter";
+import { mailVorgabe } from "./mail";
 import type { EditorPosition, KatalogLeistung } from "./editor";
 
 type Verlauf = { id: string; art: VerlaufArt; name: string | null; text: string | null; unterschrift_pfad: string | null; betrag: number | null; gelesen: boolean; created_at: string };
@@ -41,17 +43,23 @@ export function useAngebotOnline(belegId: string, aktiv: boolean) {
 /**
  * Unter dem Status eines fertigen Angebots: „Kunde bestätigt online“ (Link
  * erzeugen, teilen, sperren; Verlauf mit Annahme, Rückfragen, Unterschrift)
- * und die Datenblätter der Artikel als Anhang. Verschickt wird nichts von
- * hier — Mail-App und WhatsApp öffnen sich mit fertigem Text.
+ * und die Datenblätter der Artikel als Anhang. „Per E-Mail“ schickt das PDF
+ * samt Datenblättern und Link über die Edge Function `beleg-mail`
+ * (`BelegMailDialog`); WhatsApp und die Mail-App öffnen sich mit fertigem Text.
+ * Datenblätter: nur „mit dem Angebot“ — „erst nach Auftrag“ erst nach der
+ * Annahme, „nur intern“ nie (`fuerKunden`).
  */
 export function AngebotVersand({
-  beleg, positionen, katalog, pdfErzeugen,
+  beleg, positionen, katalog, pdfErzeugen, mailOffen, onMailOffen,
 }: {
   beleg: Beleg;
   positionen: EditorPosition[];
   katalog: KatalogLeistung[];
   /** das PDF, wie es der Kunde bekommt */
   pdfErzeugen: () => Promise<{ blob: Blob; dateiname: string }>;
+  /** „Per E-Mail“-Dialog — der Knopf steht auch in der Status-Karte des Editors */
+  mailOffen: boolean;
+  onMailOffen: (o: boolean) => void;
 }) {
   const qc = useQueryClient();
   const { firma } = useSitzung();
@@ -72,7 +80,7 @@ export function AngebotVersand({
 
   const { data: kunde } = useQuery({
     queryKey: ["kunden", "telefon", beleg.kunde_id],
-    enabled: !!beleg.kunde_id && !!link,
+    enabled: !!beleg.kunde_id && fertig,
     queryFn: async () => (await supabase.from("kunden").select("telefon, email").eq("id", beleg.kunde_id!).maybeSingle()).data,
   });
 
@@ -123,7 +131,8 @@ export function AngebotVersand({
   // ── Datenblätter ──
   const namen = useMemo(() => new Map(positionen.filter((p) => p.artikel_id).map((p) => [p.artikel_id!, p.bezeichnung])), [positionen]);
   const ids = useMemo(() => artikelIdsVon(positionen, katalog), [positionen, katalog]);
-  const { data: blaetter = [] } = useDatenblaetter(ids, namen);
+  const { data: alleBlaetter = [] } = useDatenblaetter(ids, namen);
+  const blaetter = useMemo(() => alleBlaetter.filter((d) => fuerKunden(d.sichtbar, beleg.status)), [alleBlaetter, beleg.status]);
   const [ohne, setOhne] = useState<Set<string>>(new Set());
   const gewaehlt = blaetter.filter((d) => !ohne.has(d.pfad));
 
@@ -212,8 +221,8 @@ export function AngebotVersand({
                 <Button variant="outline" className="h-11" asChild>
                   <a href={whatsappAdresse(text, kunde?.telefon)} target="_blank" rel="noopener noreferrer"><MessageCircle className="h-4 w-4" /> WhatsApp</a>
                 </Button>
-                <Button variant="outline" className={cn("h-11", !kannTeilen && "col-span-2 sm:col-span-1")} asChild>
-                  <a href={mailAdresse(beleg.empf_email ?? kunde?.email, betreff, text)}><Mail className="h-4 w-4" /> E-Mail</a>
+                <Button variant="outline" className={cn("h-11", !kannTeilen && "col-span-2 sm:col-span-1")} onClick={() => onMailOffen(true)}>
+                  <Mail className="h-4 w-4" /> E-Mail
                 </Button>
               </div>
             </div>
@@ -225,6 +234,7 @@ export function AngebotVersand({
                 <li key={v.id} className="flex items-start gap-2.5 py-1.5">
                   {v.art === "angenommen" ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                     : v.art === "rueckfrage" ? <MessageSquareText className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                      : v.art === "gesendet" ? <Send className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                       : <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-muted-foreground/40" aria-hidden />}
                   <div className="min-w-0 flex-1">
                     <p>
@@ -249,7 +259,10 @@ export function AngebotVersand({
       {blaetter.length > 0 && (
         <section className="rounded-lg border bg-card p-4" aria-label="Datenblätter">
           <h2 className="flex items-center gap-2 text-[0.9375rem] font-semibold"><Paperclip className="h-4 w-4 text-primary" /> Datenblätter als Anhang</h2>
-          <p className="mt-0.5 text-sm text-muted-foreground">Aus den Artikeln im Angebot — der Kunde sieht sie auch beim Bestätigungslink.</p>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            Aus den Artikeln im Angebot — der Kunde sieht sie auch beim Bestätigungslink.
+            {alleBlaetter.length > blaetter.length && ` Weitere ${alleBlaetter.length - blaetter.length} sind am Artikel auf „nur intern“${beleg.status === "angenommen" ? "" : " oder „erst nach Auftrag“"} gestellt.`}
+          </p>
           <ul className="mt-2 divide-y text-sm">
             {blaetter.map((d) => (
               <li key={d.pfad} className="flex items-center gap-2 py-1.5">
@@ -267,6 +280,24 @@ export function AngebotVersand({
             Angebot + {gewaehlt.length} {gewaehlt.length === 1 ? "Datenblatt" : "Datenblätter"} {kannTeilen ? "teilen" : "laden (ZIP)"}
           </Button>
         </section>
+      )}
+
+      {mailOffen && (
+        <BelegMailDialog
+          open={mailOffen}
+          onOpenChange={onMailOffen}
+          belegId={beleg.id}
+          art="Angebot"
+          vorgabe={mailVorgabe({
+            art: "Angebot", nummer: beleg.nummer, betreff: beleg.betreff, an: beleg.empf_email ?? kunde?.email, firma: firma?.name,
+            telefon: firma?.telefon, link: offen ? link : null, giltBis: beleg.gueltig_bis ? datum(beleg.gueltig_bis) : null,
+            datenblaetter: gewaehlt.length,
+          })}
+          anhangName={pdfDateiname("Angebot", beleg.nummer, beleg.empf_name)}
+          vorbereiten={async () => (await pdfErzeugen()).blob}
+          datenblaetter={blaetter}
+          startGewaehlt={gewaehlt.map((d) => d.pfad)}
+        />
       )}
     </>
   );

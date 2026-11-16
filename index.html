@@ -32,6 +32,13 @@
 
   <body>
     <div id="root"></div>
+    <!-- Schriftgröße je Gerät vor dem Start setzen (kein Springen) — Werte wie src/lib/schrift.ts -->
+    <script>
+      try {
+        var s = localStorage.getItem('setec.schrift');
+        if (s === 'gross' || s === 'sehr_gross' || s === 'extra_gross') document.documentElement.dataset.schrift = s;
+      } catch (e) { /* gesperrter Speicher: Normal */ }
+    </script>
     <!-- Chrome bietet die Installation genau einmal an, oft bevor das App-Bündel
          geladen ist (schwaches Netz). Hier sofort auffangen; lib/installieren.ts
          übernimmt es aus window.__installPrompt. -->

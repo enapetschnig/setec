@@ -8,7 +8,32 @@ import type { EditorPosition, KatalogLeistung } from "./editor";
 
 export const DATEIEN_BUCKET = "projekt-dateien"; // Paket F legt Artikel-Dateien unter artikel/<id>/… ab
 
-export type Datenblatt = { id?: string; artikel_id?: string; name: string; pfad: string; artikel?: string | null };
+/**
+ * Sichtbarkeit je Datenblatt am Artikel (Spalte `artikel_dateien.sichtbar`,
+ * Migration 20261116170000): intern = nie nach außen, angebot = geht mit dem
+ * Angebot mit (Standard), auftrag = erst wenn das Angebot angenommen ist.
+ * Dieselbe Regel steht in der Datenbank (`angebot_datenblaetter`,
+ * `datenblatt_oeffentlich`) und in der Edge Function `beleg-mail`.
+ */
+export type Sichtbarkeit = "intern" | "angebot" | "auftrag";
+
+export const SICHTBARKEITEN: { wert: Sichtbarkeit; text: string; kurz: string }[] = [
+  { wert: "intern", text: "Nur intern", kurz: "intern" },
+  { wert: "angebot", text: "Mit dem Angebot", kurz: "mit Angebot" },
+  { wert: "auftrag", text: "Erst nach Auftrag", kurz: "nach Auftrag" },
+];
+
+export const sichtbarkeitLesen = (w: unknown): Sichtbarkeit => (w === "intern" || w === "auftrag" ? w : "angebot");
+
+/** Darf das Datenblatt zu einem Angebot in diesem Status zum Kunden? */
+export function fuerKunden(sichtbar: Sichtbarkeit | undefined, angebotStatus: string | null | undefined): boolean {
+  const s = sichtbar ?? "angebot";
+  if (s === "intern") return false;
+  if (s === "auftrag") return angebotStatus === "angenommen";
+  return true;
+}
+
+export type Datenblatt = { id?: string; artikel_id?: string; name: string; pfad: string; artikel?: string | null; sichtbar?: Sichtbarkeit };
 
 /** Artikel des Angebots: Artikel-Positionen und das Material der Leistungen */
 export function artikelIdsVon(positionen: Pick<EditorPosition, "artikel_id" | "leistung_id">[], katalog: Pick<KatalogLeistung, "id" | "leistung_material">[]): string[] {

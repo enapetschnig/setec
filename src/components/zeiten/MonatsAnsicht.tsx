@@ -102,7 +102,7 @@ export function MonatsAnsicht({ person, onBuchen, onWahl }: {
                         title={t.feiertag ?? undefined}
                         className={cn("flex h-12 w-full flex-col items-center justify-center rounded-md text-xs transition-shadow sm:h-14",
                           TON[t.ton], tag === t.iso && "ring-2 ring-primary ring-offset-1", t.iso === heute && "font-bold")}>
-                        <span className="text-[10px] leading-none opacity-70">{t.tag}</span>
+                        <span className="text-[0.625rem] leading-none opacity-70">{t.tag}</span>
                         <span className="zahl text-sm font-semibold leading-tight">
                           {t.ist ? zahl(t.ist) : ab ?? (t.feiertag ? "F" : "")}
                         </span>
@@ -112,13 +112,13 @@ export function MonatsAnsicht({ person, onBuchen, onWahl }: {
                 })}
                 <td className={cn("zahl text-xs font-semibold sm:text-sm", w.ist < w.soll && w.tage.some((t) => t && t.iso < heute) && "text-status-rot-fg")}>
                   {zahl(w.ist)}
-                  <span className="block text-[10px] font-normal text-muted-foreground">KW {w.kw}</span>
+                  <span className="block text-[0.625rem] font-normal text-muted-foreground">KW {w.kw}</span>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
-        <p className="mt-1 flex flex-wrap gap-x-3 gap-y-1 px-1 text-[11px] text-muted-foreground">
+        <p className="mt-1 flex flex-wrap gap-x-3 gap-y-1 px-1 text-[0.6875rem] text-muted-foreground">
           <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-status-gruen" /> Soll erreicht</span>
           <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-status-gelb" /> weniger</span>
           <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-status-rot" /> nichts gebucht</span>
@@ -171,7 +171,7 @@ export function MonatAlle({ mitarbeiter, onPerson }: { mitarbeiter: Profil[]; on
             {zeilen.map(({ p, m }) => (
               <tr key={p.id} className="cursor-pointer hover:bg-muted/50" onClick={() => onPerson(p.id)}>
                 <td className="px-3 py-2">
-                  <span className="flex min-h-9 items-center gap-2 font-medium"><Avatar profil={p} className="h-7 w-7 text-[11px]" /> {p.vorname}</span>
+                  <span className="flex min-h-9 items-center gap-2 font-medium"><Avatar profil={p} className="h-7 w-7 text-[0.6875rem]" /> {p.vorname}</span>
                 </td>
                 <td className="zahl px-2 py-2 text-right">{zahl(m.ist + m.abwesend)}</td>
                 <td className="zahl px-2 py-2 text-right text-muted-foreground">{zahl(m.soll)}</td>

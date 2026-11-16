@@ -166,6 +166,11 @@
   html {
     -webkit-tap-highlight-color: transparent;
   }
+  /* Schriftgröße je Gerät (Einstellungen → Mein Konto, lib/schrift.ts): 1rem wächst,
+     alles in rem wächst mit. Werte gleich wie SCHRIFTGROESSEN. */
+  :root[data-schrift="gross"] { font-size: 17px; }
+  :root[data-schrift="sehr_gross"] { font-size: 18.5px; }
+  :root[data-schrift="extra_gross"] { font-size: 20px; }
 
   body {
     @apply bg-background text-foreground;
@@ -186,7 +191,7 @@
 
   /* Eingabefelder am Handy 16 px — sonst zoomt iOS beim Antippen hinein */
   input, textarea, select {
-    font-size: 16px;
+    font-size: max(16px, 1rem);
   }
   @media (min-width: 1024px) {
     input, textarea, select { font-size: 0.875rem; }

@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ArtikelDialog } from "@/components/stamm/ArtikelDialog";
 import { ArtikelLieferantDialog } from "@/components/material/ArtikelLieferantDialog";
 import {
-  artikelDateiHochladen, artikelDateiLoeschen, lagerplatzSetzen, platzSchluessel, useArtikelBewegungen, useArtikelDateien,
+  artikelDateiHochladen, artikelDateiLoeschen, artikelDateiSichtbar, lagerplatzSetzen, platzSchluessel, useArtikelBewegungen, useArtikelDateien,
   useArtikelLieferanten, useLagerplaetze, type ArtikelDateiMitUrl, type ArtikelLieferant,
 } from "@/components/material/artikelDaten";
 import { aufschlagAus, besterLieferant, bewegungsGruppe, ekVon, mitBestandDanach, type BewegungsFilter } from "@/components/material/artikelLogik";
@@ -25,6 +25,7 @@ import { dezimalLesen, euro, zahl } from "@/lib/format";
 import { artikelVk, vkHerkunft } from "@/lib/preise";
 import { BUCHUNGS_ART, name, type Artikel, type BuchungsArt } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { SICHTBARKEITEN, sichtbarkeitLesen, type Sichtbarkeit } from "@/components/belege/datenblattLogik";
 
 const FILTER: { wert: BewegungsFilter; text: string }[] = [
   { wert: "alle", text: "Alle" }, { wert: "zugang", text: "Zugänge" }, { wert: "abgang", text: "Abgänge" },
@@ -252,6 +253,15 @@ function Datenblaetter({ artikelId, blaetter, darf }: { artikelId: string; blaet
       toast.error("Nicht entfernt", { description: fehlerText(e) });
     }
   };
+  const sichtbarSetzen = async (d: ArtikelDateiMitUrl, wert: Sichtbarkeit) => {
+    try {
+      await artikelDateiSichtbar(d.id, wert);
+      await neuLaden("artikel");
+      toast.success(wert === "intern" ? "Nur intern — geht nie zum Kunden" : wert === "auftrag" ? "Geht erst nach dem Auftrag zum Kunden" : "Geht mit dem Angebot zum Kunden");
+    } catch (e) {
+      toast.error("Nicht gespeichert", { description: fehlerText(e) });
+    }
+  };
   if (!darf && !blaetter.length) return null;
   return (
     <Karte titel="Datenblätter" ohnePolster aktion={darf ? (
@@ -264,16 +274,26 @@ function Datenblaetter({ artikelId, blaetter, darf }: { artikelId: string; blaet
       </>
     ) : undefined}>
       {!blaetter.length ? (
-        <p className="px-4 pb-3 text-sm text-muted-foreground lg:px-5">Noch kein Datenblatt. PDF vom Hersteller hochladen — es geht später auch als Anhang zum Angebot.</p>
+        <p className="px-4 pb-3 text-sm text-muted-foreground lg:px-5">Noch kein Datenblatt. PDF vom Hersteller hochladen — je Datei wählbar: nur intern, mit dem Angebot oder erst nach dem Auftrag.</p>
       ) : (
         <ul className="divide-y border-t">
           {blaetter.map((d) => (
-            <li key={d.id} className="flex items-center gap-2 px-4 py-1.5 lg:px-5">
+            <li key={d.id} className="flex flex-wrap items-center gap-x-2 gap-y-1 px-4 py-1.5 lg:px-5">
               <FileText className="h-4 w-4 shrink-0 text-primary" />
               <a href={d.url ?? undefined} target="_blank" rel="noreferrer"
-                className="flex min-h-11 min-w-0 flex-1 items-center truncate text-sm font-medium text-primary hover:underline">
+                className="flex min-h-11 min-w-0 flex-1 basis-40 items-center truncate text-sm font-medium text-primary hover:underline">
                 {d.name ?? "Datenblatt"}
               </a>
+              {darf && (
+                <Select value={sichtbarkeitLesen(d.sichtbar)} onValueChange={(w) => void sichtbarSetzen(d, w as Sichtbarkeit)}>
+                  <SelectTrigger className="h-11 w-auto min-w-[10.5rem] shrink-0 text-sm" aria-label={`Wer sieht ${d.name ?? "das Datenblatt"}`}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SICHTBARKEITEN.map((s) => <SelectItem key={s.wert} value={s.wert} className="h-11">{s.text}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              )}
               {darf && (
                 <Button variant="ghost" size="icon" className="h-11 w-11 shrink-0 text-muted-foreground" aria-label={`${d.name} entfernen`}
                   onClick={() => void loeschen(d)}>

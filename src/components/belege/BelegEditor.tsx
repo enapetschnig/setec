@@ -1,10 +1,10 @@
 import { supabase } from "@/integrations/supabase/client";
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
-  Ban, Calculator, Check, Clock, Copy, Download, Eye, FileText, FolderInput, HandCoins, LayoutTemplate, LockOpen, Mic, MoreHorizontal, MoreVertical, PenLine,
+  Ban, Calculator, Check, Clock, Copy, Download, Eye, FileText, FolderInput, HandCoins, LayoutTemplate, LockOpen, Mail, Mic, MoreHorizontal, MoreVertical, PenLine,
   Percent, Plus, LayoutGrid, Receipt, RotateCcw, Rows3, Save, Sparkles, SplitSquareHorizontal, ThumbsDown, ThumbsUp, Trash2, Type, Undo2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -59,6 +59,8 @@ import { SpracheDialog, type SprachUebernahme } from "./SpracheDialog";
 import { TeilrechnungDialog } from "./TeilrechnungDialog";
 import { Eingabezeile } from "./Eingabezeile";
 import { AngebotVersand } from "./AngebotVersand";
+import { BelegMailDialog } from "./BelegMailDialog";
+import { mailArt, mailVorgabe, versendbar } from "./mail";
 import { vorlageEinfuegen } from "./vorlagen";
 import { useVorlagen, vorlageBerechnen } from "./vorlagenDaten";
 import { VorlagenDialog, type VorlageWahl } from "./VorlagenDialog";
@@ -121,7 +123,7 @@ export function BelegEditor({
   const qc = useQueryClient();
   const neuLaden = useNeuLaden();
   const pc = useIstPc();
-  const { firma } = useSitzung();
+  const { firma, istChef } = useSitzung();
   const heute = isoTag();
 
   // ── Zustand ──
@@ -146,6 +148,7 @@ export function BelegEditor({
   const [seitenVorschau, setSeitenVorschauState] = useState(() => { try { return localStorage.getItem(VORSCHAU_KEY) !== "aus"; } catch { return true; } });
   const setSeitenVorschau = (an: boolean) => { setSeitenVorschauState(an); try { localStorage.setItem(VORSCHAU_KEY, an ? "an" : "aus"); } catch { /* egal */ } };
   const [vollVorschau, setVollVorschau] = useState(false);
+  const [mailOffen, setMailOffen] = useState(false);
   const breitGenug = useMedia("(min-width: 1536px)");
   const schmal = !useMedia("(min-width: 640px)");
   const [dialog, setDialog] = useState<Dialog>(autoSprache ? "sprache" : autoImport ? "import" : autoKi ? "ki" : null);
@@ -198,6 +201,19 @@ export function BelegEditor({
   const { data: nachfolger } = useNachfolger(id, !neu && status === "storniert");
   const stornoBeleg = nachfolger?.storno ?? null;
   const korrekturBeleg = nachfolger?.korrektur ?? null;
+  // Per E-Mail (Edge Function beleg-mail): nur der Chef, nur fertige Belege
+  const mailMoeglich = istChef && !!beleg && versendbar(beleg);
+  const { data: mailDaten } = useQuery({
+    queryKey: ["belege", "gesendet", id],
+    enabled: mailMoeglich,
+    queryFn: async () => {
+      const [k, g] = await Promise.all([
+        beleg?.kunde_id ? supabase.from("kunden").select("email").eq("id", beleg.kunde_id).maybeSingle() : Promise.resolve({ data: null }),
+        supabase.from("angebot_verlauf").select("name, created_at").eq("beleg_id", id).eq("art", "gesendet").order("created_at", { ascending: false }).limit(1).maybeSingle(),
+      ]);
+      return { kundeMail: (k.data as { email: string | null } | null)?.email ?? null, zuletzt: g.data };
+    },
+  });
   // Korrektur: die Rechnung, die sie ersetzt
   const ersetztQuelle = useBelegKurz(beleg?.korrektur_von ?? null);
 
@@ -649,6 +665,22 @@ export function BelegEditor({
     if (pc) setVorschau({ url: URL.createObjectURL(blob), blob, dateiname });
     else await pdfTeilenOderLaden(blob, dateiname);
   });
+  /** Vor dem Mailversand einer Rechnung: das Original muss im Archiv liegen — die Function hängt nur dieses an */
+  const originalSichern = async (): Promise<null> => {
+    if (!firma) throw new Error("Firmendaten fehlen — bitte in den Einstellungen eintragen.");
+    if (dirty) throw new Error("Bitte zuerst speichern.");
+    if (!(await archivLaden(id))) {
+      const { blob } = await entwurfPdf(firma);
+      if (!(await archivieren(id, blob))) throw new Error("Das PDF konnte nicht abgelegt werden — bitte einmal „PDF“ öffnen.");
+    }
+    return null;
+  };
+  /** Angebot: das PDF wie beim Herunterladen — aber nie aus ungespeicherten Änderungen */
+  const angebotPdf = async () => {
+    if (!firma) throw new Error("Firmendaten fehlen — bitte in den Einstellungen eintragen.");
+    if (dirty) throw new Error("Bitte zuerst speichern.");
+    return entwurfPdf(firma);
+  };
   const vorschauSchliessen = () => {
     if (vorschau) URL.revokeObjectURL(vorschau.url);
     setVorschau(null);
@@ -838,6 +870,7 @@ export function BelegEditor({
         {!neu && !istStorno && <MenuePunkt icon={Copy} onClick={() => kopieren(false)}>Kopieren (neuer Entwurf)</MenuePunkt>}
         {istAngebot && anzahl > 0 && <MenuePunkt icon={LayoutTemplate} onClick={() => setDialog("vorlageSpeichern")}>Als Vorlage speichern</MenuePunkt>}
         <MenuePunkt icon={Download} onClick={pdf}>{pc ? "PDF ansehen" : "PDF teilen / laden"}</MenuePunkt>
+        {mailMoeglich && <MenuePunkt icon={Mail} onClick={() => setMailOffen(true)}>Per E-Mail senden</MenuePunkt>}
         {!istAngebot && status === "offen" && (
           <MenuePunkt icon={LockOpen} onClick={() => setFrage("aendern")}>Rechnung ändern</MenuePunkt>
         )}
@@ -952,6 +985,15 @@ export function BelegEditor({
         : istStorno
           ? [{ text: pc ? "PDF" : "PDF teilen", icon: FileText, onClick: pdf, primaer: true }]
           : [{ text: "PDF", icon: FileText, onClick: pdf }];
+  // „Per E-Mail“ gleich neben dem PDF — beim offenen Beleg die Hauptaktion
+  if (mailMoeglich && !entsperrt) {
+    const haupt = status === "offen" || istStorno;
+    const pdfStelle = statusKnoepfe.findIndex((k) => k.onClick === pdf);
+    const knopf = { text: "Per E-Mail", icon: Mail, onClick: () => setMailOffen(true), primaer: haupt };
+    if (haupt) statusKnoepfe.forEach((k) => { if (k.onClick === pdf) k.primaer = false; });
+    if (haupt) statusKnoepfe.unshift(knopf);
+    else statusKnoepfe.splice(pdfStelle < 0 ? statusKnoepfe.length : pdfStelle + 1, 0, knopf);
+  }
   const nebenAnzahl = statusKnoepfe.filter((k) => !k.primaer).length;
 
   const statusKarte = beleg && !entwurf && (
@@ -960,6 +1002,12 @@ export function BelegEditor({
         <StatusBadge status={anzeigeStatus} />
         <p className="min-w-0 text-sm text-muted-foreground">{statusText}</p>
       </div>
+      {!istAngebot && mailDaten?.zuletzt && (
+        <p className="mt-2 flex items-start gap-1.5 text-sm text-muted-foreground">
+          <Mail className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+          <span>Per E-Mail an {mailDaten.zuletzt.name} am {new Date(mailDaten.zuletzt.created_at).toLocaleString("de-AT", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
+        </p>
+      )}
       {folge.length > 0 && (
         <p className="mt-2 text-sm">
           In Rechnung übernommen:{" "}
@@ -1108,7 +1156,23 @@ export function BelegEditor({
         </p>
       )}
       {istAngebot && beleg && !entwurf && firma && (
-        <AngebotVersand beleg={beleg} positionen={positionen} katalog={katalog} pdfErzeugen={() => entwurfPdf(firma)} />
+        <AngebotVersand beleg={beleg} positionen={positionen} katalog={katalog} pdfErzeugen={angebotPdf}
+          mailOffen={mailOffen && mailMoeglich} onMailOffen={setMailOffen} />
+      )}
+      {!istAngebot && beleg && mailMoeglich && mailOffen && (
+        <BelegMailDialog
+          open={mailOffen}
+          onOpenChange={setMailOffen}
+          belegId={beleg.id}
+          art={mailArt(beleg)}
+          vorgabe={mailVorgabe({
+            art: mailArt(beleg), nummer: beleg.nummer, betreff: beleg.betreff, an: beleg.empf_email ?? mailDaten?.kundeMail,
+            firma: firma?.name, telefon: firma?.telefon, datum: datum(beleg.datum), betrag: euro(Number(beleg.brutto)),
+            faellig: beleg.faellig_am ? datum(beleg.faellig_am) : null, bezahlt: status === "bezahlt", stornoZu: stornoQuelle.data?.nummer ?? null,
+          })}
+          anhangName={pdfDateiname(typText, beleg.nummer, beleg.empf_name)}
+          vorbereiten={originalSichern}
+        />
       )}
       {beleg && !istAngebot && !entwurf && !istStorno && <OpKarte rechnung={beleg} onGeaendert={() => void neuHolen()} />}
 

@@ -4,7 +4,7 @@
  * `angebot_oeffentlich`, `angebot_annehmen`, `angebot_rueckfrage`.
  */
 
-export type VerlaufArt = "link" | "geoeffnet" | "angenommen" | "rueckfrage" | "gesperrt";
+export type VerlaufArt = "link" | "geoeffnet" | "angenommen" | "rueckfrage" | "gesperrt" | "gesendet";
 
 export const VERLAUF_TEXT: Record<VerlaufArt, string> = {
   link: "Bestätigungslink erzeugt",
@@ -12,6 +12,7 @@ export const VERLAUF_TEXT: Record<VerlaufArt, string> = {
   angenommen: "Online angenommen",
   rueckfrage: "Rückfrage",
   gesperrt: "Link gesperrt",
+  gesendet: "Per E-Mail gesendet",
 };
 
 /** Was die öffentliche Seite über das Angebot weiß */

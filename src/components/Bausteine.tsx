@@ -149,7 +149,7 @@ export function Karte({
         <div className="flex items-center justify-between gap-3 px-4 pb-2 pt-3.5 lg:px-5">
           {titel && <h2 className="text-[0.9375rem] font-semibold">{titel}</h2>}
           {alle && (
-            <Link to={alle.to} className="-my-2.5 -mr-2 inline-flex min-h-11 shrink-0 items-center gap-1 px-2 text-[13px] font-medium text-muted-foreground hover:text-foreground">
+            <Link to={alle.to} className="-my-2.5 -mr-2 inline-flex min-h-11 shrink-0 items-center gap-1 px-2 text-[0.8125rem] font-medium text-muted-foreground hover:text-foreground">
               {alle.text ?? "Alle anzeigen"} <ArrowRight className="h-3.5 w-3.5" />
             </Link>
           )}
@@ -163,5 +163,5 @@ export function Karte({
 
 /** Kleine Überschrift in Großbuchstaben (Gruppen auf der Startseite, Formularabschnitte) */
 export function Gruppentitel({ children, className }: { children: ReactNode; className?: string }) {
-  return <h2 className={cn("px-1 pb-2 text-[11px] font-medium uppercase tracking-[0.06em] text-muted-foreground", className)}>{children}</h2>;
+  return <h2 className={cn("px-1 pb-2 text-[0.6875rem] font-medium uppercase tracking-[0.06em] text-muted-foreground", className)}>{children}</h2>;
 }

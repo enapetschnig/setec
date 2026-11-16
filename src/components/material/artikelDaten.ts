@@ -87,6 +87,12 @@ export async function artikelDateiHochladen(artikelId: string, roh: File, art: "
   }
 }
 
+/** Wer ein Datenblatt sieht: nur intern, mit dem Angebot, erst nach Auftrag (nur Chef — RLS) */
+export async function artikelDateiSichtbar(id: string, sichtbar: "intern" | "angebot" | "auftrag"): Promise<void> {
+  const { error } = await supabase.from("artikel_dateien").update({ sichtbar }).eq("id", id);
+  if (error) throw error;
+}
+
 /** Erst die Zeile, dann die Datei — eine verwaiste Datei stört nicht, eine Zeile ohne Datei schon. */
 export async function artikelDateiLoeschen(d: ArtikelDatei): Promise<void> {
   const { error } = await supabase.from("artikel_dateien").delete().eq("id", d.id);

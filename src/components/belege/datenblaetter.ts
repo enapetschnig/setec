@@ -1,26 +1,21 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { DATEIEN_BUCKET, datenblaetterOrdnen, type Datenblatt } from "./datenblattLogik";
+import { DATEIEN_BUCKET, datenblaetterOrdnen, sichtbarkeitLesen, type Datenblatt } from "./datenblattLogik";
 
-export { artikelIdsVon, DATEIEN_BUCKET, paketNamen, type Datenblatt } from "./datenblattLogik";
+export { artikelIdsVon, DATEIEN_BUCKET, fuerKunden, paketNamen, type Datenblatt } from "./datenblattLogik";
 
 /**
  * Datenblätter der Artikel im Angebot — als Anhang zum Angebot.
  * Abgelegt werden sie am Artikel (Tabelle `artikel_dateien`, Speicher
- * `dateien`, Pfad `artikel/<artikel_id>/…`). Fehlt die Tabelle noch oder
- * schlägt die Abfrage fehl, gibt es eben keine Anhänge — kein Fehler.
+ * `projekt-dateien`, Pfad `artikel/<artikel_id>/…`). Schlägt die Abfrage
+ * fehl, gibt es eben keine Anhänge — kein Fehler.
  */
 
-// `artikel_dateien` steht (noch) nicht in den erzeugten Typen
-type LoseAbfrage = {
-  from: (t: string) => {
-    select: (s: string) => {
-      in: (f: string, w: string[]) => { eq: (f: string, w: string) => Promise<{ data: unknown[] | null; error: { message: string } | null }> };
-    };
-  };
-};
-
-/** `namen`: Artikel-ID → Bezeichnung (aus dem Angebot — kein Join, die Tabelle kommt aus einem anderen Paket) */
+/**
+ * `namen`: Artikel-ID → Bezeichnung (aus dem Angebot). Liefert alle
+ * Datenblätter samt Sichtbarkeit — was davon zum Kunden darf, entscheidet
+ * `fuerKunden` (intern nie, „nach Auftrag“ erst bei Annahme).
+ */
 export function useDatenblaetter(artikelIds: string[], namen: Map<string, string>, aktiv = true) {
   return useQuery({
     queryKey: ["artikel_dateien", "datenblaetter", artikelIds.join(",")],
@@ -28,18 +23,16 @@ export function useDatenblaetter(artikelIds: string[], namen: Map<string, string
     staleTime: 60_000,
     retry: false,
     queryFn: async (): Promise<Datenblatt[]> => {
-      try {
-        const { data, error } = await (supabase as unknown as LoseAbfrage)
-          .from("artikel_dateien")
-          .select("id, artikel_id, name, pfad")
-          .in("artikel_id", artikelIds.slice(0, 300))
-          .eq("art", "datenblatt");
-        if (error) return [];
-        return datenblaetterOrdnen(((data ?? []) as { id: string; artikel_id: string; name: string | null; pfad: string }[])
-          .map((d) => ({ id: d.id, artikel_id: d.artikel_id, name: d.name || d.pfad.split("/").pop() || "Datenblatt", pfad: d.pfad, artikel: namen.get(d.artikel_id) ?? null })));
-      } catch {
-        return [];
-      }
+      const { data, error } = await supabase
+        .from("artikel_dateien")
+        .select("id, artikel_id, name, pfad, sichtbar")
+        .in("artikel_id", artikelIds.slice(0, 300))
+        .eq("art", "datenblatt");
+      if (error) return [];
+      return datenblaetterOrdnen((data ?? []).map((d) => ({
+        id: d.id, artikel_id: d.artikel_id, name: d.name || d.pfad.split("/").pop() || "Datenblatt", pfad: d.pfad,
+        artikel: namen.get(d.artikel_id) ?? null, sichtbar: sichtbarkeitLesen(d.sichtbar),
+      })));
     },
   });
 }

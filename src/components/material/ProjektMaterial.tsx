@@ -122,13 +122,13 @@ export function ProjektMaterial({ projekt }: { projekt: ProjektMitKunde }) {
 
   const aktionen = (
     <div className="grid grid-cols-3 gap-2">
-      <Button asChild className="h-auto min-h-14 flex-col gap-1 whitespace-normal px-1 py-2 text-center text-[13px] leading-tight">
+      <Button asChild className="h-auto min-h-14 flex-col gap-1 whitespace-normal px-1 py-2 text-center text-[0.8125rem] leading-tight">
         <Link to={scanLink("ausfassung")}><PackageMinus className="h-5 w-5" />Ausfassen</Link>
       </Button>
-      <Button asChild variant="outline" className="h-auto min-h-14 flex-col gap-1 whitespace-normal px-1 py-2 text-center text-[13px] leading-tight">
+      <Button asChild variant="outline" className="h-auto min-h-14 flex-col gap-1 whitespace-normal px-1 py-2 text-center text-[0.8125rem] leading-tight">
         <Link to={scanLink("rueckgabe")}><PackagePlus className="h-5 w-5" />Zurückgeben</Link>
       </Button>
-      <Button asChild variant="outline" className="h-auto min-h-14 flex-col gap-1 whitespace-normal px-1 py-2 text-center text-[13px] leading-tight">
+      <Button asChild variant="outline" className="h-auto min-h-14 flex-col gap-1 whitespace-normal px-1 py-2 text-center text-[0.8125rem] leading-tight">
         <Link to={scanLink("direkt")}><ShoppingCart className="h-5 w-5" />Direkt gekauft</Link>
       </Button>
     </div>

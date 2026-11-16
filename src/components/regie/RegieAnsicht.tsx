@@ -134,7 +134,7 @@ export function RegieAnsicht({ voll }: { voll: RegieVoll }) {
               <ul className="divide-y">
                 {voll.zeiten.map((z) => (
                   <li key={z.id} className="flex items-center gap-3 px-4 py-2.5 lg:px-5">
-                    <Avatar profil={z.profiles} className="h-7 w-7 text-[10px]" />
+                    <Avatar profil={z.profiles} className="h-7 w-7 text-[0.625rem]" />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-medium">{name(z.profiles)}</span>
                       {z.von && <span className="block text-xs text-muted-foreground">{zeitSpanne(z.von, z.bis, z.pause_minuten)}</span>}

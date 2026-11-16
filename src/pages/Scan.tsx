@@ -926,7 +926,7 @@ export default function Scan() {
               {sichtbareModi.map((m) => (
                 <button key={m} type="button" role="radio" aria-checked={modus === m} onClick={() => modusWaehlen(m)}
                   className={cn(
-                    "h-11 min-w-0 truncate rounded-md px-0.5 text-[13px] font-medium transition-colors sm:px-1 sm:text-sm",
+                    "h-11 min-w-0 truncate rounded-md px-0.5 text-[0.8125rem] font-medium transition-colors sm:px-1 sm:text-sm",
                     modus === m ? "bg-card font-semibold text-primary ring-1 ring-primary/30" : "text-muted-foreground hover:text-foreground",
                   )}>
                   {MODI[m].kurz}

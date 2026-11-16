@@ -108,7 +108,7 @@ export default function Zeiten() {
                 className={cn("flex h-11 shrink-0 items-center gap-2 rounded-full border px-3.5 text-sm font-medium transition-colors",
                   "m" in x && "pl-1.5",
                   an ? "border-primary bg-primary-soft text-primary" : "bg-card text-muted-foreground hover:bg-muted")}>
-                {"m" in x && <Avatar profil={x.m} className="h-7 w-7 text-[11px]" />}
+                {"m" in x && <Avatar profil={x.m} className="h-7 w-7 text-[0.6875rem]" />}
                 {x.label}
               </button>
             );
@@ -151,7 +151,7 @@ export default function Zeiten() {
                     <tr key={m.id}>
                       <td className="pr-1">
                         <button type="button" className="flex min-h-11 items-center gap-1.5 font-medium hover:text-primary" onClick={() => setPerson(m.id)}>
-                          <Avatar profil={m} className="h-6 w-6 text-[10px]" /><span className="max-w-[5rem] truncate">{m.vorname}</span>
+                          <Avatar profil={m} className="h-6 w-6 text-[0.625rem]" /><span className="max-w-[5rem] truncate">{m.vorname}</span>
                         </button>
                       </td>
                       {tage.map((t) => {
