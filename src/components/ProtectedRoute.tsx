@@ -54,8 +54,8 @@ export function ProtectedRoute({ children, nurChef = false }: { children: ReactN
     ) : (
       <Hinweis
         icon={<Clock className="h-8 w-8 text-amber-600" />}
-        titel="Wartet auf Freischaltung"
-        text="Dein Konto ist angelegt. Sobald der Chef es freischaltet, kannst du loslegen."
+        titel="Zugang nicht aktiv"
+        text="Dein Konto ist derzeit nicht freigeschaltet. Bitte melde dich beim Chef."
       >
         {abmelden}
       </Hinweis>

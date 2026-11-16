@@ -23,7 +23,7 @@ if (!process.env.DEMO_CHEF_PASSWORT) {
   process.exit(1);
 }
 const db = createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_KEY, { auth: { persistSession: false } });
-const { error: anmeldung } = await db.auth.signInWithPassword({ email: "chef@elektro.handwerkapp.at", password: process.env.DEMO_CHEF_PASSWORT });
+const { error: anmeldung } = await db.auth.signInWithPassword({ email: process.env.CHEF_LOGIN ?? "chef@elektro.handwerkapp.at", password: process.env.DEMO_CHEF_PASSWORT });
 if (anmeldung) throw new Error(`Anmeldung als Demo-Chef: ${anmeldung.message}`);
 
 async function allePfade(ordner) {

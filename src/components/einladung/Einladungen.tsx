@@ -56,7 +56,7 @@ export function EinladenKarte() {
     e.preventDefault();
     if (sendet) return;
     const an = handyNummer(nummer);
-    if (!an) return toast.error("Diese Handynummer stimmt so nicht — z. B. 0664 1234567.");
+    if (!an) return toast.error("Das ist keine Handynummer — z. B. 0664 1234567.");
     setSendet(true);
     const { data, error } = await supabase.functions.invoke("einladung-sms", { body: { nummer: an } });
     setSendet(false);

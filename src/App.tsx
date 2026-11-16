@@ -46,7 +46,7 @@ const Bestellungen = lazy(() => import("./pages/Bestellungen"));
 const BestellungDetail = lazy(() => import("./pages/BestellungDetail"));
 // Öffentlich, ohne Anmeldung: Kunde bestätigt ein Angebot über den Link
 const AngebotBestaetigen = lazy(() => import("./pages/AngebotBestaetigen"));
-// Öffentlich: der Firmen-Link (Aushang/QR) — installieren und selbst registrieren
+// Öffentlich: der eine Link /start (Aushang/QR/SMS) — installieren und selbst registrieren; Passwort-Link aus der Mail
 const Start = lazy(() => import("./pages/Start"));
 const PasswortNeu = lazy(() => import("./pages/PasswortNeu"));
 const Aushang = lazy(() => import("./pages/Aushang"));

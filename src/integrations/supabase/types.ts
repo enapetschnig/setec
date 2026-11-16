@@ -1497,89 +1497,6 @@ export type Database = {
           },
         ]
       }
-      einladungen: {
-        Row: {
-          created_at: string
-          eingeloest_am: string | null
-          eingeloest_von: string | null
-          erstellt_von: string | null
-          gueltig_bis: string
-          id: string
-          mehrfach: boolean
-          nachname: string
-          profil_id: string | null
-          rolle: string
-          team_id: string | null
-          token: string | null
-          token_hash: string
-          vorname: string
-          zurueckgezogen_am: string | null
-        }
-        Insert: {
-          created_at?: string
-          eingeloest_am?: string | null
-          eingeloest_von?: string | null
-          erstellt_von?: string | null
-          gueltig_bis?: string
-          id?: string
-          mehrfach?: boolean
-          nachname?: string
-          profil_id?: string | null
-          rolle?: string
-          team_id?: string | null
-          token?: string | null
-          token_hash: string
-          vorname?: string
-          zurueckgezogen_am?: string | null
-        }
-        Update: {
-          created_at?: string
-          eingeloest_am?: string | null
-          eingeloest_von?: string | null
-          erstellt_von?: string | null
-          gueltig_bis?: string
-          id?: string
-          mehrfach?: boolean
-          nachname?: string
-          profil_id?: string | null
-          rolle?: string
-          team_id?: string | null
-          token?: string | null
-          token_hash?: string
-          vorname?: string
-          zurueckgezogen_am?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "einladungen_eingeloest_von_fkey"
-            columns: ["eingeloest_von"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "einladungen_erstellt_von_fkey"
-            columns: ["erstellt_von"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "einladungen_profil_id_fkey"
-            columns: ["profil_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "einladungen_team_id_fkey"
-            columns: ["team_id"]
-            isOneToOne: false
-            referencedRelation: "teams"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       fahrzeug_eintraege: {
         Row: {
           art: string
@@ -3615,14 +3532,7 @@ export type Database = {
       }
       beleg_fertigstellen: { Args: { p_id: string }; Returns: string }
       beleg_stornieren: { Args: { p_id: string }; Returns: string }
-      benutzer_aus_name: { Args: { p_text: string }; Returns: string }
       datenblatt_oeffentlich: { Args: { p_name: string }; Returns: boolean }
-      einladung_benutzervorschlag: {
-        Args: { p_domain: string; p_nachname: string; p_vorname: string }
-        Returns: string
-      }
-      einladung_hash: { Args: { p_token: string }; Returns: string }
-      einladung_token: { Args: never; Returns: string }
       fibu_uebergeben: {
         Args: {
           p_belege: string[]
@@ -3681,6 +3591,7 @@ export type Database = {
         Args: { p_dazu?: string[]; p_regie: string; p_weg?: string[] }
         Returns: string[]
       }
+      sms_platz: { Args: { p_nummer: string; p_von: string }; Returns: string }
     }
     Enums: {
       [_ in never]: never

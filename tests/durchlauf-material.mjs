@@ -14,6 +14,11 @@ import { execFileSync } from "child_process";
 import fs from "fs";
 
 const URL = process.env.APP_URL || "http://127.0.0.1:8093";
+// Konten: seit 16.11.2026 gibt es die Demo-Konten nicht mehr — eigene Testkonten
+// per CHEF_LOGIN/MONTEUR_LOGIN/LISA_LOGIN (E-Mail) übergeben, z. B. zztest-…@setec-test.at.
+const CHEF_LOGIN = process.env.CHEF_LOGIN ?? "chef@elektro.handwerkapp.at";
+const MONTEUR_LOGIN = process.env.MONTEUR_LOGIN ?? "max@elektro.handwerkapp.at";
+const LISA_LOGIN = process.env.LISA_LOGIN ?? "lisa@elektro.handwerkapp.at";
 const MONTEUR_PW = process.env.MONTEUR_PW;
 const CHEF_PW = process.env.CHEF_PW;
 if (!MONTEUR_PW || !CHEF_PW) {
@@ -44,12 +49,12 @@ const r2 = (x) => Math.sign(x) * Math.round(Math.abs(x) * 100 + 1e-9) / 100;
 
 const db = createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_KEY, { auth: { persistSession: false } });
 {
-  const { error } = await db.auth.signInWithPassword({ email: "chef@elektro.handwerkapp.at", password: CHEF_PW });
+  const { error } = await db.auth.signInWithPassword({ email: CHEF_LOGIN, password: CHEF_PW });
   if (error) throw new Error(`Chef-Anmeldung für die Prüfung: ${error.message}`);
 }
-const { data: profile } = await db.from("profiles").select("id, vorname, email").in("email", ["max@elektro.handwerkapp.at", "lisa@elektro.handwerkapp.at"]);
-const maxP = profile.find((p) => p.email.startsWith("max"));
-const lisaP = profile.find((p) => p.email.startsWith("lisa"));
+const { data: profile } = await db.from("profiles").select("id, vorname, email").in("email", [MONTEUR_LOGIN, LISA_LOGIN]);
+const maxP = profile.find((p) => p.email === MONTEUR_LOGIN);
+const lisaP = profile.find((p) => p.email === LISA_LOGIN);
 const { data: firma } = await db.from("firma").select("name, material_aufschlag").eq("id", 1).single();
 const { data: bus } = await db.from("lagerorte").select("id, name").ilike("name", "%Bus 1%").single();
 const bestandVorher = new Map();
@@ -85,7 +90,7 @@ const bild = (page, name) => page.screenshot({ path: `${BILDER}/material-${name}
 
 let projektId = null;
 try {
-  const max = await sitzung("max", MONTEUR_PW);
+  const max = await sitzung(MONTEUR_LOGIN, MONTEUR_PW);
 
   // ── 1. Projekt ──────────────────────────────────────────────────────────
   console.log(`\n— Monteur Max${IPHONE ? " (iPhone)" : " (Android)"}: ${NAME} —`);
@@ -147,7 +152,7 @@ try {
 
   // ── 5. Chef am PC: 2 h für Lisa, dann Rechnung ─────────────────────────
   console.log("\n— Chef am PC —");
-  const chef = await sitzung("chef", CHEF_PW, true);
+  const chef = await sitzung(CHEF_LOGIN, CHEF_PW, true);
   await chef.goto(`${URL}/projekte/${projektId}`);
   await chef.getByRole("button", { name: "+ Stunden" }).first().click();
   const fuerWen = chef.getByRole("group", { name: "Für wen" });

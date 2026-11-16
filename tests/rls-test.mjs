@@ -1,5 +1,7 @@
 // Prüft die Regeln, die in der Datenbank stecken (RLS und Trigger), mit drei
-// Testkonten: Chef, Monteur und einem, der noch nicht freigeschaltet ist.
+// Testkonten: Chef, Monteur und einem, der nicht freigeschaltet ist (seit
+// 16.11.2026 ist jedes neue Konto sofort aktiv — „neu“ wird dafür per SQL
+// auf aktiv = false gesetzt, wie ein vom Chef zurückgenommener Zugang).
 //
 //   node tests/rls-test.mjs anlegen   Testkonten registrieren, dann die
 //                                     ausgegebenen SQL-Zeilen ausführen
@@ -44,6 +46,7 @@ if (process.argv[2] === "anlegen") {
   console.log("Angelegt. Jetzt freischalten (SQL als postgres):");
   console.log(`update public.profiles set aktiv = true, rolle = 'chef' where email = '${mail("chef")}';`);
   console.log(`update public.profiles set aktiv = true where email = '${mail("monteur")}';`);
+  console.log(`update public.profiles set aktiv = false where email = '${mail("neu")}';`);
   process.exit(0);
 }
 
@@ -89,6 +92,38 @@ console.log("\n— Nicht freigeschaltet —");
   ok(!!e2, "kann sich nicht selbst freischalten" + abgelehnt(e2));
   const { error: e3 } = await neu.storage.from("projekt-dateien").upload(`rlstest/${Date.now()}.txt`, new Blob(["x"]), { contentType: "text/plain" });
   ok(!!e3, "kann keine Dateien hochladen" + abgelehnt(e3));
+}
+
+console.log("\n— Selbst registrieren (jeder sofort aktiv) —");
+{
+  const frisch = await konto(`frisch${Date.now()}`);
+  const { data: { user } } = await frisch.auth.getUser();
+  const { data: ich } = await frisch.from("profiles").select("rolle, aktiv, vorname").eq("id", user.id).single();
+  ok(ich?.aktiv === true && ich?.rolle === "monteur" && ich?.vorname === "Test", "neues Konto ist sofort aktiver Monteur mit Namen");
+  const { data: hoch } = await frisch.from("profiles").update({ rolle: "chef" }).eq("id", user.id).select("rolle");
+  const { data: nachher } = await frisch.from("profiles").select("rolle").eq("id", user.id).single();
+  ok(nachher?.rolle === "monteur", "kann sich nicht selbst zum Chef machen" + (hoch?.length ? " (Update lief, Rolle blieb)" : ""));
+  const { data: pr } = await frisch.from("projekte").select("id").limit(1);
+  ok(Array.isArray(pr), "sieht sofort die Projekte wie jeder Monteur");
+  const { error: eRpc1 } = await frisch.rpc("firmen_link", { p_neu: false });
+  ok(!!eRpc1, "alter Firmen-Link (firmen_link) gibt es nicht mehr" + abgelehnt(eRpc1));
+  const { data: sm } = await frisch.from("sms_einladungen").select("id");
+  ok((sm ?? []).length === 0, "Monteur sieht das SMS-Protokoll nicht");
+  const { error: eSm } = await chef.from("sms_einladungen").insert({ nummer: "+430000000000" });
+  ok(!!eSm, "auch der Chef schreibt das SMS-Protokoll nicht selbst (nur die Edge Function)" + abgelehnt(eSm));
+  const { data: { session } } = await frisch.auth.getSession();
+  const r = await fetch(`${env.VITE_SUPABASE_URL}/functions/v1/einladung-sms`, {
+    method: "POST",
+    headers: { apikey: env.VITE_SUPABASE_KEY, Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ nummer: "0664 0000000" }),
+  });
+  ok(r.status === 403, `SMS-Einladung als Monteur abgelehnt (${r.status})`);
+  const r2 = await fetch(`${env.VITE_SUPABASE_URL}/functions/v1/einladung-sms`, {
+    method: "POST", headers: { apikey: env.VITE_SUPABASE_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ nummer: "0664 0000000" }),
+  });
+  ok(r2.status === 401, `SMS-Einladung ohne Anmeldung abgelehnt (${r2.status})`);
+  const { data: vs } = await frisch.from("profiles").select("id").eq("versteckt", true);
+  ok((vs ?? []).length === 0, "das versteckte ePower-Konto ist unsichtbar");
 }
 
 console.log("\n— Monteur —");

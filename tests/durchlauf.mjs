@@ -16,6 +16,11 @@ import { execFileSync } from "child_process";
 import fs from "fs";
 
 const URL = process.env.APP_URL || "http://127.0.0.1:8093";
+// Konten: seit 16.11.2026 gibt es die Demo-Konten nicht mehr — eigene Testkonten
+// per CHEF_LOGIN/MONTEUR_LOGIN/LISA_LOGIN (E-Mail) übergeben, z. B. zztest-…@setec-test.at.
+const CHEF_LOGIN = process.env.CHEF_LOGIN ?? "chef@elektro.handwerkapp.at";
+const MONTEUR_LOGIN = process.env.MONTEUR_LOGIN ?? "max@elektro.handwerkapp.at";
+const LISA_LOGIN = process.env.LISA_LOGIN ?? "lisa@elektro.handwerkapp.at";
 const MONTEUR_PW = process.env.MONTEUR_PW;
 const CHEF_PW = process.env.CHEF_PW;
 if (!MONTEUR_PW || !CHEF_PW) {
@@ -39,10 +44,10 @@ const ok = (bedingung, text) => {
 // Nachprüfen in der Datenbank als Chef (sieht alles, RLS wie in der App)
 const db = createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_KEY, { auth: { persistSession: false } });
 {
-  const { error } = await db.auth.signInWithPassword({ email: "chef@elektro.handwerkapp.at", password: CHEF_PW });
+  const { error } = await db.auth.signInWithPassword({ email: CHEF_LOGIN, password: CHEF_PW });
   if (error) throw new Error(`Chef-Anmeldung für die Prüfung: ${error.message}`);
 }
-const { data: maxProfil } = await db.from("profiles").select("id").eq("email", "max@elektro.handwerkapp.at").single();
+const { data: maxProfil } = await db.from("profiles").select("id").eq("email", MONTEUR_LOGIN).single();
 
 // BROWSER=webkit: Safari-Technik wie am iPhone (Linux braucht dazu
 // PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS=1)
@@ -76,7 +81,7 @@ async function codeEintippen(page, code) {
 }
 
 try {
-  const max = await sitzung("max", MONTEUR_PW);
+  const max = await sitzung(MONTEUR_LOGIN, MONTEUR_PW);
 
   // ── 1. Projekt anlegen ────────────────────────────────────────────────
   console.log(`\n— Monteur Max: ${NAME} —`);
@@ -158,7 +163,7 @@ try {
 
   // ── 5. Chef: Rechnung aus dem Projekt ─────────────────────────────────
   console.log("\n— Chef: Rechnung aus dem Projekt —");
-  const chef = await sitzung("chef", CHEF_PW);
+  const chef = await sitzung(CHEF_LOGIN, CHEF_PW);
   // wie „Rechnung schreiben“ im Ordner Belege des Projekts: Import geht gleich auf
   await chef.goto(`${URL}/belege/neu?typ=rechnung&projekt=${projektId}&import=1`);
   const uebernehmen = chef.getByRole("button", { name: /Positionen? übernehmen/ });

@@ -34,7 +34,7 @@ export default function Auth() {
     e.preventDefault();
     const email = String(new FormData(e.currentTarget).get("email") ?? "").trim().toLowerCase();
     const falsch = emailFehler(email);
-    if (falsch) return toast.error(falsch, { description: "Hast du dich mit einem Benutzernamen statt E-Mail registriert? Dann gibt dir der Chef ein vorläufiges Passwort." });
+    if (falsch) return toast.error(falsch, { description: "Hast du gar keine E-Mail in der App (Anmeldung mit Benutzername)? Dann gibt dir der Chef ein vorläufiges Passwort." });
     setLaden(true);
     const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${window.location.origin}/passwort-neu` });
     setLaden(false);

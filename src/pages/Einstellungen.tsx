@@ -527,7 +527,7 @@ function Mitarbeiter() {
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <div className="space-y-2 rounded-lg border bg-muted/40 p-4 text-center">
-                <p className="text-xs text-muted-foreground">Benutzername</p>
+                <p className="text-xs text-muted-foreground">Anmelden mit</p>
                 <p className="font-mono text-lg font-semibold">{passwort.p.email?.replace(`@${KUNDE.loginDomain}`, "")}</p>
                 <p className="pt-2 text-xs text-muted-foreground">Vorläufiges Passwort</p>
                 <p className="select-all font-mono text-2xl font-bold tracking-wide">{passwort.neu}</p>
@@ -602,7 +602,7 @@ function Konto() {
           <Feld label="Nachname"><Input className="h-11" value={nachname} onChange={(e) => setNachname(e.target.value)} /></Feld>
           <Feld label="Telefon"><Input className="h-11" type="tel" value={telefon} onChange={(e) => setTelefon(e.target.value)} /></Feld>
         </div>
-        <p className="mt-2 text-xs text-muted-foreground">Benutzername: <span className="font-mono">{profil?.email?.replace(`@${KUNDE.loginDomain}`, "")}</span></p>
+        <p className="mt-2 text-xs text-muted-foreground">Anmelden mit: <span className="font-mono">{profil?.email?.replace(`@${KUNDE.loginDomain}`, "")}</span></p>
         <Button onClick={datenSpeichern} disabled={laeuft !== null} className="mt-4 h-11 gap-2">
           {laeuft === "daten" && <Loader2 className="h-4 w-4 animate-spin" />} Speichern
         </Button>

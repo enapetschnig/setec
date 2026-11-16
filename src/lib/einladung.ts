@@ -24,11 +24,14 @@ export function mailAdresse(betreff: string, text: string): string {
   return `mailto:?subject=${encodeURIComponent(betreff)}&body=${encodeURIComponent(text)}`;
 }
 
-/** 0664 123 45 67 · 0043 664… · +43 (0) 664… · +49… → E.164, sonst null (gleich wie in der Edge Function einladung-sms) */
+/** Nur Handynummern (keine Mehrwert- oder Festnetznummern): AT, DE, CH, IT, SI, HR, HU, SK, CZ, PL, RO, BA, RS */
+const HANDY = /^\+(43(6\d{8,12})|49(1[5-7]\d{8,10})|41(7\d{8})|39(3\d{8,9})|386([3-7]\d{7})|385(9\d{7,8})|36((20|30|31|50|70)\d{7})|421(9\d{8})|420([67]\d{8})|48([4-8]\d{8})|40(7\d{8})|387(6\d{7,8})|381(6\d{7,8}))$/;
+
+/** 0664 123 45 67 · 0043 664… · +43 (0) 664… · +49… → E.164-Handynummer, sonst null (gleich wie e164 in der Edge Function einladung-sms) */
 export function handyNummer(eingabe: string): string | null {
   let n = eingabe.replace(/\(0\)/g, "").replace(/[\s/().-]/g, "");
   if (n.startsWith("00")) n = "+" + n.slice(2);
   else if (n.startsWith("0")) n = "+43" + n.slice(1);
   else if (!n.startsWith("+")) n = "+43" + n;
-  return /^\+[1-9]\d{7,14}$/.test(n) ? n : null;
+  return HANDY.test(n) ? n : null;
 }

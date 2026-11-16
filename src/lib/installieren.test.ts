@@ -67,6 +67,10 @@ describe("einladung", () => {
     }
     expect(handyNummer("+49 151 12345678")).toBe("+4915112345678");
     expect(handyNummer("0664")).toBeNull();
+    expect(handyNummer("0900 123456")).toBeNull(); // Mehrwertnummer
+    expect(handyNummer("0316 123456")).toBeNull(); // Festnetz Graz
+    expect(handyNummer("+1 202 5550123")).toBeNull(); // nicht freigegebenes Land
+    expect(handyNummer("+386 41 123456")).toBe("+38641123456");
     expect(handyNummer("abc")).toBeNull();
   });
   it("Text, WhatsApp und Mail", () => {
