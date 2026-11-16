@@ -17,6 +17,8 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, Karte, StatusPille } from "@/components/Bausteine";
 import { InstallAnleitung } from "@/components/Installieren";
+import { MitteilungenKarte } from "@/components/Mitteilungen";
+import { pushBeimAbmelden } from "@/lib/push";
 import { EinladenKarte } from "@/components/einladung/Einladungen";
 import { LohnSaetze, WhatsAppVorlagenKarte } from "@/components/projekt/ProjektEinstellungen";
 import { InterneArten } from "@/components/zeiten/InterneArten";
@@ -638,6 +640,8 @@ function Konto() {
         </Button>
       </Karte>
 
+      <MitteilungenKarte />
+
       <Karte titel="Passwort ändern">
         <div className="grid gap-3 sm:grid-cols-2">
           <Feld label="Neues Passwort"><Input className="h-11" type="password" autoComplete="new-password" value={passwort} onChange={(e) => setPasswort(e.target.value)} /></Feld>
@@ -649,7 +653,7 @@ function Konto() {
       </Karte>
 
       <Button variant="outline" className="h-12 w-full gap-2 text-destructive sm:w-auto"
-        onClick={async () => { await supabase.auth.signOut({ scope: "local" }); navigate("/auth"); }}>
+        onClick={async () => { await pushBeimAbmelden(); await supabase.auth.signOut({ scope: "local" }); navigate("/auth"); }}>
         <LogOut className="h-4 w-4" /> Abmelden
       </Button>
     </div>

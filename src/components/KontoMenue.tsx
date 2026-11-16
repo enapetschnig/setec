@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import ChangePasswordDialog from "@/components/ChangePasswordDialog";
 import { InstallAnleitung } from "@/components/Installieren";
+import { pushBeimAbmelden } from "@/lib/push";
 import { Avatar } from "@/components/Bausteine";
 import { useSitzung } from "@/hooks/useSitzung";
 import { name } from "@/lib/types";
@@ -25,6 +26,7 @@ export function KontoMenue({ mitName, leiste }: { mitName?: boolean; leiste?: bo
   const [installOffen, setInstallOffen] = useState(false);
 
   const abmelden = async () => {
+    await pushBeimAbmelden();
     await supabase.auth.signOut({ scope: "local" });
     navigate("/auth");
   };

@@ -383,7 +383,21 @@ Ein Einsatz ist ein Termin mit Status. Die Startseite zeigt heute und den nächs
 Telefon und den Schnellwegen zu Stunden, Material und Regie. Einen Knopf „Beginnen“ gibt es nicht mehr (die
 Zeit kommt aus den Stunden); „Erledigt“ setzt den Status per Trigger `termin_einsatz` und gilt nicht als
 Terminänderung. Verschiebt das Büro einen Termin, sieht der Monteur beim
-nächsten Öffnen „Termin geändert“; was schon gesehen wurde, merkt sich das Gerät (`elektro.termine.gesehen`). Der
+nächsten Öffnen „Termin geändert“; was schon gesehen wurde, merkt sich das Gerät (`elektro.termine.gesehen`).
+**Mitteilungen aufs Handy** (Web-Push, Migration `20261116163000_termin_push.sql`): Jeder schaltet sie in
+„Einstellungen → Mein Konto“ ein (`components/Mitteilungen.tsx`, `lib/push.ts`; iPhone nur in der installierten
+Home-App, die Karte erklärt das); solange aus, zeigt die Monteur-Startseite einen dezenten Hinweis (× = 30 Tage weg).
+Abo je Gerät in `push_abos` (nur eigene Zeilen, Anmelden über `push_abo_registrieren`, Abmelden löscht das Abo
+des Geräts). Trigger `termine_push` (AFTER insert/update/delete) ruft per pg_net die Edge Function `termin-push`
+(ohne JWT; Adresse + Geheimnis in `push_verbindung`, nur in der DB, wie `cockpit_verbindung`) — nur wenn sich Tag,
+Zeit, Ort, Titel oder Personen ändern (reiner Status: nichts), an alte und neue Mitarbeiter außer dem, der
+geändert hat (`auth.uid()`), und nur wenn einer davon ein Abo hat; Fehler beim Senden halten das Speichern nie
+auf. Texte: „Neuer Einsatz“, „Einsatz geändert — Morgen 7:00 Huber, Kindberg – jetzt mit Max (statt …)“,
+„Nicht mehr eingeteilt“, „Einsatz gestrichen“; Vergangenes schickt nichts. 404/410 löscht das Abo.
+`termin-push` GET liefert den öffentlichen VAPID-Schlüssel (Secrets `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`),
+POST `{aktion:"test"}` mit JWT schickt eine Testmitteilung an die eigenen Geräte. Im Service Worker:
+`public/push-sw.js` per `workbox.importScripts` (Modus prompt bleibt); Antippen holt die App nach vorne und
+wechselt zur Startseite (`PushKlick`, nicht wenn etwas ungespeichert ist). Der
 Chef sieht auf der Startseite Anträge und „erledigter Einsatz, noch nicht verrechnet“.
 Jeder Einsatz (heute und morgen) klappt auf (`EinsatzDetails.tsx`): Projekt, Adresse mit Karte und Navigation,
 Kunde mit Telefon/Mail, Notiz und Projektbeschreibung, wer noch dabei ist (mit Anruf-Knopf), Bus und Geräte,

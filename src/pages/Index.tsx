@@ -13,6 +13,7 @@ import { KontoMenue } from "@/components/KontoMenue";
 import { StartListe } from "@/components/rahmen/StartListe";
 import { sucheOeffnen } from "@/components/rahmen/Suchpalette";
 import { EinsatzBereich } from "@/components/einsatz/EinsatzBereich";
+import { MitteilungenHinweis } from "@/components/Mitteilungen";
 import { Button } from "@/components/ui/button";
 import { MeineAufgaben } from "@/components/aufgaben/MeineAufgaben";
 import { useAufgabenZaehler } from "@/components/aufgaben/aufgabenDaten";
@@ -294,6 +295,7 @@ export default function Index() {
   const handgriffe = (
     <>
       <NeueDokumente />
+      <MitteilungenHinweis />
       <EinsatzBereich onStunden={(id) => { setZeitProjekt(id); setZeitOffen(true); }} />
       <MeineAufgaben />
 

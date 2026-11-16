@@ -84,6 +84,8 @@ export default defineConfig(({ mode }) => ({
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
         // Screenshots braucht nur das Installationsblatt — nicht offline vorhalten
         globIgnores: ['screenshot-*.png'],
+        // Mitteilungen aufs Handy: push- und notificationclick-Handler (public/push-sw.js)
+        importScripts: ['push-sw.js'],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024 // 5 MB
       }
     })

@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { UpdateHinweis } from "@/components/UpdateHinweis";
+import { PushKlick } from "@/components/Mitteilungen";
 import { WunschMelden } from "@/components/wunsch/WunschMelden";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AppLayout } from "@/components/AppLayout";
@@ -131,6 +132,7 @@ const App = () => (
             </Routes>
             <InstallHinweis />
             <UpdateHinweis />
+            <PushKlick />
             <WunschMelden />
           </SitzungProvider>
         </BrowserRouter>

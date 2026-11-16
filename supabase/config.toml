@@ -2,3 +2,6 @@ project_id = "xcsbbaiwzdivmaodltxm"
 
 [functions.wunsch-datei]
 verify_jwt = false
+
+[functions.termin-push]
+verify_jwt = false
