@@ -106,7 +106,7 @@ type Icon = ComponentType<{ className?: string }>;
  * aufbaut (Zahlung, Mahnung, Kanzlei).
  */
 export function BelegEditor({
-  id, daten, startKopf, autoSprache = false, autoImport = false, autoKi = false, startVorlage,
+  id, daten, startKopf, autoSprache = false, autoImport = false, autoKi = false, startVorlage, startPositionen, nachNeuAnlegen,
 }: {
   id: string;
   /** null = neuer Beleg, noch nicht in der Datenbank */
@@ -118,6 +118,10 @@ export function BelegEditor({
   autoKi?: boolean;
   /** neues Angebot aus dieser Vorlage (Preise von heute oder wie in der Vorlage) */
   startVorlage?: { id: string; nachziehen: boolean };
+  /** neuer Beleg mit diesen Positionen (z. B. aus einem Kunden-Lieferschein) */
+  startPositionen?: EditorPosition[];
+  /** nach dem ersten Speichern (z. B. Rechnung am Lieferschein vermerken) */
+  nachNeuAnlegen?: (id: string) => Promise<void> | void;
 }) {
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -129,8 +133,8 @@ export function BelegEditor({
   // ── Zustand ──
   const [start] = useState(() => {
     const k = daten ? kopfAusBeleg(daten.beleg) : startKopf!;
-    const p = daten ? daten.positionen.map(positionAusDb) : [];
-    return { k, p, s: schnappschuss(k, p) };
+    const p = daten ? daten.positionen.map(positionAusDb) : startPositionen ?? [];
+    return { k, p, s: schnappschuss(k, daten ? p : []) };
   });
   const [neu, setNeu] = useState(!daten);
   const [beleg, setBeleg] = useState<Beleg | null>(daten?.beleg ?? null);
@@ -371,6 +375,9 @@ export function BelegEditor({
       });
       const d: BelegMitPositionen = { beleg: erg.beleg, positionen: erg.positionen };
       if (warNeu) sicherungLoeschen(sicherungsSchluessel(id, true, kopf.typ));
+      if (warNeu && nachNeuAnlegen) {
+        try { await nachNeuAnlegen(id); } catch (e) { toast.warning("Nicht am Lieferschein vermerkt", { description: (e as Error).message }); }
+      }
       letzteDaten.current = d;
       qc.setQueryData(DETAIL(id), d);
       if (aktuellRef.current === vorher) {

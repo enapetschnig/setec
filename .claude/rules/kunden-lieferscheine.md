@@ -1,0 +1,6 @@
+# Kunden-Lieferscheine (Material an Kunden)
+
+- 2026-11-16 · Stefan: Kunden kaufen oft nur Material (Theke) oder holen eine Sonderbestellung ab; die Rechnung ändert den Lager nicht (gewollt) → eigener Kunden-Lieferschein `/kunden-lieferscheine` (Tabellen `kunden_lieferscheine`, `kunden_lieferschein_positionen`, Nummer `LS-JJJJ-NNN`). **Nicht** `lieferscheine` (das sind die der Lieferanten) und nicht in `belege` (sonst rutscht er in Rechnungslisten/Buchhaltung, `kopfAusBeleg` macht aus unbekanntem typ ein Angebot).
+- Abschließen nur per RPC `kunden_lieferschein_abschliessen` (Nummer + `material_buchungen` abgang/zugang mit `vorgang` = Lieferschein-ID); danach fest, nicht löschbar — Rücknahmen als neuer Lieferschein („Retour dazu“). Freie Zeilen buchen nichts. Nur Chef (Lagerabgang ist Chef-Sache).
+- Unterschrift im privaten Bucket `kunden-lieferscheine` (kein Projekt-Pfad). Mail über `beleg-mail` mit `kunden_lieferschein_id` (PDF von der App). „Rechnung schreiben“ → `/belege/neu?typ=rechnung&lieferschein=<id>` (VK aus dem Artikel, Retour mit Minus), Rechnung wird am Lieferschein vermerkt (`rechnung_id`).
+- Abgeschlossene Lieferscheine lassen sich nicht löschen → Tests mit eindeutigen Namen je Lauf statt Aufräumen; neuer Nummernkreis steht in beiden Aufräum-Dateien.

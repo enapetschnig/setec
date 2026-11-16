@@ -44,6 +44,8 @@ const Buchhaltung = lazy(() => import("./pages/Buchhaltung"));
 const Plantafel = lazy(() => import("./pages/Plantafel"));
 const Fuhrpark = lazy(() => import("./pages/Fuhrpark"));
 const Lieferscheine = lazy(() => import("./pages/Lieferscheine"));
+const KundenLieferscheine = lazy(() => import("./pages/KundenLieferscheine"));
+const KundenLieferscheinSeite = lazy(() => import("./pages/KundenLieferscheinSeite"));
 const Bestellungen = lazy(() => import("./pages/Bestellungen"));
 const BestellungDetail = lazy(() => import("./pages/BestellungDetail"));
 // Öffentlich, ohne Anmeldung: Kunde bestätigt ein Angebot über den Link
@@ -100,6 +102,9 @@ const App = () => (
                 <Route path="/plantafel" element={<S><Plantafel /></S>} />
                 <Route path="/fuhrpark" element={<S><Fuhrpark /></S>} />
                 <Route path="/lieferscheine" element={<S><Lieferscheine /></S>} />
+                <Route path="/kunden-lieferscheine" element={<S chef><KundenLieferscheine /></S>} />
+                <Route path="/kunden-lieferscheine/neu" element={<S chef><KundenLieferscheinSeite /></S>} />
+                <Route path="/kunden-lieferscheine/:id" element={<S chef><KundenLieferscheinSeite /></S>} />
                 <Route path="/scan" element={<S><Scan /></S>} />
                 <Route path="/lager" element={<S><Lager /></S>} />
                 <Route path="/bestellungen" element={<S chef><Bestellungen /></S>} />

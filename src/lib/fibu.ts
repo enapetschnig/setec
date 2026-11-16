@@ -58,6 +58,10 @@ export type FibuEingang = {
   reverse_charge: boolean;
   kategorie: string;
   datei_pfad: string | null;
+  /** Zahlweg — nur für den Hinweis in der Belegliste */
+  bezahlt_am?: string | null;
+  bar_bezahlt?: boolean;
+  lastschrift?: boolean;
   /** Aufwandskonto der Kategorie, sonst das der Art */
   kategorie_konto?: number | null;
   kreditor?: number;

@@ -1395,6 +1395,7 @@ export type Database = {
         Row: {
           abgelehnt_grund: string | null
           betrieb: boolean
+          bar_bezahlt: boolean
           bezahlt_am: string | null
           brutto: number
           created_at: string
@@ -1428,6 +1429,7 @@ export type Database = {
         Insert: {
           abgelehnt_grund?: string | null
           betrieb?: boolean
+          bar_bezahlt?: boolean
           bezahlt_am?: string | null
           brutto?: number
           created_at?: string
@@ -1461,6 +1463,7 @@ export type Database = {
         Update: {
           abgelehnt_grund?: string | null
           betrieb?: boolean
+          bar_bezahlt?: boolean
           bezahlt_am?: string | null
           brutto?: number
           created_at?: string
@@ -2005,6 +2008,161 @@ export type Database = {
           schluessel?: string
         }
         Relationships: []
+      }
+      kunden_lieferschein_positionen: {
+        Row: {
+          artikel_id: string | null
+          artikelnummer: string | null
+          bezeichnung: string
+          einheit: string
+          id: string
+          lieferschein_id: string
+          menge: number
+          pos: number
+          retour: boolean
+        }
+        Insert: {
+          artikel_id?: string | null
+          artikelnummer?: string | null
+          bezeichnung: string
+          einheit?: string
+          id?: string
+          lieferschein_id: string
+          menge: number
+          pos?: number
+          retour?: boolean
+        }
+        Update: {
+          artikel_id?: string | null
+          artikelnummer?: string | null
+          bezeichnung?: string
+          einheit?: string
+          id?: string
+          lieferschein_id?: string
+          menge?: number
+          pos?: number
+          retour?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kunden_lieferschein_positionen_artikel_id_fkey"
+            columns: ["artikel_id"]
+            isOneToOne: false
+            referencedRelation: "artikel"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kunden_lieferschein_positionen_lieferschein_id_fkey"
+            columns: ["lieferschein_id"]
+            isOneToOne: false
+            referencedRelation: "kunden_lieferscheine"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      kunden_lieferscheine: {
+        Row: {
+          created_at: string
+          datum: string
+          empf_email: string | null
+          empf_name: string
+          empf_ort: string | null
+          empf_plz: string | null
+          empf_strasse: string | null
+          erstellt_von: string | null
+          fertig_am: string | null
+          gesendet_am: string | null
+          gesendet_an: string | null
+          id: string
+          kunde_id: string | null
+          lagerort_id: string | null
+          notiz: string | null
+          nummer: string | null
+          rechnung_id: string | null
+          status: string
+          unterschrieben_am: string | null
+          unterschrift_name: string | null
+          unterschrift_pfad: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          datum?: string
+          empf_email?: string | null
+          empf_name?: string
+          empf_ort?: string | null
+          empf_plz?: string | null
+          empf_strasse?: string | null
+          erstellt_von?: string | null
+          fertig_am?: string | null
+          gesendet_am?: string | null
+          gesendet_an?: string | null
+          id?: string
+          kunde_id?: string | null
+          lagerort_id?: string | null
+          notiz?: string | null
+          nummer?: string | null
+          rechnung_id?: string | null
+          status?: string
+          unterschrieben_am?: string | null
+          unterschrift_name?: string | null
+          unterschrift_pfad?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          datum?: string
+          empf_email?: string | null
+          empf_name?: string
+          empf_ort?: string | null
+          empf_plz?: string | null
+          empf_strasse?: string | null
+          erstellt_von?: string | null
+          fertig_am?: string | null
+          gesendet_am?: string | null
+          gesendet_an?: string | null
+          id?: string
+          kunde_id?: string | null
+          lagerort_id?: string | null
+          notiz?: string | null
+          nummer?: string | null
+          rechnung_id?: string | null
+          status?: string
+          unterschrieben_am?: string | null
+          unterschrift_name?: string | null
+          unterschrift_pfad?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kunden_lieferscheine_kunde_id_fkey"
+            columns: ["kunde_id"]
+            isOneToOne: false
+            referencedRelation: "kunden"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kunden_lieferscheine_lagerort_id_fkey"
+            columns: ["lagerort_id"]
+            isOneToOne: false
+            referencedRelation: "lagerorte"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kunden_lieferscheine_rechnung_id_fkey"
+            columns: ["rechnung_id"]
+            isOneToOne: false
+            referencedRelation: "belege"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kunden_lieferscheine_erstellt_von_fkey"
+            columns: ["erstellt_von"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       kunden: {
         Row: {
@@ -3672,6 +3830,10 @@ export type Database = {
       }
       ist_aktiv: { Args: never; Returns: boolean }
       ist_chef: { Args: never; Returns: boolean }
+      kunden_lieferschein_abschliessen: {
+        Args: { p_id: string }
+        Returns: string
+      }
       kontakt_belege: {
         Args: { p_kontakt: string }
         Returns: {

@@ -26,7 +26,7 @@ import {
   BUCKET, dateiAdresse, eingangDateiHochladen, eingangLoeschen, eingangSpeichern, freigabeSetzen, lastschriftUebertragen, useLastschriftJeLieferant, type EingangMitAnteilen, type Hochgeladen,
 } from "./eingangDaten";
 import {
-  abbuchungAm, ablauf, anteileAusPositionen, lastschriftBetrag, aufteilungFehler, bruttoAusNetto, KATEGORIEN, nettoAusBrutto, positionenAbweichung, zuZahlen, type AnteilEntwurf, type PositionEntwurf,
+  abbuchungAm, ablauf, anteileAusPositionen, bezahltText, lastschriftBetrag, aufteilungFehler, bruttoAusNetto, KATEGORIEN, nettoAusBrutto, positionenAbweichung, zuZahlen, type AnteilEntwurf, type PositionEntwurf,
 } from "./eingangLogik";
 import { EingangPositionen } from "./EingangPositionen";
 import { LieferscheinAbgleich } from "./LieferscheinAbgleich";
@@ -44,6 +44,8 @@ type Kopf = {
   iban: string; skonto_prozent: string; skonto_bis: string; ls_nummern: string;
   /** Händler hat ein SEPA-Mandat und bucht selbst ab (am Tag X jeden Monats) */
   lastschrift: boolean; lastschrift_tag: string;
+  /** bar oder mit eigener Karte ausgelegt (im Büro zurück) */
+  bar: boolean;
 };
 
 const kopfAus = (r: EingangMitAnteilen | null, heute: string): Kopf => ({
@@ -67,6 +69,7 @@ const kopfAus = (r: EingangMitAnteilen | null, heute: string): Kopf => ({
   ls_nummern: (r?.lieferschein_nummern ?? []).join(", "),
   lastschrift: r?.lastschrift ?? false,
   lastschrift_tag: r?.lastschrift_tag != null ? String(r.lastschrift_tag) : "",
+  bar: r?.bar_bezahlt ?? false,
 });
 
 const positionenAus = (r: EingangMitAnteilen | null): PositionEntwurf[] =>
@@ -240,6 +243,7 @@ export function EingangDialog({
         reverse_charge: k.reverse_charge,
         betrieb: k.betrieb,
         bezahlt_am: k.bezahlt ? k.bezahlt_am || heute : null,
+        bar_bezahlt: k.bezahlt && k.bar,
         notiz: leerNull(k.notiz),
         iban: ibanPruefen(ibanText),
         skonto_prozent: skonto || null,
@@ -412,7 +416,7 @@ export function EingangDialog({
       {rechnung && status && (
         <section className="space-y-2 rounded-lg border bg-card p-3">
           <div className="flex flex-wrap items-center gap-2">
-            <StatusPille eintrag={status === "ueberwiesen" && rechnung.lastschrift ? { ton: "gruen", text: "Abgebucht" } : FREIGABE_STATUS[status]} />
+            <StatusPille eintrag={status === "ueberwiesen" ? { ton: "gruen", text: bezahltText(rechnung) } : FREIGABE_STATUS[status]} />
             <span className="text-sm text-muted-foreground">
               {status === "pruefen" && "Stimmen Menge und Preis? Dann freigeben."}
               {status === "freigegeben" && (() => { const z = zuZahlen(rechnung, heute); return z.skonto ? `${euro(z.betrag)} überweisen — mit Skonto bis ${z.bis?.split("-").reverse().join(".")}` : `${euro(z.betrag)} überweisen`; })()}
@@ -607,6 +611,20 @@ export function EingangDialog({
           <Switch id="e-bezahlt" checked={k.bezahlt} onCheckedChange={(v) => setz({ bezahlt: v })} disabled={!!rechnung && status !== "freigegeben" && status !== "lastschrift" && status !== "ueberwiesen"} />
         </div>
       </div>
+      {k.bezahlt && (
+        <div className="-mt-1 space-y-1.5 px-1">
+          <div className="flex flex-wrap gap-1.5" role="group" aria-label="Wie bezahlt">
+            {[{ bar: false, text: k.lastschrift ? "Abgebucht" : "Überwiesen" }, { bar: true, text: "Bar / eigene Karte" }].map((x) => (
+              <button key={x.text} type="button" aria-pressed={k.bar === x.bar} onClick={() => setz({ bar: x.bar })}
+                className={cn("min-h-11 rounded-md border px-3 text-sm transition-colors",
+                  k.bar === x.bar ? "border-primary bg-primary-soft font-medium text-primary" : "bg-card hover:bg-muted")}>
+                {x.text}
+              </button>
+            ))}
+          </div>
+          {k.bar && <p className="text-xs text-muted-foreground">Bar oder mit eigener Karte ausgelegt (z. B. Baumarkt) und im Büro zurückgegeben — steht unter Bezahlt → „Bar bezahlt“ und in der Belegliste für die Buchhaltung.</p>}
+        </div>
+      )}
 
       <EingangPositionen positionen={positionen} setPositionen={setPositionen} onAnteile={anteileAusZeilen} anteileGesperrt={verrechnet} />
       {abweichung != null && (

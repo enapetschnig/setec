@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { EingangDialog } from "@/components/eingang/EingangDialog";
 import { dateiAdresse, eingangLaden, type EingangMitAnteilen } from "@/components/eingang/eingangDaten";
-import { ablauf } from "@/components/eingang/eingangLogik";
+import { ablauf, bezahltText } from "@/components/eingang/eingangLogik";
 import { isoTag } from "@/lib/format";
 import { BELEG_STATUS, FREIGABE_STATUS } from "@/lib/types";
 import { useEingangZeitraum, useKategorien, useLetzteEingangKategorien } from "./buchhaltungDaten";
@@ -29,7 +29,7 @@ export function EingangListe({ zeitraum, onKategorien }: { zeitraum: Zeitraum; o
         id: r.id, datum: r.datum, nummer: r.nummer, name: r.lieferant, unter: null,
         netto: Number(r.netto), ust: Number(r.ust), brutto: Number(r.brutto), offen: erledigt ? 0 : Number(r.brutto),
         status: !erledigt && !r.lastschrift && r.faellig_am && r.faellig_am < heute ? BELEG_STATUS.ueberfaellig
-          : a === "ueberwiesen" && r.lastschrift ? { ton: "gruen", text: "Abgebucht" } : FREIGABE_STATUS[a],
+          : a === "ueberwiesen" ? { ton: "gruen", text: bezahltText(r) } : FREIGABE_STATUS[a],
         erledigt,
         kategorie_id: r.kategorie_id,
         vorschlag: r.kategorie_id ? null : eingangVorschlag(r.lieferant, r.eingang_positionen.map((p) => p.bezeichnung), jeLieferant, kategorien),

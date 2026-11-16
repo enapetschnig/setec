@@ -161,7 +161,7 @@ export const FREIGABE_STATUS: Record<string, StatusEintrag> = {
   pruefen: { ton: "cyan", text: "Zu prüfen" },
   freigegeben: { ton: "blau", text: "Zu überweisen" },
   lastschrift: { ton: "blau", text: "Lastschrift" },
-  ueberwiesen: { ton: "gruen", text: "Überwiesen" },
+  ueberwiesen: { ton: "gruen", text: "Bezahlt" },
   abgelehnt: { ton: "rot", text: "Abgelehnt" },
 };
 

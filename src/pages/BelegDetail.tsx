@@ -7,7 +7,10 @@ import { Leer } from "@/components/Bausteine";
 import { BelegEditor } from "@/components/belege/BelegEditor";
 import { AltrechnungAnsicht } from "@/components/buchhaltung/AltrechnungAnsicht";
 import { useBeleg } from "@/components/belege/daten";
-import { empfaengerAusKunde, kopfNeu, neueId, type BelegTyp } from "@/components/belege/editor";
+import { artikelPosition, empfaengerAusKunde, kopfNeu, leerePosition, neueId, zahlText, type BelegTyp, type EditorPosition } from "@/components/belege/editor";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { klsRechnungSetzen, useKundenLieferschein } from "@/components/kundenlieferschein/klsDaten";
 import { useKunden, useProjekt } from "@/hooks/useDaten";
 import { useSitzung } from "@/hooks/useSitzung";
 import { isoTag } from "@/lib/format";
@@ -66,8 +69,22 @@ function NeuerBeleg({ params }: { params: URLSearchParams }) {
   const { data: projekt, isLoading: projektLaedt } = useProjekt(projektId);
   const { data: kunden, isLoading: kundenLaedt } = useKunden();
   const [id] = useState(neueId);
+  // Rechnung aus einem Kunden-Lieferschein: Zeilen mit Verkaufspreis, Retour mit Minus
+  const lsId = typ === "rechnung" ? params.get("lieferschein") : null;
+  const { data: ls, isLoading: lsLaedt } = useKundenLieferschein(lsId);
+  const artikelIds = [...new Set((ls?.kunden_lieferschein_positionen ?? []).map((p) => p.artikel_id).filter(Boolean) as string[])];
+  const { data: lsArtikel, isLoading: artikelLaedt } = useQuery({
+    queryKey: ["artikel", "fuer-lieferschein", lsId, artikelIds.join(",")],
+    enabled: !!ls,
+    queryFn: async () => {
+      if (!artikelIds.length) return [];
+      const { data, error } = await supabase.from("artikel").select("id, bezeichnung, einheit, vk_preis, ek_preis, listenpreis, aufschlag").in("id", artikelIds);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
 
-  if (laden || (projektId && projektLaedt) || kundenLaedt) return <Laedt titel={typ === "angebot" ? "Neues Angebot" : "Neue Rechnung"} />;
+  if (laden || (projektId && projektLaedt) || kundenLaedt || (lsId && (lsLaedt || artikelLaedt))) return <Laedt titel={typ === "angebot" ? "Neues Angebot" : "Neue Rechnung"} />;
 
   const kopf = kopfNeu(typ, firma, isoTag());
   if (projekt) {
@@ -79,6 +96,20 @@ function NeuerBeleg({ params }: { params: URLSearchParams }) {
     const kunde = kunden?.find((k) => k.id === params.get("kunde")) ?? null;
     if (kunde) Object.assign(kopf, empfaengerAusKunde(kunde));
   }
+  let startPositionen: EditorPosition[] | undefined;
+  if (ls) {
+    if (!ls.kunde_id) Object.assign(kopf, { empf_name: ls.empf_name, empf_strasse: ls.empf_strasse ?? "", empf_plz: ls.empf_plz ?? "", empf_ort: ls.empf_ort ?? "", empf_email: ls.empf_email ?? "" });
+    kopf.betreff = `Lieferschein ${ls.nummer ?? ""}`.trim();
+    if (!kopf.leistung_von) kopf.leistung_von = ls.datum;
+    startPositionen = [...ls.kunden_lieferschein_positionen].sort((a, b) => a.pos - b.pos).map((p) => {
+      const a = lsArtikel?.find((x) => x.id === p.artikel_id);
+      const menge = zahlText(p.retour ? -Number(p.menge) : Number(p.menge));
+      const bezeichnung = p.retour ? `Retour: ${p.bezeichnung}` : p.bezeichnung;
+      return a
+        ? { ...artikelPosition(a, firma), bezeichnung, menge }
+        : leerePosition("material", { bezeichnung, einheit: p.einheit, menge });
+    });
+  }
 
   return (
     <BelegEditor
@@ -89,6 +120,8 @@ function NeuerBeleg({ params }: { params: URLSearchParams }) {
       autoKi={params.get("ki") === "1"}
       autoImport={typ === "rechnung" && !!projekt && params.get("import") === "1"}
       startVorlage={typ === "angebot" && params.get("vorlage") ? { id: params.get("vorlage")!, nachziehen: params.get("preise") !== "vorlage" } : undefined}
+      startPositionen={startPositionen}
+      nachNeuAnlegen={ls ? (rid) => klsRechnungSetzen(ls.id, rid) : undefined}
     />
   );
 }

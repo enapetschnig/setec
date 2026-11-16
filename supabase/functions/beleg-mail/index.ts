@@ -15,6 +15,9 @@
 // bestätigte Domain) mit dem Firmennamen, Antwort an = Firmen-Mail
 // (firma.email). Vermerk: angebot_verlauf art 'gesendet' (name = Empfänger,
 // text = Betreff). Drossel: 30 Mails je Stunde und Konto.
+// Kunden-Lieferschein (16.11.2026): statt beleg_id `kunden_lieferschein_id` —
+//   nur abgeschlossen (mit Nummer), das PDF kommt wie beim Angebot von der App;
+//   Vermerk in kunden_lieferscheine.gesendet_an/gesendet_am.
 // Secrets: RESEND_API_KEY, optional RESEND_FROM.
 import { createClient } from "npm:@supabase/supabase-js@2.119.0";
 
@@ -80,16 +83,32 @@ Deno.serve(async (req) => {
     const text = typeof ein.text === "string" ? ein.text.trim() : "";
     if (!betreff || betreff.length > 200) return antwort({ error: "Betreff fehlt oder ist zu lang." }, 400);
     if (!text || text.length > 10_000) return antwort({ error: "Text fehlt oder ist zu lang." }, 400);
-    if (typeof ein.beleg_id !== "string") return antwort({ error: "Beleg fehlt." }, 400);
+    const lsId = typeof ein.kunden_lieferschein_id === "string" ? ein.kunden_lieferschein_id : null;
+    if (!lsId && typeof ein.beleg_id !== "string") return antwort({ error: "Beleg fehlt." }, 400);
 
-    const { data: b, error: eB } = await dienst.from("belege")
-      .select("id, typ, status, nummer, archiv_stand").eq("id", ein.beleg_id).maybeSingle();
-    if (eB) throw eB;
-    if (!b) return antwort({ error: "Beleg nicht gefunden." }, 404);
-    const art = b.typ === "angebot" ? "Angebot" : b.status === "storno" ? "Stornorechnung" : "Rechnung";
+    let b: { id: string; typ: string; status: string; nummer: string | null; archiv_stand: number | null };
+    if (lsId) {
+      const { data: l, error: eL } = await dienst.from("kunden_lieferscheine").select("id, status, nummer").eq("id", lsId).maybeSingle();
+      if (eL) throw eL;
+      if (!l) return antwort({ error: "Lieferschein nicht gefunden." }, 404);
+      b = { id: l.id, typ: "lieferschein", status: l.status, nummer: l.nummer, archiv_stand: null };
+    } else {
+      const { data, error: eB } = await dienst.from("belege")
+        .select("id, typ, status, nummer, archiv_stand").eq("id", ein.beleg_id).maybeSingle();
+      if (eB) throw eB;
+      if (!data) return antwort({ error: "Beleg nicht gefunden." }, 404);
+      b = data;
+    }
+    const art = b.typ === "lieferschein" ? "Lieferschein" : b.typ === "angebot" ? "Angebot" : b.status === "storno" ? "Stornorechnung" : "Rechnung";
 
     const anhaenge: { filename: string; content: Uint8Array }[] = [];
-    if (b.typ === "rechnung") {
+    if (b.typ === "lieferschein") {
+      if (b.status !== "fertig" || !b.nummer) return antwort({ error: "Verschickt wird nur ein abgeschlossener Lieferschein." }, 400);
+      if (typeof ein.pdf !== "string" || !ein.pdf) return antwort({ error: "PDF fehlt." }, 400);
+      const pdf = ausBase64(ein.pdf);
+      if (!istPdf(pdf) || pdf.length > MAX_PDF) return antwort({ error: "Das PDF ist ungültig oder größer als 8 MB." }, 400);
+      anhaenge.push({ filename: dateiname(ein.pdf_name, `Lieferschein ${b.nummer}.pdf`), content: pdf });
+    } else if (b.typ === "rechnung") {
       if (!["offen", "bezahlt", "storno"].includes(b.status) || !b.nummer) {
         return antwort({ error: "Verschickt wird nur eine fertige Rechnung (offen, bezahlt oder Stornorechnung)." }, 400);
       }
@@ -174,9 +193,11 @@ Deno.serve(async (req) => {
     let id: string | null = null;
     try { id = JSON.parse(rueck)?.id ?? null; } catch { /* nur fürs Protokoll */ }
 
-    const { error: eV } = await dienst.from("angebot_verlauf").insert({
-      beleg_id: b.id, art: "gesendet", name: an.join(", "), text: betreff, wer: user.id, gelesen: true,
-    });
+    const { error: eV } = lsId
+      ? await dienst.from("kunden_lieferscheine").update({ gesendet_an: an.join(", "), gesendet_am: new Date().toISOString() }).eq("id", b.id)
+      : await dienst.from("angebot_verlauf").insert({
+        beleg_id: b.id, art: "gesendet", name: an.join(", "), text: betreff, wer: user.id, gelesen: true,
+      });
     return antwort({ ok: true, id, an, vermerkt: !eV });
   } catch (e) {
     return antwort({ error: String((e as Error).message || e) }, 400);

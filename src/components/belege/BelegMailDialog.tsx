@@ -21,11 +21,13 @@ import { blobBase64, empfaengerLesen, type MailArt, type MailVorgabe } from "./m
  * bleibt als Ausweichweg — dort ohne Anhang.
  */
 export function BelegMailDialog({
-  open, onOpenChange, belegId, art, vorgabe, anhangName, vorbereiten, datenblaetter = [], startGewaehlt,
+  open, onOpenChange, belegId, lieferscheinId, art, vorgabe, anhangName, vorbereiten, datenblaetter = [], startGewaehlt,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
-  belegId: string;
+  belegId?: string;
+  /** Kunden-Lieferschein statt Angebot/Rechnung (PDF kommt aus `vorbereiten`) */
+  lieferscheinId?: string;
   art: MailArt;
   vorgabe: MailVorgabe;
   anhangName: string;
@@ -63,7 +65,7 @@ export function BelegMailDialog({
       const pdf = await vorbereiten();
       const { data, error } = await supabase.functions.invoke("beleg-mail", {
         body: {
-          beleg_id: belegId, an: empfaenger.join(", "), betreff: betreff.trim(), text: text.trim(), pdf_name: anhangName,
+          ...(lieferscheinId ? { kunden_lieferschein_id: lieferscheinId } : { beleg_id: belegId }), an: empfaenger.join(", "), betreff: betreff.trim(), text: text.trim(), pdf_name: anhangName,
           ...(pdf ? { pdf: await blobBase64(pdf) } : {}),
           datenblaetter: datenblaetter.filter((d) => gewaehlt.has(d.pfad)).map((d) => d.pfad),
         },
@@ -74,6 +76,7 @@ export function BelegMailDialog({
         throw new Error(meldung);
       }
       toast.success(`${art} an ${(data as { an?: string[] })?.an?.join(", ") ?? empfaenger.join(", ")} gesendet`);
+      if (lieferscheinId) void qc.invalidateQueries({ queryKey: ["kls"] });
       void qc.invalidateQueries({ queryKey: ["belege", "online", belegId] });
       void qc.invalidateQueries({ queryKey: ["belege", "gesendet", belegId] });
       onOpenChange(false);
@@ -131,7 +134,7 @@ export function BelegMailDialog({
             <li className="flex min-h-11 items-center gap-2 px-4 py-1.5">
               <FileText className="h-4 w-4 shrink-0 text-primary" />
               <span className="min-w-0 flex-1 truncate font-medium">{anhangName}</span>
-              <span className="shrink-0 text-xs text-muted-foreground">{art === "Angebot" ? "PDF" : "Original"}</span>
+              <span className="shrink-0 text-xs text-muted-foreground">{art === "Angebot" || art === "Lieferschein" ? "PDF" : "Original"}</span>
             </li>
             {datenblaetter.map((d) => (
               <li key={d.pfad}>

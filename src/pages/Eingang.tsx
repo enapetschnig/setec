@@ -9,27 +9,25 @@ import { Input } from "@/components/ui/input";
 import { useIstPc } from "@/components/AppLayout";
 import { EingangDialog } from "@/components/eingang/EingangDialog";
 import { ueberwiesen, useEingangsrechnungen, type EingangMitAnteilen } from "@/components/eingang/eingangDaten";
-import { ablauf, kategorieText, lastschriftBetrag, zahlung, zuordnung, zuZahlen } from "@/components/eingang/eingangLogik";
+import { ablauf, bezahltText, kategorieText, lastschriftBetrag, zahlung, zahlweg, ZAHLWEGE, zuordnung, zuZahlen, type Zahlweg } from "@/components/eingang/eingangLogik";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useKunden, useNeuLaden } from "@/hooks/useDaten";
 import { useSitzung } from "@/hooks/useSitzung";
 import { ibanPruefen, sepaXml } from "@/lib/sepa";
 import { passtSuche } from "@/components/regie/regieLogik";
 import { datum, euro, isoTag } from "@/lib/format";
-import { EINGANG_STATUS, FREIGABE_STATUS, type StatusEintrag } from "@/lib/types";
+import { EINGANG_STATUS, FREIGABE_STATUS } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useKategorien } from "@/components/buchhaltung/buchhaltungDaten";
 
-const ABGEBUCHT: StatusEintrag = { ton: "gruen", text: "Abgebucht" };
-
-type Filter = "alle" | "pruefen" | "freigegeben" | "lastschrift" | "ueberwiesen" | "abgelehnt" | "zuzuordnen";
+type Filter = "alle" | "pruefen" | "freigegeben" | "lastschrift" | "bezahlt" | "abgelehnt" | "zuzuordnen";
 
 /** Der Ablauf von links nach rechts: prüfen → freigeben → überweisen */
 const FILTER: { wert: Filter; text: string }[] = [
   { wert: "pruefen", text: "Zu prüfen" },
   { wert: "freigegeben", text: "Zu überweisen" },
   { wert: "lastschrift", text: "Lastschrift" },
-  { wert: "ueberwiesen", text: "Überwiesen" },
+  { wert: "bezahlt", text: "Bezahlt" },
   { wert: "abgelehnt", text: "Abgelehnt" },
   { wert: "zuzuordnen", text: "Zuzuordnen" },
   { wert: "alle", text: "Alle" },
@@ -40,7 +38,7 @@ const LEER_TEXT: Record<Filter, string> = {
   pruefen: "Nichts zu prüfen.",
   freigegeben: "Nichts zu überweisen.",
   lastschrift: "Keine offene Lastschrift. Bucht ein Händler selbst ab (SEPA-Mandat), in der Rechnung „Händler bucht per Lastschrift ab“ einschalten.",
-  ueberwiesen: "Noch nichts überwiesen.",
+  bezahlt: "Noch nichts bezahlt.",
   abgelehnt: "Keine abgelehnten Rechnungen.",
   zuzuordnen: "Alles zugeordnet.",
 };
@@ -48,7 +46,8 @@ const LEER_TEXT: Record<Filter, string> = {
 const passt = (r: EingangMitAnteilen, f: Filter) =>
   f === "alle" ? true
     : f === "zuzuordnen" ? zuordnung(r, r.eingang_anteile) !== "zugeordnet"
-      : ablauf(r) === f;
+      : f === "bezahlt" ? ablauf(r) === "ueberwiesen"
+        : ablauf(r) === f;
 
 /** /eingang — Eingangsrechnungen (nur Chef), Filter über ?filter= */
 export default function Eingang() {
@@ -56,7 +55,10 @@ export default function Eingang() {
   const heute = isoTag();
   const [params, setParams] = useSearchParams();
   const f = params.get("filter");
-  const filter: Filter = FILTER.some((x) => x.wert === f) ? f as Filter : f === "unbezahlt" ? "freigegeben" : "pruefen";
+  const filter: Filter = FILTER.some((x) => x.wert === f) ? f as Filter : f === "unbezahlt" ? "freigegeben" : f === "ueberwiesen" ? "bezahlt" : "pruefen";
+  /** Unter „Bezahlt“: nach Zahlweg (überwiesen, Lastschrift, bar) */
+  const w = params.get("weg");
+  const weg: Zahlweg | null = filter === "bezahlt" && ZAHLWEGE.some((x) => x.wert === w) ? w as Zahlweg : null;
   const { firma } = useSitzung();
   const neuLaden = useNeuLaden();
   /** Zu überweisen: abgewählte bleiben stehen */
@@ -80,8 +82,17 @@ export default function Eingang() {
     setParams(neu, { replace: true });
   }, [offenParam, alle, params, setParams]);
 
+  const wegSetzen = (wert: Zahlweg | null) => {
+    const neu = new URLSearchParams(params);
+    if (wert) neu.set("weg", wert);
+    else neu.delete("weg");
+    setParams(neu, { replace: true });
+  };
+  const bezahlte = useMemo(() => alle.filter((r) => passt(r, "bezahlt")), [alle]);
+
   const filterSetzen = (w: Filter) => {
     const neu = new URLSearchParams(params);
+    neu.delete("weg");
     if (w === "pruefen") neu.delete("filter");
     else neu.set("filter", w);
     setParams(neu, { replace: true });
@@ -93,11 +104,11 @@ export default function Eingang() {
     return z;
   }, [alle]);
 
-  const liste = useMemo(() => alle.filter((r) => passt(r, filter) && passtSuche([
+  const liste = useMemo(() => alle.filter((r) => passt(r, filter) && (!weg || zahlweg(r) === weg) && passtSuche([
     r.lieferant, r.nummer, r.notiz, katName(r), ...r.eingang_anteile.flatMap((a) => [a.text, a.projekte?.nummer, a.projekte?.name]),
   ], suche)).sort((a, b) => (filter === "freigegeben" ? (zuZahlen(a, heute).bis ?? a.faellig_am ?? "9").localeCompare(zuZahlen(b, heute).bis ?? b.faellig_am ?? "9")
     : filter === "lastschrift" ? (lastschriftBetrag(a).am ?? a.datum).localeCompare(lastschriftBetrag(b).am ?? b.datum) : 0)),
-  [alle, filter, suche, heute]);
+  [alle, filter, weg, suche, heute]);
 
   // Vorschläge: bisherige Lieferanten und die Lieferanten-Kontakte
   const lieferanten = useMemo(() => [...new Set([
@@ -174,6 +185,18 @@ export default function Eingang() {
             </button>
           ))}
         </div>
+        {filter === "bezahlt" && (
+          <div className="flex flex-wrap gap-1.5" role="group" aria-label="Wie bezahlt">
+            {[{ wert: null, text: "Alle" }, ...ZAHLWEGE].map((x) => (
+              <button key={x.wert ?? "alle"} type="button" onClick={() => wegSetzen(x.wert as Zahlweg | null)}
+                className={cn("inline-flex min-h-11 items-center gap-1.5 rounded-md border px-3 text-sm transition-colors",
+                  weg === x.wert ? "border-primary bg-primary-soft font-medium text-primary" : "bg-card hover:bg-muted")}>
+                {x.text}
+                <span className="zahl text-xs text-muted-foreground">{x.wert ? bezahlte.filter((r) => zahlweg(r) === x.wert).length : bezahlte.length}</span>
+              </button>
+            ))}
+          </div>
+        )}
         <div className="relative lg:max-w-md">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input value={suche} onChange={(e) => setSuche(e.target.value)} placeholder="Suchen – Lieferant, Nummer, Projekt …"
@@ -221,7 +244,7 @@ export default function Eingang() {
                     <div className="min-w-0 flex-1 space-y-0.5">
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                         <span className="truncate font-medium">{r.lieferant}</span>
-                        <StatusPille eintrag={schritt === "ueberwiesen" && r.lastschrift ? ABGEBUCHT : FREIGABE_STATUS[schritt]} />
+                        <StatusPille eintrag={schritt === "ueberwiesen" ? { ton: "gruen", text: bezahltText(r) } : FREIGABE_STATUS[schritt]} />
                         {r.lastschrift && schritt !== "lastschrift" && schritt !== "ueberwiesen" && schritt !== "abgelehnt" && <StatusPille eintrag={FREIGABE_STATUS.lastschrift} />}
                         {z !== "zugeordnet" && <StatusPille eintrag={EINGANG_STATUS[z]} />}
                         {zahl === "ueberfaellig" && schritt !== "abgelehnt" && <StatusPille eintrag={EINGANG_STATUS.ueberfaellig} />}

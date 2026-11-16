@@ -55,7 +55,7 @@ export function Uebergabe({ zeitraum }: { zeitraum: Zeitraum }) {
       const [b, e, u, d, alt] = await Promise.all([
         supabase.from("belege").select("id, nummer, datum, faellig_am, status, netto, ust, brutto, ust_satz, reverse_charge, empf_name, empf_uid, teil_nr, storno_von, kategorie_id, kunden(nummer, name, strasse, plz, ort, uid)")
           .eq("typ", "rechnung").eq("altbestand", false).neq("status", "entwurf").gte("datum", von).lte("datum", bis).order("datum").order("nummer"),
-        supabase.from("eingangsrechnungen").select("id, lieferant, nummer, datum, faellig_am, netto, ust, brutto, ust_satz, reverse_charge, kategorie, kategorie_id, datei_pfad")
+        supabase.from("eingangsrechnungen").select("id, lieferant, nummer, datum, faellig_am, netto, ust, brutto, ust_satz, reverse_charge, kategorie, kategorie_id, datei_pfad, bezahlt_am, bar_bezahlt, lastschrift")
           .gte("datum", von).lte("datum", bis).order("datum").order("lieferant"),
         supabase.from("fibu_uebergabe_belege").select("beleg_id, eingang_id"),
         supabase.from("belege").select("id", { count: "exact", head: true }).eq("typ", "rechnung").eq("status", "entwurf").gte("datum", von).lte("datum", bis),
@@ -147,7 +147,8 @@ export function Uebergabe({ zeitraum }: { zeitraum: Zeitraum }) {
           b.reverse_charge ? "ja" : "", Number(b.netto), Number(b.ust), Number(b.brutto), b.faellig_am ? datum(b.faellig_am) : "",
           b.storno_von ? "Stornorechnung" : b.status === "storniert" ? "storniert" : b.teil_nr ? `${b.teil_nr}. Teilrechnung` : "", alsText(b.datei)]),
         ...eingaengeFertig.map((e): CsvZelle[] => ["Eingangsrechnung", alsText(e.nummer ?? eingangNummer(e)), datum(e.datum), e.kreditor, alsText(e.lieferant), "", aufwandKonto(e, konten), Number(e.ust_satz),
-          e.reverse_charge ? "ja" : "", Number(e.netto), Number(e.ust), Number(e.brutto), e.faellig_am ? datum(e.faellig_am) : "", "", alsText(e.datei)]),
+          e.reverse_charge ? "ja" : "", Number(e.netto), Number(e.ust), Number(e.brutto), e.faellig_am ? datum(e.faellig_am) : "",
+          e.bezahlt_am && e.bar_bezahlt ? "Bar bezahlt (ausgelegt)" : e.lastschrift ? "Lastschrift" : "", alsText(e.datei)]),
       ];
       dateien["Belegliste.csv"] = strToU8(`\uFEFF${liste.map((z) => z.map(csvFeld).join(";")).join("\r\n")}\r\n`);
 

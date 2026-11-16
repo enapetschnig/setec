@@ -108,6 +108,21 @@ export function ablauf(r: Pick<Eingangsrechnung, "freigabe" | "bezahlt_am"> & { 
   return "pruefen";
 }
 
+/** Wie eine bezahlte Rechnung bezahlt wurde */
+export type Zahlweg = "ueberweisung" | "lastschrift" | "bar";
+export const ZAHLWEGE: { wert: Zahlweg; text: string; pille: string }[] = [
+  { wert: "ueberweisung", text: "Überwiesen", pille: "Überwiesen" },
+  { wert: "lastschrift", text: "Lastschrift", pille: "Abgebucht" },
+  { wert: "bar", text: "Bar bezahlt", pille: "Bar bezahlt" },
+];
+export function zahlweg(r: { lastschrift?: boolean | null; bar_bezahlt?: boolean | null }): Zahlweg {
+  if (r.bar_bezahlt) return "bar";
+  return r.lastschrift ? "lastschrift" : "ueberweisung";
+}
+/** Pille einer bezahlten Rechnung: Überwiesen / Abgebucht / Bar bezahlt */
+export const bezahltText = (r: { lastschrift?: boolean | null; bar_bezahlt?: boolean | null }) =>
+  ZAHLWEGE.find((z) => z.wert === zahlweg(r))!.pille;
+
 /**
  * Voraussichtlicher Abbuchungstag einer Lastschrift: der erste Tag X ab dem
  * Rechnungsdatum (Monatsende, wenn der Monat kürzer ist). Ohne Tag: null.

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { dezimalLesen } from "@/lib/format";
 import {
-  abbuchungAm, ablauf, abgleich, anteileAusPositionen, lastschriftBetrag, aufteilungFehler, positionenAbweichung, bruttoAusNetto, nettoAusBrutto, rest, textAehnlich, zahlung, zuordnung, zuZahlen,
+  abbuchungAm, ablauf, abgleich, anteileAusPositionen, bezahltText, lastschriftBetrag, zahlweg, aufteilungFehler, positionenAbweichung, bruttoAusNetto, nettoAusBrutto, rest, textAehnlich, zahlung, zuordnung, zuZahlen,
   type AnteilEntwurf,
 } from "./eingangLogik";
 
@@ -130,5 +130,14 @@ describe("Lastschrift (SEPA-Mandat)", () => {
     const mitDatum = { ...r, skonto_bis: "2026-11-20" };
     expect(lastschriftBetrag(mitDatum).skonto).toBe(36);
     expect(lastschriftBetrag({ ...r, skonto_prozent: null }).betrag).toBe(1200);
+  });
+});
+
+describe("Zahlweg", () => {
+  it("bar vor Lastschrift vor Überweisung", () => {
+    expect(zahlweg({ bar_bezahlt: true, lastschrift: true })).toBe("bar");
+    expect(zahlweg({ bar_bezahlt: false, lastschrift: true })).toBe("lastschrift");
+    expect(zahlweg({})).toBe("ueberweisung");
+    expect(bezahltText({ bar_bezahlt: true })).toBe("Bar bezahlt");
   });
 });

@@ -4,7 +4,7 @@
  * `mailto:` bleibt als Ausweichweg.
  */
 
-export type MailArt = "Angebot" | "Rechnung" | "Stornorechnung";
+export type MailArt = "Angebot" | "Rechnung" | "Stornorechnung" | "Lieferschein";
 
 export type MailVorgabe = { an: string; betreff: string; text: string };
 
@@ -52,6 +52,8 @@ export function mailVorgabe(d: {
     zeilen.push(`anbei unser Angebot ${nr}${titel} als PDF${blaetter}.`);
     if (d.link) zeilen.push("", "Sie können es auch online ansehen und direkt bestätigen:", d.link);
     if (d.giltBis) zeilen.push("", `Das Angebot gilt bis ${d.giltBis}.`);
+  } else if (d.art === "Lieferschein") {
+    zeilen.push(`anbei unser Lieferschein ${nr}${d.datum ? ` vom ${d.datum}` : ""} als PDF.`);
   } else if (d.art === "Stornorechnung") {
     zeilen.push(`anbei die Stornorechnung ${nr}${d.stornoZu ? ` zur Rechnung ${d.stornoZu}` : ""} als PDF. Sie hebt die Rechnung in voller Höhe auf.`);
   } else {

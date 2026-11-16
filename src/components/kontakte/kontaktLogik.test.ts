@@ -96,7 +96,9 @@ describe("Belege eines Lieferanten", () => {
     });
   });
   it("Pillen je Belegart", () => {
-    expect(belegPille({ quelle: "rechnung", status: "bezahlt" }).text).toBe("Überwiesen");
+    // 16.11.2026 Wunsch SETEC: „Überwiesen“ heißt jetzt „Bezahlt“ (auch bar, Lastschrift)
+    expect(belegPille({ quelle: "rechnung", status: "bezahlt" }).text).toBe("Bezahlt");
+    expect(belegPille({ quelle: "rechnung", status: "lastschrift" }).text).toBe("Lastschrift");
     expect(belegPille({ quelle: "rechnung", status: "offen" }).text).toBe("Zu prüfen");
     expect(belegPille({ quelle: "lieferschein", status: "offen" }).text).toBe("Ohne Rechnung");
     expect(belegPille({ quelle: "bestellung", status: "geliefert" }).text).toBe("Geliefert");

@@ -106,7 +106,7 @@ export async function dateiAdresse(pfad: string): Promise<string> {
 
 export type EingangKopf = Pick<Eingangsrechnung,
   "lieferant" | "nummer" | "datum" | "faellig_am" | "netto" | "ust_satz" | "ust" | "brutto" | "kategorie" | "kategorie_id" | "reverse_charge" | "betrieb" | "bezahlt_am" | "notiz"
-  | "iban" | "skonto_prozent" | "skonto_bis" | "lieferschein_nummern" | "lastschrift" | "lastschrift_tag">;
+  | "iban" | "skonto_prozent" | "skonto_bis" | "lieferschein_nummern" | "lastschrift" | "lastschrift_tag" | "bar_bezahlt">;
 
 /** Schon hochgeladene Datei (z. B. für die KI vor dem ersten Speichern) */
 export type Hochgeladen = { pfad: string; name: string; mime: string | null };

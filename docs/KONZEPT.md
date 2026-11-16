@@ -213,6 +213,9 @@ Rechnungen von Großhändlern und Subunternehmern, nur der Chef
   Rechnungsdatum (`abbuchungAm`), „Als abgebucht markieren“ setzt `bezahlt_am`.
   Nie überfällig. Gilt je Händler: Umschalten überträgt auf seine offenen
   Rechnungen, neue Rechnungen werden wie seine letzte vorbelegt.
+- **Bezahlt** (Reiter, früher „Überwiesen“): Unterfilter Überwiesen /
+  Lastschrift / Bar bezahlt (`bar_bezahlt`, ausgelegt und im Büro zurück —
+  Hinweis in der Belegliste für die Buchhaltung).
 - **Positionen** (`eingang_positionen`): die Zeilen der Rechnung, je Zeile ein
   Projekt; „Aufteilung aus den Positionen übernehmen“ macht daraus die
   Anteile (`anteileAusPositionen`, in Cent). „Mit KI ausfüllen“ liest Kopf,
@@ -1071,3 +1074,11 @@ Projekt- und Regienummer vergibt ein Trigger beim Anlegen, Belegnummern
 - Diktat (`DiktatKnopf`): ohne Netz oder Mikrofon eine klare Meldung und Ende —
   kein Neustart in Schleife
 - Handy zuerst: Ziel 360 px Breite, Knöpfe ≥ 44 px, Eingaben `h-11`/`h-12`
+
+## Kunden-Lieferscheine (16.11.2026)
+
+Material an Kunden ohne Projekt (Theke, Sonderbestellung) samt Retour:
+`/kunden-lieferscheine`, aus dem Kontakt „Lieferschein“. Entwurf → Abschließen
+(RPC `kunden_lieferschein_abschliessen`: Nummer LS-, Lagerbuchung) → Kunde
+unterschreibt → PDF/Druck/Mail (`beleg-mail`) → „Rechnung schreiben“. Details
+`.claude/rules/kunden-lieferscheine.md`.

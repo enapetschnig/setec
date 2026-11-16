@@ -1,6 +1,6 @@
 import {
   BarChart3, BookOpenCheck, MessageSquarePlus, Bus, FileCheck2, FileText, LayoutGrid, HandCoins, ClipboardSignature, Clock, FolderKanban, Home, Inbox, Package,
-  FolderArchive, ListTodo, Receipt, ScanBarcode, Settings, ShieldCheck, ShoppingCart, Smartphone, UserCog, Users, Warehouse, type LucideIcon,
+  FolderArchive, ListTodo, PackageCheck, Receipt, ScanBarcode, Settings, ShieldCheck, ShoppingCart, Smartphone, UserCog, Users, Warehouse, type LucideIcon,
 } from "lucide-react";
 
 /**
@@ -46,6 +46,7 @@ export const NAVIGATION: NavEintrag[] = [
   { titel: "Anlagen & Prüfungen", selten: true, text: "E-Check, Verteiler, Blitzschutz — was fällig ist", nurChef: true, pfad: "/anlagen", icon: ShieldCheck, gruppe: "baustelle", stichworte: "E-Check Prüfprotokoll Prüfung PV-Anlage Wartung" },
 
   { titel: "Eingangsrechnungen", text: "Rechnungen vom Großhändler prüfen, zuordnen, zahlen", pfad: "/eingang", icon: Inbox, gruppe: "buero", nurChef: true, stichworte: "Lieferantenrechnung Großhändler Überweisen Skonto Freigabe" },
+  { titel: "Kunden-Lieferscheine", text: "Material an Kunden ausgeben, Retour, Unterschrift", pfad: "/kunden-lieferscheine", icon: PackageCheck, gruppe: "buero", nurChef: true, stichworte: "Lieferschein Kunde Theke Verkauf Material Sonderbestellung Retour Rücknahme Unterschrift Ausgabe" },
   { titel: "Offene Posten", text: "Wer noch zahlen muss, mahnen mit einem Tipp", pfad: "/offene-posten", icon: HandCoins, gruppe: "buero", nurChef: true, stichworte: "Mahnung mahnen Zahlung bezahlt Zahlungseingang" },
   { titel: "Dokumente", text: "Vorlagen, Zertifikate, Lohnzettel, Krankenscheine", textMonteur: "Firmendokumente, meine Lohnzettel", nurChef: true, pfad: "/dokumente", icon: FolderArchive, gruppe: "buero", stichworte: "Lohnzettel Krankenschein Vorlage Zertifikat Anmeldung Versicherung" },
   { titel: "Buchhaltung", selten: true, text: "Ein- und Ausgang, Kategorien, der Monat für den Steuerberater", pfad: "/buchhaltung", icon: BookOpenCheck, gruppe: "buero", nurChef: true, stichworte: "Steuerberater Kanzlei BMD RZL Altrechnungen Kategorie Export" },
