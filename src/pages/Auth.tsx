@@ -9,9 +9,10 @@ import { Label } from "@/components/ui/label";
 import { useSitzung } from "@/hooks/useSitzung";
 import { authFehler, zuEmail } from "@/lib/konto";
 import { offeneEinladung } from "@/lib/einladung";
+import { KontoAnlegen } from "@/components/einladung/KontoAnlegen";
 import { KUNDE } from "@/kunde.config";
 
-type Modus = "login" | "reset" | "neu";
+type Modus = "login" | "reset" | "register";
 
 export default function Auth() {
   const navigate = useNavigate();
@@ -19,7 +20,7 @@ export default function Auth() {
   const [laden, setLaden] = useState(false);
   const [modus, setModus] = useState<Modus>("login");
 
-  if (!sitzungLaedt && session && modus === "login") return <Navigate to="/" replace />;
+  if (!sitzungLaedt && session) return <Navigate to="/" replace />;
   // Frisch installierte App (Android/PC) startet auf „/“ — zurück zur offenen Einladung
   const einladung = !sitzungLaedt && !session ? offeneEinladung() : null;
   if (einladung) return <Navigate to={`/einladung/${einladung}`} replace />;
@@ -55,14 +56,10 @@ export default function Auth() {
 
       <div className="relative -mt-10 flex-1 px-4 pb-10">
         <div className="mx-auto w-full max-w-sm rounded-2xl border bg-card p-6 shadow-lg">
-          {modus === "neu" && (
+          {modus === "register" && (
             <div className="space-y-4">
-              <h2 className="text-lg font-semibold">Neu bei {KUNDE.kurzname}?</h2>
-              <p className="text-sm text-muted-foreground">
-                Scan den QR-Code am Aushang oder öffne den Link, den dir der Chef geschickt hat. Damit legst du die App auf den
-                Startbildschirm und registrierst dich darin selbst — in einer Minute.
-              </p>
-              <Button className="h-12 w-full" onClick={() => setModus("login")}>Zurück zur Anmeldung</Button>
+              <h2 className="text-lg font-semibold">Registrieren</h2>
+              <KontoAnlegen token={null} zurAnmeldung={() => setModus("login")} />
             </div>
           )}
 
@@ -93,7 +90,7 @@ export default function Auth() {
               </Button>
               <div className="flex items-center justify-between text-sm">
                 <button type="button" onClick={() => setModus("reset")} className="h-11 text-muted-foreground hover:text-foreground">Passwort vergessen?</button>
-                <button type="button" onClick={() => setModus("neu")} className="h-11 font-medium text-primary hover:underline" data-pruef="neu-hier">Neu hier?</button>
+                <button type="button" onClick={() => setModus("register")} className="h-11 font-medium text-primary hover:underline" data-pruef="registrieren">Registrieren</button>
               </div>
             </form>
           )}

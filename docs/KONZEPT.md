@@ -49,9 +49,11 @@ SETEC-Pakete (Lohnkosten, Angebot online als anon, Lager, Aufgaben, Dokumente).
 - Anmelden mit Benutzername: „Jürgen Maier“ → `juergen.maier@<loginDomain>`;
   Anmelden und Registrieren rechnen gleich (`zuEmail`). Meldungen von
   Supabase Auth übersetzt `authFehler`.
-- **Ein Weg in die App: der Firmen-Link** (siehe unten). Ein Konto ohne
-  gültigen Link (nur noch direkt über die Auth-API möglich) bleibt
-  `aktiv = false` und sieht nichts. **Sperren** setzt `gesperrt = true` (der Trigger nimmt
+- **Ein Registrierungsformular** (`components/einladung/KontoAnlegen.tsx`):
+  auf der Anmeldeseite („Registrieren“) und hinter dem Firmen-Link. Mit Link
+  sofort aktiv; ohne Link `aktiv = false` („Wartet auf Freischaltung“), der
+  Chef sieht es auf der Startseite und schaltet unter Einstellungen →
+  Mitarbeiter mit einem Tipp frei. **Sperren** setzt `gesperrt = true` (der Trigger nimmt
   `aktiv` weg); Freischalten hebt die Sperre auf. Gesperrte sehen „Zugang
   gesperrt“, nicht „Wartet auf Freischaltung“, und zählen auf der Startseite
   nicht als wartend.
@@ -74,8 +76,7 @@ SETEC-Pakete (Lohnkosten, Angebot online als anon, Lager, Aufgaben, Dokumente).
   nichts). Wer registriert (Vor-/Nachname, Benutzername aus dem Vornamen
   vorgeschlagen, Passwort), ist sofort aktiver Monteur (`handle_new_user`
   prüft Token + Namen); Chef-Rolle, Team, Farbe danach in den Einstellungen.
-  Abgelöst: persönliche Einladungen, Zugangslinks, „Konto anlegen“ auf `/auth`
-  (dort nur noch „Neu hier?“ mit dem Hinweis auf den QR-Code).
+  Abgelöst: persönliche Einladungen und Zugangslinks.
 - **Einladungsseite**: Handy im Browser → erst „App auf den Startbildschirm“
   (Anleitung je Gerät/Browser aus `lib/installieren.ts`, Bedienzeichen als
   Bild, iOS 26 über `Version/NN`; Android/PC-Chrome/Edge ein Knopf
@@ -921,8 +922,9 @@ Projekt- und Regienummer vergibt ein Trigger beim Anlegen, Belegnummern
    Verrechnetes, sortiert nach „noch nicht verrechnet“.
 7. **Neuer Mitarbeiter**: scannt den QR-Code am Aushang (oder öffnet den
    Firmen-Link aus der WhatsApp-Gruppe) → installiert die App → registriert
-   sich darin selbst und ist sofort drin. Der Chef gibt bei Bedarf danach
-   Chef-Rolle, Team und Farbe.
+   sich darin selbst und ist sofort drin. Ohne Link: auf der Anmeldeseite
+   „Registrieren“ (dasselbe Formular), der Chef schaltet mit einem Tipp frei.
+   Chef-Rolle, Team und Farbe gibt der Chef danach.
 
 ## Code-Konventionen
 

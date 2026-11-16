@@ -79,8 +79,8 @@ export function EinladenKarte() {
   return (
     <Karte titel="Neue Mitarbeiter">
       <p className="text-sm text-muted-foreground">
-        Jeder registriert sich selbst: QR-Code scannen (oder den Link öffnen), App auf den Startbildschirm legen, darin Name und
-        Passwort eintragen — fertig, ohne Freischalten. Chef-Rechte und Team gibst du danach hier unten.
+        Jeder registriert sich selbst. Über diesen Link oder QR-Code ist er sofort drin; wer sich ohne Link auf der
+        Anmeldeseite registriert, wartet, bis du ihn unten mit einem Tipp freischaltest. Chef-Rechte und Team gibst du danach hier unten.
       </p>
       {error ? (
         <p className="mt-4 text-sm text-destructive">Der Link lässt sich gerade nicht laden: {(error as Error).message}</p>
