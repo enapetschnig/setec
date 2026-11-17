@@ -1,3 +1,4 @@
+import { AdresseFeld } from "@/components/AdresseFeld";
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -270,7 +271,8 @@ function Editor({ start, kunden, vorlageKunde, retourVon, lager }: {
             {kopf.kunde_id && <p className="text-xs text-muted-foreground">Aus den Kontakten übernommen.</p>}
           </div>
           <div className="grid gap-2 sm:grid-cols-[2fr_1fr_2fr]">
-            <Input aria-label="Straße" className="h-11" placeholder="Straße" value={kopf.empf_strasse} onChange={(e) => setz({ empf_strasse: e.target.value })} />
+            <AdresseFeld aria-label="Straße" className="h-11" placeholder="Straße – Vorschläge kommen" wert={kopf.empf_strasse} onChange={(empf_strasse) => setz({ empf_strasse })}
+              onWaehlen={(a) => setz({ empf_strasse: a.strasse, empf_plz: a.plz, empf_ort: a.ort })} />
             <Input aria-label="PLZ" className="h-11" placeholder="PLZ" inputMode="numeric" value={kopf.empf_plz} onChange={(e) => setz({ empf_plz: e.target.value })} />
             <Input aria-label="Ort" className="h-11" placeholder="Ort" value={kopf.empf_ort} onChange={(e) => setz({ empf_ort: e.target.value })} />
           </div>

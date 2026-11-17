@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { AdresseFeld } from "@/components/AdresseFeld";
 import { FormularDialog } from "@/components/FormularDialog";
 import { KundeWahl } from "@/components/KundeWahl";
 import { ProjektWahl } from "@/components/ProjektWahl";
@@ -309,7 +310,11 @@ function AnschriftDialog({ open, onOpenChange, kopf, aendern }: { open: boolean;
     >
       {feld("empf_zusatz", "Zeile über dem Namen (optional)", { placeholder: "z. B. Herrn / Frau / z. H." })}
       {feld("empf_name", "Name / Firma")}
-      {feld("empf_strasse", "Straße")}
+      <div className="space-y-1.5">
+        <Label htmlFor="a-empf_strasse">Straße</Label>
+        <AdresseFeld id="a-empf_strasse" className="h-12" wert={kopf.empf_strasse ?? ""} onChange={(empf_strasse) => aendern({ empf_strasse })}
+          onWaehlen={(a) => aendern({ empf_strasse: a.strasse, empf_plz: a.plz, empf_ort: a.ort })} placeholder="Tippen – Vorschläge kommen" />
+      </div>
       <div className="grid grid-cols-[6rem_minmax(0,1fr)] gap-2">
         {feld("empf_plz", "PLZ", { inputMode: "numeric" })}
         {feld("empf_ort", "Ort")}
