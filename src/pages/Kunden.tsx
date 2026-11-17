@@ -27,7 +27,7 @@ function suchText(k: Kunde, personen: string[] = []) {
     .filter(Boolean).join(" ").toLowerCase();
 }
 
-/** Am Handy erst so viele Zeilen zeichnen, der Rest per Knopf — über 1000 Kontakte bleiben flüssig */
+/** Erst so viele Zeilen zeichnen, der Rest per Knopf — über 1000 Kontakte bleiben am Handy flüssig */
 const ZEILEN_SCHRITT = 100;
 
 type ArtFilter = "alle" | KontaktArt;

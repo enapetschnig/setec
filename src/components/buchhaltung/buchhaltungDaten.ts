@@ -105,10 +105,8 @@ export function useLetzteEingangKategorien(aktiv = true) {
     queryKey: ["buchhaltung", "eingang-letzte"],
     enabled: aktiv,
     queryFn: async () => {
-      const { data, error } = await supabase.from("eingangsrechnungen").select("lieferant, kategorie_id")
-        .not("kategorie_id", "is", null).order("datum", { ascending: false }).limit(1000);
-      if (error) throw error;
-      return data ?? [];
+      return alleZeilen((a, b) => supabase.from("eingangsrechnungen").select("lieferant, kategorie_id")
+        .not("kategorie_id", "is", null).order("datum", { ascending: false }).order("id").range(a, b));
     },
   });
 }
