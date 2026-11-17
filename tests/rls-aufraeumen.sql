@@ -31,6 +31,9 @@ begin
   delete from public.eingang_anteile where projekt_id = any(v_projekte);
   delete from public.zahlungen where beleg_id in (select id from public.belege where projekt_id = any(v_projekte) or erstellt_von = any(v_user));
   delete from public.belege where projekt_id = any(v_projekte) or erstellt_von = any(v_user);
+  -- Erstaufnahmen samt Fotos (Dateien im Speicher löscht der Test selbst)
+  delete from public.erstaufnahmen where erstellt_von = any(v_user)
+     or kunde_id in (select id from public.kunden where name like 'RLS-Test%');
   delete from public.zeiten where projekt_id = any(v_projekte) or user_id = any(v_user) or erstellt_von = any(v_user);
   delete from public.material_buchungen where projekt_id = any(v_projekte) or user_id = any(v_user);
   delete from public.bestellungen where lieferant like 'RLS-Test%' or erstellt_von = any(v_user);
@@ -73,7 +76,8 @@ begin
       union all select nummer from public.pruefungen where n.typ = 'pruefung' and nummer like 'PR-' || n.jahr || '-%'
       union all select nummer from public.bestellungen where n.typ = 'bestellung' and nummer like 'BE-' || n.jahr || '-%'
       union all select nummer from public.kunden_lieferscheine where n.typ = 'kundenlieferschein' and nummer like 'LS-' || n.jahr || '-%'
+      union all select nummer from public.erstaufnahmen where n.typ = 'erstaufnahme' and nummer like 'EA-' || n.jahr || '-%'
     ) x), 0)
   -- nur Kreise, die hier oben gezählt werden — sonst fiele ein fremder Kreis auf 0 (doppelte Nummern)
-  where n.typ in ('projekt', 'angebot', 'rechnung', 'regie', 'pruefung', 'bestellung', 'kundenlieferschein');
+  where n.typ in ('projekt', 'angebot', 'rechnung', 'regie', 'pruefung', 'bestellung', 'kundenlieferschein', 'erstaufnahme');
 end $$;

@@ -94,7 +94,8 @@ export function FotosTab({ projektId, art = "foto" }: { projektId: string; art?:
     const { data: weg, error } = await supabase.from("dateien").delete().eq("id", d.id).select("id");
     if (error) return toast.error("Nicht gelöscht", { description: fehlerText(error) });
     if (!weg?.length) return toast.error("Nicht gelöscht", { description: "Löschen kann nur, wer hochgeladen hat, oder der Chef." });
-    await supabase.storage.from("projekt-dateien").remove([d.pfad]);
+    // Fotos der Erstaufnahme bleiben dort (der Speicher lässt sie ohnehin nicht löschen)
+    if (!d.erstaufnahme_foto_id) await supabase.storage.from("projekt-dateien").remove([d.pfad]);
     toast.success(d.art === "foto" ? "Foto gelöscht" : "Dokument gelöscht");
     setBild(null);
     await neuLaden("dateien");

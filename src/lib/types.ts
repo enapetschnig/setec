@@ -34,6 +34,8 @@ export type Aufgabe = Tables<"aufgaben">;
 export type AufgabeVerlauf = Tables<"aufgabe_verlauf">;
 export type PersonalDokument = Tables<"personal_dokumente">;
 export type FirmenDokument = Tables<"firmen_dokumente">;
+export type Erstaufnahme = Tables<"erstaufnahmen">;
+export type ErstaufnahmeFoto = Tables<"erstaufnahme_fotos">;
 
 export type Rolle = "chef" | "monteur";
 
@@ -118,6 +120,15 @@ export const FOERDER_STATUS: Record<FoerderStatus, StatusEintrag> = {
   fertig_gemeldet: { ton: "lila", text: "Fertigstellung gemeldet" },
   ausbezahlt: { ton: "gruen", text: "Ausbezahlt" },
   abgelehnt: { ton: "rosa", text: "Abgelehnt" },
+};
+
+// ── Erstaufnahme (Besichtigung vor dem Angebot) ────────────────────────
+export type ErstaufnahmeStatus = "offen" | "angebot" | "auftrag" | "kein_auftrag";
+export const ERSTAUFNAHME_STATUS: Record<ErstaufnahmeStatus, StatusEintrag> = {
+  offen: { ton: "cyan", text: "Offen" },
+  angebot: { ton: "blau", text: "Angebot" },
+  auftrag: { ton: "gruen", text: "Auftrag" },
+  kein_auftrag: { ton: "rosa", text: "Kein Auftrag" },
 };
 
 // ── Belege und Regieberichte ───────────────────────────────────────────

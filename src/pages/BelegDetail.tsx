@@ -14,13 +14,15 @@ import { klsRechnungSetzen, useKundenLieferschein } from "@/components/kundenlie
 import { useKunden, useProjekt } from "@/hooks/useDaten";
 import { useSitzung } from "@/hooks/useSitzung";
 import { isoTag } from "@/lib/format";
+import { betreffAusWunsch } from "@/lib/erstaufnahme";
+import { useErstaufnahme } from "@/components/erstaufnahme/eaDaten";
 import { lohnarten as lohnartenFuer } from "@/lib/kalkulation";
 import { stundensatzFuer } from "@/lib/preise";
 import { importPositionen, regieImportLaden } from "@/components/belege/importieren";
 import { regieIdsAusUrl } from "@/components/regie/regieLogik";
 
 /**
- * /belege/neu?typ=angebot|rechnung[&projekt=<id>|&kunde=<id>][&sprache=1][&import=1][&ki=1]
+ * /belege/neu?typ=angebot|rechnung[&projekt=<id>|&kunde=<id>|&erstaufnahme=<id>][&sprache=1][&import=1][&ki=1]
  *   [&regie=<id>,<id>] — Rechnung aus Regieberichten ohne Projekt (Rechnungen → „Noch nicht verrechnet“)
  *   [&vorlage=<id>[&preise=vorlage]] — Angebot aus einer Vorlage (sonst Preise von heute)
  * /belege/:id
@@ -89,6 +91,10 @@ function NeuerBeleg({ params }: { params: URLSearchParams }) {
     },
   });
 
+  // Angebot aus einer Erstaufnahme: Kunde, Adresse, Betreff aus dem Kundenwunsch — ohne Projekt
+  const eaId = typ === "angebot" ? params.get("erstaufnahme") : null;
+  const { data: ea, isLoading: eaLaedt } = useErstaufnahme(eaId);
+
   // Rechnung aus Regieberichten ohne Projekt: genau diese Berichte, je einer ein Titel
   const regieIds = typ === "rechnung" ? regieIdsAusUrl(params.get("regie")) : [];
   const { data: regie, isLoading: regieLaedt, error: regieFehler } = useQuery({
@@ -98,7 +104,7 @@ function NeuerBeleg({ params }: { params: URLSearchParams }) {
     queryFn: () => regieImportLaden({ ids: regieIds }, null, { zeiten: [], material: [], regie: [] }),
   });
 
-  if (laden || (projektId && projektLaedt) || kundenLaedt || (lsId && (lsLaedt || artikelLaedt)) || (regieIds.length > 0 && regieLaedt)) {
+  if (laden || (projektId && projektLaedt) || kundenLaedt || (lsId && (lsLaedt || artikelLaedt)) || (regieIds.length > 0 && regieLaedt) || (eaId && eaLaedt)) {
     return <Laedt titel={typ === "angebot" ? "Neues Angebot" : "Neue Rechnung"} />;
   }
   if (regieFehler) {
@@ -118,6 +124,12 @@ function NeuerBeleg({ params }: { params: URLSearchParams }) {
   } else if (params.get("kunde")) {
     const kunde = kunden?.find((k) => k.id === params.get("kunde")) ?? null;
     if (kunde) Object.assign(kopf, empfaengerAusKunde(kunde));
+  }
+  if (ea) {
+    kopf.erstaufnahme_id = ea.ea.id;
+    const kunde = kunden?.find((k) => k.id === ea.ea.kunde_id) ?? null;
+    if (kunde) Object.assign(kopf, empfaengerAusKunde(kunde));
+    kopf.betreff = betreffAusWunsch(ea.ea.kundenwunsch) || kopf.betreff;
   }
   let startPositionen: EditorPosition[] | undefined;
   if (ls) {

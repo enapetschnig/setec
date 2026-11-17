@@ -1,7 +1,8 @@
 import { AdresseFeld } from "@/components/AdresseFeld";
 import { useState } from "react";
 import { toast } from "sonner";
-import { Loader2, Trash2 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { ClipboardList, ClipboardSignature, Loader2, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import FormularDialog from "@/components/FormularDialog";
 import { Button } from "@/components/ui/button";
@@ -21,7 +22,7 @@ import { fehlerText } from "@/components/stamm/stammDaten";
 import { useFahrzeuge, useKunden, useMitarbeiter, useNeuLaden, useProjekte, useTeams } from "@/hooks/useDaten";
 import { useSitzung } from "@/hooks/useSitzung";
 import { isoTag } from "@/lib/format";
-import { adresseZeile, kundenProjekte, ortVorschlaege, TERMIN_ARTEN, terminArt, terminFarbe, titelVorschlag, type TerminArt } from "@/lib/kalender";
+import { adresseZeile, kundenProjekte, ortVorschlaege, TERMIN_ARTEN, terminArt, terminFarbe, terminWeiter, titelVorschlag, type TerminArt } from "@/lib/kalender";
 import { EINSATZ_STATUS, FAHRZEUG_ART, PROJEKT_STATUS, TEAM_FARBEN, type FahrzeugArt, type Kunde, type Termin } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -67,7 +68,7 @@ export function terminFehler(
  * - Besichtigung / Service: Adresse des Kunden, eines seiner Projekte oder frei — kein Projekt
  * - Büro: ohne Kunde
  * Danach Team, Leute, Geräte, Zeit. Aus dem Projekt geöffnet: Kunde und Projekt vorbelegt.
- * Später (Stufe 2/3): Besichtigung → „Erstaufnahme“, Service → „Regiebericht“.
+ * Gespeicherte Besichtigung → Knopf „Erstaufnahme“, Service → „Regiebericht“ (`terminWeiter`).
  */
 export function TerminDialog({
   open, onOpenChange, termin, datum: vorDatum, bisDatum: vorBis, projektId: vorProjekt, mitarbeiterId, teamId, fahrzeugId, von: vorVon, bis: vorBisZeit,
@@ -210,6 +211,11 @@ export function TerminDialog({
 
   // Einteilen, verschieben, löschen: nur der Chef. Wer eingeteilt ist, meldet erledigt.
   const nurLesen = !istChef;
+  const navigate = useNavigate();
+  // Nur für gespeicherte Termine in der gespeicherten Art (sonst passt der Kunde nicht)
+  const weiter = termin && terminArt(termin.art) === w.art
+    ? terminWeiter({ ...termin, kunde_id: termin.kunde_id ?? null }, istChef || (!!profil && termin.mitarbeiter.includes(profil.id)))
+    : null;
   const darfStatus = istChef || (!!termin && !!profil && termin.mitarbeiter.includes(profil.id));
 
   const speichern = async () => {
@@ -280,6 +286,12 @@ export function TerminDialog({
           {termin && istChef && (
             <Button variant="ghost" className="text-destructive sm:mr-auto" onClick={() => setLoeschFrage(true)} disabled={speichert}>
               <Trash2 className="mr-2 h-4 w-4" /> Löschen
+            </Button>
+          )}
+          {weiter && (
+            <Button variant="outline" className="gap-2" disabled={speichert} data-termin-weiter={weiter.art}
+              onClick={() => { onOpenChange(false); navigate(weiter.pfad); }}>
+              {weiter.art === "erstaufnahme" ? <ClipboardList className="h-4 w-4" /> : <ClipboardSignature className="h-4 w-4" />} {weiter.text}
             </Button>
           )}
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={speichert}>{nurLesen ? "Schließen" : "Abbrechen"}</Button>

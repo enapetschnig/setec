@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Bus, Check, ChevronDown, FileText, FolderKanban, Mail, MapPin, Navigation, Package, Phone, ScanBarcode, Users } from "lucide-react";
+import { AlertTriangle, Bus, Check, ChevronDown, ClipboardList, ClipboardSignature, FileText, FolderKanban, Mail, MapPin, Navigation, Package, Phone, ScanBarcode, Users } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Avatar } from "@/components/Bausteine";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { ausfassVorschlag, verbrauchtKarte } from "@/components/material/artikel
 import { mengeText, useProjektMaterial } from "@/components/material/materialDaten";
 import { useFahrzeuge, useMitarbeiter, useProjekt, useTeams } from "@/hooks/useDaten";
 import { useSitzung } from "@/hooks/useSitzung";
+import { terminWeiter } from "@/lib/kalender";
 import { name, type Termin } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -23,7 +24,7 @@ const tel = (n: string) => `tel:${n.replace(/[^\d+]/g, "")}`;
  * dabei ist, Bus und Geräte, offene Hinweise und der Weg ins Projekt.
  */
 export function EinsatzDetails({ t }: { t: Termin }) {
-  const { profil } = useSitzung();
+  const { profil, istChef } = useSitzung();
   const { data: projekt, isLoading } = useProjekt(t.projekt_id ?? undefined);
   const { data: mitarbeiter = [] } = useMitarbeiter();
   const { data: fahrzeuge = [] } = useFahrzeuge();
@@ -38,6 +39,8 @@ export function EinsatzDetails({ t }: { t: Termin }) {
     },
   });
 
+  // Besichtigung → Erstaufnahme, Service → Regiebericht (wer eingeteilt ist oder der Chef)
+  const weiter = terminWeiter(t, istChef || (!!profil && t.mitarbeiter.includes(profil.id)));
   const adresse = (projekt ? [projekt.strasse, [projekt.plz, projekt.ort].filter(Boolean).join(" ")].filter(Boolean).join(", ") : "") || t.ort || "";
   const kunde = projekt?.kunden;
   const kollegen = t.mitarbeiter.filter((id) => id !== profil?.id).map((id) => mitarbeiter.find((m) => m.id === id)).filter((m): m is NonNullable<typeof m> => !!m);
@@ -123,7 +126,12 @@ export function EinsatzDetails({ t }: { t: Termin }) {
       {t.projekt_id && (
         <Button asChild className="h-11 w-full sm:w-auto"><Link to={`/projekte/${t.projekt_id}`}><FolderKanban className="h-4 w-4" /> Ins Projekt</Link></Button>
       )}
-      {!projekt && !adresse && !t.beschreibung && !kollegen.length && <p className="text-muted-foreground">Kein Projekt hinterlegt.</p>}
+      {weiter && (
+        <Button asChild className="h-11 w-full sm:w-auto" data-termin-weiter={weiter.art}>
+          <Link to={weiter.pfad}>{weiter.art === "erstaufnahme" ? <ClipboardList className="h-4 w-4" /> : <ClipboardSignature className="h-4 w-4" />} {weiter.text}</Link>
+        </Button>
+      )}
+      {!projekt && !adresse && !t.beschreibung && !kollegen.length && !weiter && <p className="text-muted-foreground">Kein Projekt hinterlegt.</p>}
     </div>
   );
 }

@@ -1289,6 +1289,87 @@ console.log("\n— G Personal: interne Stunden, Teamleitung, Aufgaben, Dokumente
   await chef.storage.from("firmen-dokumente").remove([fdAlle, fdChef]);
 }
 
+// ── Erstaufnahme → Angebot ohne Projekt → Annahme (Migration 20261117120000) ──
+{
+  const { data: k } = await chef.from("kunden").insert({ name: "RLS-Test EA Kunde", strasse: "Feldweg 3", plz: "8643", ort: "Allerheiligen" }).select("id").single();
+  const { data: ea, error: e1 } = await monteur.from("erstaufnahmen")
+    .insert({ kunde_id: k.id, strasse: "Feldweg 3", plz: "8643", ort: "Allerheiligen", kundenwunsch: "RLS-Test PV 10 kW" }).select("*").single();
+  ok(!e1 && /^EA-\d{4}-\d{3}$/.test(ea?.nummer ?? "") && ea.status === "offen" && ea.erstellt_von === monteurId,
+    "Monteur legt eine Erstaufnahme an (Nummer EA-…, offen)" + (e1 ? abgelehnt(e1) : ""));
+  const { error: e2 } = await monteur.from("erstaufnahmen").insert({ kunde_id: k.id, status: "auftrag" });
+  ok(!!e2, "Monteur legt keine Erstaufnahme gleich als Auftrag an" + abgelehnt(e2));
+  const { data: m1, error: e3 } = await monteur.from("erstaufnahmen").update({ notizen: "Dach Süd", messwerte: [{ bezeichnung: "Speicher", wert: "10", einheit: "kWh" }] }).eq("id", ea.id).select("id");
+  ok(!e3 && m1?.length === 1, "Monteur ergänzt Notizen und Messwerte" + (e3 ? abgelehnt(e3) : ""));
+  const { error: e4 } = await monteur.from("erstaufnahmen").update({ status: "kein_auftrag" }).eq("id", ea.id);
+  ok(!!e4, "Status setzt nur der Chef" + abgelehnt(e4));
+  const { error: e5 } = await monteur.from("erstaufnahmen").update({ nummer: "EA-1999-999" }).eq("id", ea.id);
+  ok(!!e5, "Nummer bleibt" + abgelehnt(e5));
+  const { data: m2 } = await monteur.from("erstaufnahmen").delete().eq("id", ea.id).select("id");
+  ok(!m2?.length, "Monteur löscht keine Erstaufnahme");
+  const { data: n1 } = await neu.from("erstaufnahmen").select("id");
+  const { error: e6 } = await neu.from("erstaufnahmen").insert({ kunde_id: k.id });
+  ok(!n1?.length && !!e6, "Nicht freigeschaltet: keine Erstaufnahmen sehen oder anlegen");
+  const anon = neuerClient();
+  const { data: a1 } = await anon.from("erstaufnahmen").select("id");
+  ok(!a1?.length, "anon sieht keine Erstaufnahmen");
+
+  // Foto unter ea/<id>/ — Monteur lädt hoch
+  const pfad = `ea/${ea.id}/rlstest-${Date.now()}.png`;
+  const { error: e7 } = await monteur.storage.from("projekt-dateien").upload(pfad, new Blob(["x"]), { contentType: "image/png" });
+  const { error: e8 } = await monteur.from("erstaufnahme_fotos").insert({ erstaufnahme_id: ea.id, pfad, beschriftung: "RLS-Test Keller" });
+  ok(!e7 && !e8, "Monteur lädt ein Foto zur Erstaufnahme hoch (ea/<id>/…)" + (e7 || e8 ? abgelehnt(e7 ?? e8) : ""));
+  const { error: e9 } = await monteur.from("erstaufnahme_fotos").insert({ erstaufnahme_id: ea.id, pfad: `${ea.id}/x.png` });
+  ok(!!e9, "Foto-Pfad muss mit ea/ beginnen" + abgelehnt(e9));
+
+  // Angebot (nur Chef) an der Erstaufnahme, ohne Projekt
+  const { error: e10 } = await monteur.rpc("projekt_aus_erstaufnahme", { p_ea: ea.id });
+  ok(!!e10, "„Gleich Projekt“ nur der Chef" + abgelehnt(e10));
+  const { data: an, error: e11 } = await chef.from("belege")
+    .insert({ typ: "angebot", status: "offen", kunde_id: k.id, empf_name: "RLS-Test EA Kunde", betreff: "RLS-Test PV", erstaufnahme_id: ea.id }).select("id, projekt_id").single();
+  const { data: an2 } = await chef.from("belege")
+    .insert({ typ: "angebot", status: "offen", kunde_id: k.id, empf_name: "RLS-Test EA Kunde", betreff: "RLS-Test PV Variante", erstaufnahme_id: ea.id }).select("id").single();
+  const { data: eaA } = await chef.from("erstaufnahmen").select("status").eq("id", ea.id).single();
+  ok(!e11 && an.projekt_id === null && eaA?.status === "angebot", "Angebot an der Erstaufnahme ohne Projekt → Erstaufnahme „Angebot“" + (e11 ? abgelehnt(e11) : ""));
+  const { error: e12 } = await monteur.rpc("projekt_aus_angebot", { p_beleg: an.id });
+  ok(!!e12, "Monteur nimmt kein Angebot an" + abgelehnt(e12));
+  const { error: e13 } = await anon.rpc("projekt_aus_angebot", { p_beleg: an.id });
+  ok(!!e13, "anon: projekt_aus_angebot nicht direkt (nur über angebot_annehmen mit Link)" + abgelehnt(e13));
+  const { error: e13b } = await anon.rpc("projekt_aus_angebot_intern", { p_beleg: an.id });
+  ok(!!e13b, "anon: interne Funktion gesperrt" + abgelehnt(e13b));
+
+  // Chef nimmt an → Projekt mit Foto, Erstaufnahme Auftrag, Variante abgelehnt; zweimal = gleiches Projekt
+  const { data: pid, error: e14 } = await chef.rpc("projekt_aus_angebot", { p_beleg: an.id });
+  const { data: pid2 } = await chef.rpc("projekt_aus_angebot", { p_beleg: an.id });
+  ok(!e14 && !!pid && pid === pid2, "Chef nimmt an → Projekt (zweimal = dasselbe)" + (e14 ? abgelehnt(e14) : ""));
+  // Name RLS-Test… → räumt rls-aufraeumen.sql mit weg
+  const { data: p } = await chef.from("projekte").select("name, status, strasse, kunde_id").eq("id", pid).single();
+  ok(p?.status === "aktiv" && p.strasse === "Feldweg 3" && p.kunde_id === k.id && p.name === "RLS-Test PV", "Projekt „In Arbeit“ mit Kunde und Adresse der Erstaufnahme");
+  const { data: d } = await monteur.from("dateien").select("pfad, erstaufnahme_foto_id").eq("projekt_id", pid);
+  ok(d?.length === 1 && d[0].pfad === pfad && !!d[0].erstaufnahme_foto_id, "Foto der Erstaufnahme als Projekt-Datei — Monteur sieht es");
+  const { data: v } = await chef.from("belege").select("status").eq("id", an2.id).single();
+  ok(v?.status === "abgelehnt", "andere Variante → abgelehnt");
+  const { data: eaB } = await monteur.from("erstaufnahmen").select("status, projekt_id").eq("id", ea.id).single();
+  ok(eaB?.status === "auftrag" && eaB.projekt_id === pid, "Erstaufnahme „Auftrag“ mit Projekt");
+
+  // Nach dem Auftrag bleiben Fotos und Erstaufnahme
+  const { data: m3 } = await monteur.from("erstaufnahme_fotos").delete().eq("erstaufnahme_id", ea.id).select("id");
+  ok(!m3?.length, "Foto nach dem Auftrag nicht löschbar (steckt im Projekt)");
+  await chef.storage.from("projekt-dateien").remove([pfad]);
+  const { data: noch } = await chef.storage.from("projekt-dateien").createSignedUrl(pfad, 60);
+  ok(!!noch?.signedUrl, "Datei eines Erstaufnahme-Fotos löscht auch der Chef nicht aus dem Speicher");
+  const { data: c1 } = await chef.from("erstaufnahmen").delete().eq("id", ea.id).select("id");
+  ok(!c1?.length, "Erstaufnahme mit Auftrag löscht auch der Chef nicht");
+  // Aufräumen: Projekt weg → Erstaufnahme ohne Projekt; dann Zeilen und Datei
+  await chef.from("dateien").delete().eq("projekt_id", pid);
+  await chef.from("belege").delete().in("id", [an.id, an2.id]);
+  await chef.from("projekte").delete().eq("id", pid);
+  await chef.from("erstaufnahmen").update({ status: "kein_auftrag" }).eq("id", ea.id);
+  await chef.from("erstaufnahme_fotos").delete().eq("erstaufnahme_id", ea.id);
+  await chef.storage.from("projekt-dateien").remove([pfad]);
+  await chef.from("erstaufnahmen").delete().eq("id", ea.id);
+  await chef.from("kunden").delete().eq("id", k.id);
+}
+
 console.log(fehlgeschlagen ? `\n✗ ${fehlgeschlagen} Prüfung(en) fehlgeschlagen` : "\n✓ Alle Prüfungen bestanden");
 console.log("Jetzt tests/rls-aufraeumen.sql ausführen.");
 process.exit(fehlgeschlagen ? 1 : 0);

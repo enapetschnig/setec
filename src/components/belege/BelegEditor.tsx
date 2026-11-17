@@ -34,6 +34,8 @@ import { belegStatus, TON_KLASSE, type Artikel, type Beleg, type Firma } from "@
 import { cn } from "@/lib/utils";
 import { ArbeitszeitDialog } from "./ArbeitszeitDialog";
 import { AufschlaegeDialog } from "./AufschlaegeDialog";
+import { ErstaufnahmeBlock } from "@/components/erstaufnahme/ErstaufnahmeBlock";
+import { useErstaufnahme } from "@/components/erstaufnahme/eaDaten";
 import { BelegKopf, BelegTexte } from "./BelegKopf";
 import { belegLaden, useBelegKurz, useFolgeRechnungen, useLeistungsKatalog, useNachfolger, type BelegMitPositionen } from "./daten";
 import {
@@ -51,7 +53,7 @@ import { PositionDialog } from "./PositionDialog";
 import { PositionenEditor } from "./PositionenEditor";
 import { ProjektVerbrauch } from "./ProjektVerbrauch";
 import {
-  belegKopieren, belegLoeschen, belegSpeichern, fertigstellen, inRechnungUmwandeln, teilrechnungAnlegen, abzuegeLaden, projektAktivieren, projektLoeschen,
+  belegKopieren, belegLoeschen, belegSpeichern, fertigstellen, inRechnungUmwandeln, teilrechnungAnlegen, abzuegeLaden, angebotAnnehmen, projektLoeschen,
   projektNurFuerBeleg, projektZurueckAufAngebot, rechnungAendern, StandVeraltet, statusSetzen, stornieren,
 } from "./speichern";
 import { sicherungLesen, sicherungLoeschen, sicherungSchreiben, sicherungsSchluessel, type Sicherung } from "./sicherung";
@@ -190,6 +192,8 @@ export function BelegEditor({
   const entwurf = status === "entwurf";
   const bearbeitbar = entwurf || (istAngebot && status === "offen" && entsperrt);
 
+  // Angebot aus einer Erstaufnahme: Wunsch, Messwerte, Fotos beim Kalkulieren im Blick
+  const eaDaten = useErstaufnahme(kopf.erstaufnahme_id ?? null);
   const projektAbfrage = useProjekt(kopf.projekt_id ?? undefined);
   const projekt = projektAbfrage.data;
   const stundensatz = stundensatzFuer(projekt, firma);
@@ -355,7 +359,7 @@ export function BelegEditor({
       return false;
     }
     if (istAngebot && !kopf.projekt_id && !kopf.empf_name.trim() && !kopf.betreff.trim()) {
-      toast.error("Bitte zuerst Kunde oder Betreff eintragen — daraus wird das Projekt angelegt.");
+      toast.error("Bitte zuerst Kunde oder Betreff eintragen.");
       return false;
     }
     const falsch = positionen.findIndex((p) => zahlUngueltig(p.menge) || zahlUngueltig(p.einzelpreis));
@@ -365,13 +369,11 @@ export function BelegEditor({
     }
     const vorher = aktuellRef.current;
     const warNeu = neu;
-    const merk: { projekt: string | null } = { projekt: null };
     setLaeuft("speichern");
     try {
       const geloescht = [...dbIds.current].filter((x) => !positionen.some((p) => p.id === x));
       const erg = await belegSpeichern({
         id, neu: warNeu, kopf, positionen, geloescht, firma, stand: warNeu ? null : beleg?.updated_at ?? null,
-        onProjektAngelegt: (pid) => { merk.projekt = pid; },
       });
       const d: BelegMitPositionen = { beleg: erg.beleg, positionen: erg.positionen };
       if (warNeu) sicherungLoeschen(sicherungsSchluessel(id, true, kopf.typ));
@@ -398,13 +400,12 @@ export function BelegEditor({
           { duration: 10_000 },
         );
       } else if (!leise) {
-        toast.success(warNeu ? (merk.projekt ? `${typText} und Projekt angelegt` : `${typText} angelegt`) : "Gespeichert");
+        toast.success(warNeu ? `${typText} angelegt` : "Gespeichert");
       }
       void neuLaden(...NACH_AENDERUNG);
       if (warNeu && weiterleiten) navigate(`/belege/${id}`, { replace: true });
       return true;
     } catch (e) {
-      if (merk.projekt) setKopf((k) => ({ ...k, projekt_id: merk.projekt }));
       if (e instanceof StandVeraltet) await standVeraltet();
       else toast.error((e as Error).message);
       return false;
@@ -477,10 +478,12 @@ export function BelegEditor({
 
   // ── Status ──
   const angenommen = () => ausfuehren("status", async () => {
-    await statusSetzen(id, "angenommen");
-    const aktiviert = await projektAktivieren(kopf.projekt_id);
+    const { projektId, neu: projektNeu } = await angebotAnnehmen({ id, projekt_id: kopf.projekt_id });
     await neuHolen();
-    toast.success(aktiviert ? "Angebot angenommen — das Projekt steht jetzt auf „In Arbeit“." : "Angebot angenommen");
+    void neuLaden(...NACH_AENDERUNG, "erstaufnahmen", "dateien");
+    toast.success(projektNeu ? "Angebot angenommen — das Projekt ist angelegt und steht auf „In Arbeit“." : "Angebot angenommen — das Projekt steht auf „In Arbeit“.", {
+      action: { label: "Zum Projekt", onClick: () => navigate(`/projekte/${projektId}`) },
+    });
   });
   const abgelehnt = () => ausfuehren("status", async () => {
     await statusSetzen(id, "abgelehnt");
@@ -1205,6 +1208,7 @@ export function BelegEditor({
       )}
 
       <BelegKopf kopf={kopf} aendern={kopfAendern} bearbeitbar={bearbeitbar} firma={firma} pc={pc} startOffen={neu && !kopf.empf_name} />
+      {eaDaten.data && <ErstaufnahmeBlock daten={eaDaten.data} startOffen={neu} />}
       {(angebot || ersetztQuelle.data) && (
         <p className="-mt-2 px-1 text-sm text-muted-foreground">
           {angebot && <>Aus <Link to={`/belege/${angebot.id}`} className="font-medium text-primary hover:underline">Angebot {angebot.nummer ?? "(Entwurf)"}</Link></>}

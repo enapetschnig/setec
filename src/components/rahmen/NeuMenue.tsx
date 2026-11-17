@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { CalendarPlus, Camera, ChevronRight, ClipboardSignature, Clock, FilePlus2, FileText, FolderPlus, ListTodo, Mic, Plus, UserPlus, type LucideIcon } from "lucide-react";
+import { CalendarPlus, Camera, ChevronRight, ClipboardList, ClipboardSignature, Clock, FilePlus2, FileText, FolderPlus, ListTodo, Mic, Plus, UserPlus, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { FotoDialog } from "@/components/dialoge/FotoDialog";
@@ -19,7 +19,7 @@ import { cn } from "@/lib/utils";
   Menüpunkt starten dieselben Aktionen über neuStarten().
 */
 
-export type NeuArt = "projekt" | "angebot" | "sprache" | "rechnung" | "termin" | "aufgabe" | "kontakt" | "zeit" | "regie" | "foto";
+export type NeuArt = "projekt" | "erstaufnahme" | "angebot" | "sprache" | "rechnung" | "termin" | "aufgabe" | "kontakt" | "zeit" | "regie" | "foto";
 
 interface NeuAktion {
   art: NeuArt;
@@ -33,6 +33,7 @@ interface NeuAktion {
 
 const ALLE: NeuAktion[] = [
   { art: "projekt", titel: "Projekt", text: "Neue Baustelle, Nummer kommt von selbst", icon: FolderPlus },
+  { art: "erstaufnahme", titel: "Erstaufnahme", text: "Besichtigung: Wunsch, Fotos, Skizze — vor dem Angebot", icon: ClipboardList, ziel: "/erstaufnahmen/neu" },
   { art: "angebot", titel: "Angebot", text: "Am PC schreiben, mit Katalog und KI", icon: FileText, ziel: "/belege/neu?typ=angebot", nurChef: true },
   { art: "sprache", titel: "Angebot vor Ort", text: "„3 Steckdosen, 2 Schalter, 1 FI“ — sprechen, fertig", icon: Mic, ziel: "/belege/neu?typ=angebot&sprache=1", nurChef: true },
   { art: "rechnung", titel: "Rechnung", text: "Leer oder aus dem Projekt übernehmen", icon: FilePlus2, ziel: "/belege/neu?typ=rechnung", nurChef: true },

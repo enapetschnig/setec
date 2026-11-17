@@ -39,7 +39,8 @@ begin
       union all select nummer from public.pruefungen where n.typ = 'pruefung' and nummer like 'PR-' || n.jahr || '-%'
       union all select nummer from public.bestellungen where n.typ = 'bestellung' and nummer like 'BE-' || n.jahr || '-%'
       union all select nummer from public.kunden_lieferscheine where n.typ = 'kundenlieferschein' and nummer like 'LS-' || n.jahr || '-%'
+      union all select nummer from public.erstaufnahmen where n.typ = 'erstaufnahme' and nummer like 'EA-' || n.jahr || '-%'
     ) x), 0)
   -- nur Kreise, die hier oben gezählt werden — sonst fiele ein fremder Kreis auf 0 (doppelte Nummern)
-  where n.typ in ('projekt', 'angebot', 'rechnung', 'regie', 'pruefung', 'bestellung', 'kundenlieferschein');
+  where n.typ in ('projekt', 'angebot', 'rechnung', 'regie', 'pruefung', 'bestellung', 'kundenlieferschein', 'erstaufnahme');
 end $$;

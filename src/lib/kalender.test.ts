@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  adresseZeile, einsatzAusProjekt, geraetDoppelt, geraeteSpalten, kundenProjekte, MONTAGE_ORANGE, nichtEingeplant, ortVorschlaege, terminArt, terminFarbe, titelVorschlag,
+  adresseZeile, einsatzAusProjekt, geraetDoppelt, geraeteSpalten, kundenProjekte, MONTAGE_ORANGE, nichtEingeplant, ortVorschlaege, terminArt, terminFarbe, terminWeiter, titelVorschlag,
 } from "./kalender";
 import { konflikte, projektFarbe, type PlanTermin } from "./plantafel";
 
@@ -87,5 +87,22 @@ describe("Projekt in den Kalender gezogen", () => {
     expect(einsatzAusProjekt(p, "2026-11-20", { art: "person", id: "max" }).bis_datum).toBeNull();
     const sa = einsatzAusProjekt(p, "2026-11-21", { art: "geraet", id: "steiger" });
     expect(sa).toMatchObject({ bis_datum: null, mitarbeiter: [], fahrzeuge: ["steiger"] });
+  });
+});
+
+describe("terminWeiter", () => {
+  const t = { id: "t1", kunde_id: "k1" as string | null, projekt_id: null as string | null };
+  it("Besichtigung → Erstaufnahme zum Termin", () => {
+    expect(terminWeiter({ ...t, art: "besichtigung" }, true)).toEqual({ art: "erstaufnahme", text: "Erstaufnahme", pfad: "/erstaufnahmen/neu?termin=t1" });
+  });
+  it("Service → Regiebericht mit Kunde und Termin, mit Projekt dieses", () => {
+    expect(terminWeiter({ ...t, art: "service" }, true)?.pfad).toBe("/regie/neu?kunde=k1&termin=t1");
+    expect(terminWeiter({ ...t, art: "service", projekt_id: "p1" }, true)?.pfad).toBe("/regie/neu?projekt=p1&termin=t1");
+    expect(terminWeiter({ ...t, art: "service", kunde_id: null }, true)).toBeNull();
+  });
+  it("Montage/Büro nichts; wer nicht darf, nichts", () => {
+    expect(terminWeiter({ ...t, art: "montage" }, true)).toBeNull();
+    expect(terminWeiter({ ...t, art: "buero" }, true)).toBeNull();
+    expect(terminWeiter({ ...t, art: "besichtigung" }, false)).toBeNull();
   });
 });

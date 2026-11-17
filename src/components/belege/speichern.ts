@@ -15,7 +15,7 @@ import {
  * „Speichern“ heilt einen abgebrochenen ersten Versuch.
  *
  * Reihenfolge beim Speichern:
- *  1. Angebot ohne Projekt → Projekt (Status „Angebot“) anlegen
+ *  1. (Angebote legen seit 17.11.2026 kein Projekt mehr an — erst die Annahme)
  *  2. Kopf mit Netto/USt/Brutto schreiben
  *  3. entfernte Positionen löschen → Trigger gibt deren Quellen frei
  *  4. alle Positionen upserten (immer alle Felder, nie `gesamt`)
@@ -42,7 +42,7 @@ export type SpeicherErgebnis = {
 };
 
 export async function belegSpeichern({
-  id, neu, kopf, positionen, geloescht, firma, stand, onProjektAngelegt,
+  id, neu, kopf, positionen, geloescht, firma, stand,
 }: {
   id: string;
   neu: boolean;
@@ -52,9 +52,8 @@ export async function belegSpeichern({
   firma: Firma | null;
   /** `updated_at` beim Laden — weicht die Datenbank ab, wird nichts geschrieben */
   stand?: string | null;
-  onProjektAngelegt?: (projektId: string) => void;
 }): Promise<SpeicherErgebnis> {
-  let k = kopf;
+  const k = kopf;
 
   // Zwei offene Editoren: sonst schriebe der ältere Stand den neueren still
   // über (und holte gelöschte Positionen zurück). Erst prüfen, bevor etwas
@@ -65,24 +64,8 @@ export async function belegSpeichern({
     if (data && data.updated_at !== stand) throw new StandVeraltet();
   }
 
-  if (!k.projekt_id && k.typ === "angebot") {
-    const name = (k.betreff.trim() || k.empf_name.trim() || "Angebot").slice(0, 120);
-    const { data, error } = await supabase
-      .from("projekte")
-      .insert({
-        name,
-        kunde_id: k.kunde_id,
-        status: "angebot",
-        strasse: k.empf_strasse.trim() || null,
-        plz: k.empf_plz.trim() || null,
-        ort: k.empf_ort.trim() || null,
-      })
-      .select("id")
-      .single();
-    if (error) throw fehler("Projekt konnte nicht angelegt werden", error);
-    k = { ...k, projekt_id: data.id };
-    onProjektAngelegt?.(data.id);
-  }
+  // Seit 17.11.2026 legt ein Angebot kein Projekt mehr an — das entsteht bei
+  // der Annahme (projekt_aus_angebot). Alte Angebote mit Projekt bleiben so.
 
   const s = summen(positionen, k.ust_satz, ohneUstFuer(k, firma));
   const zeile = { ...kopfZuDb(k), netto: s.netto, ust: s.ust, brutto: s.brutto };
@@ -193,11 +176,17 @@ export async function statusSetzen(id: string, status: string, bezahltAm: string
   if (!data?.length) throw new Error("Status konnte nicht geändert werden.");
 }
 
-/** Angebot angenommen → Projekt geht von „Angebot“ auf „In Arbeit“. Gibt zurück, ob es umgestellt wurde. */
-export async function projektAktivieren(projektId: string | null): Promise<boolean> {
-  if (!projektId) return false;
-  const { data } = await supabase.from("projekte").update({ status: "aktiv" }).eq("id", projektId).eq("status", "angebot").select("id");
-  return !!data?.length;
+/**
+ * Angebot angenommen → Projekt (RPC `projekt_aus_angebot`, eine Transaktion):
+ * Angebot „angenommen“; hat es ein Projekt (alte Angebote), geht das von
+ * „Angebot“ auf „In Arbeit“, sonst wird es angelegt — mit Fotos, Skizzen und
+ * Notizen der Erstaufnahme. Mehrfach aufrufen schadet nicht.
+ * Gibt die Projekt-ID zurück und ob es neu ist.
+ */
+export async function angebotAnnehmen(angebot: Pick<Beleg, "id" | "projekt_id">): Promise<{ projektId: string; neu: boolean }> {
+  const { data, error } = await supabase.rpc("projekt_aus_angebot", { p_beleg: angebot.id });
+  if (error) throw fehler("Annehmen nicht möglich", error);
+  return { projektId: data, neu: !angebot.projekt_id };
 }
 
 /** Entwurf oder Angebot löschen (RLS lässt fertige Rechnungen nicht zu) */
@@ -283,6 +272,8 @@ export async function belegKopieren({
     projekt_id: quelle.projekt_id,
     kunde_id: quelle.kunde_id,
     angebot_id: typ === "rechnung" ? (quelle.typ === "angebot" ? quelle.id : quelle.angebot_id) : null,
+    // Kopie eines Angebots = weitere Variante derselben Erstaufnahme
+    erstaufnahme_id: typ === "angebot" && quelle.typ === "angebot" ? quelle.erstaufnahme_id ?? null : null,
     empf_name: quelle.empf_name,
     empf_zusatz: quelle.empf_zusatz,
     empf_strasse: quelle.empf_strasse,
@@ -354,12 +345,14 @@ function quelleAusJson(j: Position["quelle"]): Quelle | null {
 }
 
 /**
- * Angebot → Rechnung: Positionen kopieren, Angebot angenommen, Projekt in
- * Arbeit. Gibt es schon Teilrechnungen zum Angebot, wird es die
+ * Angebot → Rechnung: Angebot angenommen (Projekt in Arbeit bzw. angelegt),
+ * dann Positionen kopieren. Gibt es schon Teilrechnungen zum Angebot, wird es die
  * Schlussrechnung: je fertiger, noch nicht abgezogener Teilrechnung eine
  * Abzugsposition am Ende.
  */
 export async function inRechnungUmwandeln(angebot: Beleg, positionen: Position[], firma: Firma | null, heute: string): Promise<string> {
+  // Zuerst annehmen — so hat die Rechnung schon das (ggf. neue) Projekt
+  if (angebot.status !== "abgelehnt") angebot = { ...angebot, projekt_id: (await angebotAnnehmen(angebot)).projektId };
   const { id } = await belegKopieren({ quelle: angebot, positionen, typ: "rechnung", firma, heute });
   const teile = (await teilrechnungenZu(angebot.id)).filter((t) => (t.status === "offen" || t.status === "bezahlt") && !t.abgezogen_in);
   if (teile.length) {
@@ -373,8 +366,6 @@ export async function inRechnungUmwandeln(angebot: Beleg, positionen: Position[]
     const sm = belegSummen(alle, Number(angebot.ust_satz), ohneUst);
     await supabase.from("belege").update({ netto: sm.netto, ust: sm.ust, brutto: sm.brutto, betreff: schlussBetreff(angebot.betreff) }).eq("id", id);
   }
-  if (angebot.status === "offen") await statusSetzen(angebot.id, "angenommen");
-  await projektAktivieren(angebot.projekt_id);
   return id;
 }
 
@@ -397,6 +388,7 @@ export async function teilrechnungenZu(angebotId: string): Promise<TeilZeile[]> 
 export async function teilrechnungAnlegen(
   angebot: Beleg, betragNetto: number, prozent: number | null, firma: Firma | null, heute: string,
 ): Promise<string> {
+  if (angebot.status !== "abgelehnt") angebot = { ...angebot, projekt_id: (await angebotAnnehmen(angebot)).projektId };
   const nr = naechsteTeilNr(await teilrechnungenZu(angebot.id));
   const position = {
     id: neueId(), beleg_id: angebot.id, pos: 1, art: "pauschale", bezeichnung: teilText(nr, angebot.nummer, Number(angebot.netto), prozent),
@@ -407,8 +399,6 @@ export async function teilrechnungAnlegen(
   const { error } = await supabase.from("belege")
     .update({ teil_nr: nr, betreff: `${nr}. Teilrechnung${angebot.betreff?.trim() ? ` – ${angebot.betreff.trim()}` : ""}` }).eq("id", id);
   if (error) throw fehler("Teilrechnung konnte nicht angelegt werden", error);
-  if (angebot.status === "offen") await statusSetzen(angebot.id, "angenommen");
-  await projektAktivieren(angebot.projekt_id);
   return id;
 }
 

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
-import { Check, Clock, MapPin, Pencil, Trash2, Truck, UserRound, Users, X } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { Check, ClipboardList, ClipboardSignature, Clock, MapPin, Pencil, Trash2, Truck, UserRound, Users, X } from "lucide-react";
+import { useSitzung } from "@/hooks/useSitzung";
+import { terminWeiter } from "@/lib/kalender";
 import { Avatar } from "@/components/Bausteine";
 import { Button } from "@/components/ui/button";
 import { datum as datumText, isoZuDatum, uhrzeit } from "@/lib/format";
@@ -15,8 +17,9 @@ const zeitText = (t: Termin) => (t.ganztags || !t.von ? "ganztägig" : `${uhrzei
 /**
  * Kleines Fenster direkt am Termin im Kalender — erst „Bearbeiten“ öffnet das
  * große Formular. Geräte lassen sich hier an- und abhaken.
- * Später (Stufe 2/3): auf „Besichtigung“ ein Knopf „Erstaufnahme“, auf
- * „Service“ ein Knopf „Regiebericht“ (Kunde, Adresse, Termin vorbelegt).
+ * Auf „Besichtigung“ der Knopf „Erstaufnahme“ (öffnet die zugehörige oder
+ * legt sie mit Kunde und Ort an), auf „Service“ „Regiebericht“ (Kunde,
+ * Termin bzw. Projekt vorbelegt) — für den Chef und wer eingeteilt ist.
  */
 export function BalkenInfo({
   t, x, y, projekt, kunde, team, mitarbeiter, fahrzeuge, darf, konflikt, onZu, onBearbeiten, onErledigt, onGeraet, onPersonWeg, onLoeschen,
@@ -43,6 +46,9 @@ export function BalkenInfo({
     window.addEventListener("keydown", taste);
     return () => { document.removeEventListener("pointerdown", weg, true); window.removeEventListener("keydown", taste); };
   }, [onZu]);
+  const navigate = useNavigate();
+  const { profil } = useSitzung();
+  const weiter = terminWeiter(t, darf || (!!profil && t.mitarbeiter.includes(profil.id)));
   const farbe = terminFarbe(t.art, projekt).streifen;
   const leute = t.mitarbeiter.map((id) => mitarbeiter.find((m) => m.id === id)).filter((m): m is Profil => !!m);
   const geraete = fahrzeuge.filter((f) => f.aktiv !== false);
@@ -100,6 +106,11 @@ export function BalkenInfo({
         <Button size="sm" variant={darf ? "default" : "outline"} className="h-9 gap-1.5" onClick={onBearbeiten}>
           <Pencil className="h-4 w-4" /> {darf ? "Bearbeiten" : "Öffnen"}
         </Button>
+        {weiter && (
+          <Button size="sm" variant={darf ? "outline" : "default"} className="h-9 gap-1.5" onClick={() => { onZu(); navigate(weiter.pfad); }} data-termin-weiter={weiter.art}>
+            {weiter.art === "erstaufnahme" ? <ClipboardList className="h-4 w-4" /> : <ClipboardSignature className="h-4 w-4" />} {weiter.text}
+          </Button>
+        )}
         {darf && <Button size="sm" variant="outline" className="h-9 gap-1.5" onClick={onErledigt}><Check className="h-4 w-4" /> {t.status === "erledigt" ? "Wieder offen" : "Erledigt"}</Button>}
         {darf && (loeschFrage ? (
           <Button size="sm" variant="destructive" className="ml-auto h-9" onClick={onLoeschen}>Wirklich löschen</Button>

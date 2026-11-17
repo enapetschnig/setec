@@ -131,3 +131,23 @@ export function einsatzAusProjekt(
     fahrzeuge: ziel.art === "geraet" ? [ziel.id] : [],
   };
 }
+
+/**
+ * Was am Termin als Nächstes zu tun ist (Knopf im Kalender und am Handy):
+ * Besichtigung → Erstaufnahme (die zugehörige oder eine neue mit Kunde/Ort),
+ * Service → Regiebericht (mit Projekt: dieses, sonst Kunde + Termin ohne Projekt).
+ * Nur für den Chef und wer eingeteilt ist (`darf`).
+ */
+export function terminWeiter(
+  t: { id: string; art: string | null; kunde_id: string | null; projekt_id: string | null },
+  darf: boolean,
+): { art: "erstaufnahme" | "regie"; text: string; pfad: string } | null {
+  if (!darf) return null;
+  const art = terminArt(t.art);
+  if (art === "besichtigung") return { art: "erstaufnahme", text: "Erstaufnahme", pfad: `/erstaufnahmen/neu?termin=${t.id}` };
+  if (art === "service") {
+    if (t.projekt_id) return { art: "regie", text: "Regiebericht", pfad: `/regie/neu?projekt=${t.projekt_id}&termin=${t.id}` };
+    if (t.kunde_id) return { art: "regie", text: "Regiebericht", pfad: `/regie/neu?kunde=${t.kunde_id}&termin=${t.id}` };
+  }
+  return null;
+}

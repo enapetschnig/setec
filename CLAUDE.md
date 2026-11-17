@@ -5,7 +5,9 @@ App für **einen Elektrobetrieb** — Kunde **SETEC GmbH** (Stefan Sattler,
 Elektrik + Photovoltaik, Kindberg-Mürzhofen; Wunschliste und Stand:
 `docs/SETEC-WUNSCHLISTE.md`): Chef (Büro, Angebote, Rechnungen) und
 Monteure (Stunden, Material, Regieberichte, Fotos). Alles hängt am Projekt
-mit fortlaufender Nummer `2026-0001`. Ziel: die einfachste Software für
+mit fortlaufender Nummer `2026-0001` — es entsteht aber erst mit dem Auftrag:
+Termin → Erstaufnahme (`EA-2026-001`) → Angebot ohne Projekt → Annahme legt das
+Projekt an (`projekt_aus_angebot`, seit 17.11.2026; KONZEPT „Erstaufnahme“). Ziel: die einfachste Software für
 Elektriker — am Handy auf der Baustelle bedienbar, Angebot vor Ort per Sprache.
 
 | | |

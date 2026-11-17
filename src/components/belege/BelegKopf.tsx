@@ -163,7 +163,7 @@ export function BelegKopf({
             <div className="min-w-0 flex-1">
               <ProjektWahl
                 wert={kopf.projekt_id ?? ""}
-                leerText={angebot ? "Neues Projekt beim Speichern" : "Projekt wählen (optional)"}
+                leerText={angebot ? "Ohne Projekt — entsteht bei Annahme" : "Projekt wählen (optional)"}
                 onChange={(id, p) => {
                   const werte: Partial<Kopf> = { projekt_id: id };
                   if (!kopf.kunde_id && !kopf.empf_name && p?.kunde_id) {
@@ -184,7 +184,7 @@ export function BelegKopf({
           {!kopf.projekt_id && angebot && (
             <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
               <FolderKanban className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              Beim ersten Speichern wird ein Projekt mit Status „Angebot“ angelegt.
+              Kein Projekt nötig: Nimmt der Kunde an (online oder „Angenommen“), wird das Projekt angelegt —{kopf.erstaufnahme_id ? " mit Fotos und Notizen der Erstaufnahme." : " mit Kunde und Adresse."}
             </p>
           )}
         </div>

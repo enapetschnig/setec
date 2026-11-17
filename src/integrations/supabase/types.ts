@@ -882,6 +882,7 @@ export type Database = {
           empf_strasse: string | null
           empf_uid: string | null
           empf_zusatz: string | null
+          erstaufnahme_id: string | null
           erstellt_von: string | null
           faellig_am: string | null
           fertig_am: string | null
@@ -926,6 +927,7 @@ export type Database = {
           empf_strasse?: string | null
           empf_uid?: string | null
           empf_zusatz?: string | null
+          erstaufnahme_id?: string | null
           erstellt_von?: string | null
           faellig_am?: string | null
           fertig_am?: string | null
@@ -970,6 +972,7 @@ export type Database = {
           empf_strasse?: string | null
           empf_uid?: string | null
           empf_zusatz?: string | null
+          erstaufnahme_id?: string | null
           erstellt_von?: string | null
           faellig_am?: string | null
           fertig_am?: string | null
@@ -1206,6 +1209,7 @@ export type Database = {
           art: string
           beschreibung: string | null
           created_at: string
+          erstaufnahme_foto_id: string | null
           groesse: number | null
           id: string
           mime: string | null
@@ -1220,6 +1224,7 @@ export type Database = {
           art?: string
           beschreibung?: string | null
           created_at?: string
+          erstaufnahme_foto_id?: string | null
           groesse?: number | null
           id?: string
           mime?: string | null
@@ -1234,6 +1239,7 @@ export type Database = {
           art?: string
           beschreibung?: string | null
           created_at?: string
+          erstaufnahme_foto_id?: string | null
           groesse?: number | null
           id?: string
           mime?: string | null
@@ -1524,6 +1530,126 @@ export type Database = {
             columns: ["kategorie_id"]
             isOneToOne: false
             referencedRelation: "rechnung_kategorien"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      erstaufnahme_fotos: {
+        Row: {
+          beschriftung: string | null
+          created_at: string
+          erstaufnahme_id: string
+          erstellt_von: string | null
+          id: string
+          original_pfad: string | null
+          pfad: string
+          reihenfolge: number
+          skizze: boolean
+        }
+        Insert: {
+          beschriftung?: string | null
+          created_at?: string
+          erstaufnahme_id: string
+          erstellt_von?: string | null
+          id?: string
+          original_pfad?: string | null
+          pfad: string
+          reihenfolge?: number
+          skizze?: boolean
+        }
+        Update: {
+          beschriftung?: string | null
+          created_at?: string
+          erstaufnahme_id?: string
+          erstellt_von?: string | null
+          id?: string
+          original_pfad?: string | null
+          pfad?: string
+          reihenfolge?: number
+          skizze?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "erstaufnahme_fotos_erstaufnahme_id_fkey"
+            columns: ["erstaufnahme_id"]
+            isOneToOne: false
+            referencedRelation: "erstaufnahmen"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      erstaufnahmen: {
+        Row: {
+          created_at: string
+          erstellt_von: string | null
+          id: string
+          kunde_id: string | null
+          kundenwunsch: string | null
+          messwerte: Json
+          notizen: string | null
+          nummer: string
+          ort: string | null
+          plz: string | null
+          projekt_id: string | null
+          status: string
+          strasse: string | null
+          termin_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          erstellt_von?: string | null
+          id?: string
+          kunde_id?: string | null
+          kundenwunsch?: string | null
+          messwerte?: Json
+          notizen?: string | null
+          nummer?: string
+          ort?: string | null
+          plz?: string | null
+          projekt_id?: string | null
+          status?: string
+          strasse?: string | null
+          termin_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          erstellt_von?: string | null
+          id?: string
+          kunde_id?: string | null
+          kundenwunsch?: string | null
+          messwerte?: Json
+          notizen?: string | null
+          nummer?: string
+          ort?: string | null
+          plz?: string | null
+          projekt_id?: string | null
+          status?: string
+          strasse?: string | null
+          termin_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "erstaufnahmen_kunde_id_fkey"
+            columns: ["kunde_id"]
+            isOneToOne: false
+            referencedRelation: "kunden"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "erstaufnahmen_projekt_id_fkey"
+            columns: ["projekt_id"]
+            isOneToOne: false
+            referencedRelation: "projekte"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "erstaufnahmen_termin_id_fkey"
+            columns: ["termin_id"]
+            isOneToOne: false
+            referencedRelation: "termine"
             referencedColumns: ["id"]
           },
         ]
@@ -3935,6 +4061,8 @@ export type Database = {
         Args: { p_lieferant: string; p_max?: number }
         Returns: number
       }
+      projekt_aus_angebot: { Args: { p_beleg: string }; Returns: string }
+      projekt_aus_erstaufnahme: { Args: { p_ea: string }; Returns: string }
       rechnung_aendern: { Args: { p_id: string }; Returns: undefined }
       regie_unterschrieben: { Args: { p_id: string }; Returns: boolean }
       regie_zeiten_zuordnen: {

@@ -1,5 +1,5 @@
 import {
-  BarChart3, BookOpenCheck, MessageSquarePlus, Bus, CalendarDays, FileCheck2, FileText, HandCoins, ClipboardSignature, Clock, FolderKanban, Home, Inbox, Package,
+  BarChart3, BookOpenCheck, ClipboardList, MessageSquarePlus, Bus, CalendarDays, FileCheck2, FileText, HandCoins, ClipboardSignature, Clock, FolderKanban, Home, Inbox, Package,
   FolderArchive, ListTodo, PackageCheck, Receipt, ScanBarcode, Settings, ShieldCheck, ShoppingCart, Smartphone, UserCog, Users, Warehouse, type LucideIcon,
 } from "lucide-react";
 
@@ -32,6 +32,7 @@ export const NAVIGATION: NavEintrag[] = [
   { titel: "Start", text: "Übersicht", pfad: "/", icon: Home, gruppe: "haupt" },
   { titel: "Projekte", text: "Baustellen mit Fotos, Stunden, Material", nurChef: true, pfad: "/projekte", icon: FolderKanban, gruppe: "haupt", stichworte: "Baustelle Förderung Planung" },
   { titel: "Kontakte", text: "Kunden, Lieferanten, Karte", nurChef: true, pfad: "/kunden", icon: Users, gruppe: "haupt", stichworte: "Kunde Lieferant Partner Telefon Adresse Karte PV-Anlage" },
+  { titel: "Erstaufnahmen", text: "Besichtigung: Wunsch, Fotos, Skizze — vor dem Angebot", textMonteur: "Besichtigung: Wunsch, Fotos, Skizze", pfad: "/erstaufnahmen", icon: ClipboardList, gruppe: "haupt", stichworte: "Besichtigung Aufnahme Erstaufnahme Vor-Ort Skizze Messwerte Kundenwunsch" },
   { titel: "Angebote", text: "Schreiben, vor Ort per Sprache, nachfassen", pfad: "/angebote", icon: FileText, gruppe: "haupt", nurChef: true, stichworte: "Vorlage Kostenvoranschlag Sprache" },
   { titel: "Rechnungen", text: "Aus dem Projekt, PDF mit Bezahl-QR", pfad: "/rechnungen", icon: Receipt, gruppe: "haupt", nurChef: true, stichworte: "Teilrechnung Schlussrechnung Storno Gutschrift" },
   { titel: "Kalender", text: "Einteilen: Leute, Geräte, Besichtigungen, Urlaub", textMonteur: "Wo bin ich wann — und wer ist abwesend", pfad: "/kalender", icon: CalendarDays, gruppe: "haupt", stichworte: "Plantafel Einteilung Wochenplan Terminplaner Termin Einsatz Montage Besichtigung Service Team Bus Steiger Gerät Urlaub Krank Abwesenheit" },

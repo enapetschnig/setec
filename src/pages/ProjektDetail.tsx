@@ -24,6 +24,8 @@ import { FotoDialog } from "@/components/dialoge/FotoDialog";
 import { TerminDialog } from "@/components/dialoge/TerminDialog";
 import { FotosTab } from "@/components/projekt/FotosTab";
 import { PlanungBereich } from "@/components/projekt/PlanungBereich";
+import { ErstaufnahmeBlock } from "@/components/erstaufnahme/ErstaufnahmeBlock";
+import { useErstaufnahmenZumProjekt } from "@/components/erstaufnahme/eaDaten";
 import { FoerderDialog, FoerderKarte } from "@/components/projekt/Foerderung";
 import { WhatsAppDialog } from "@/components/projekt/WhatsAppDialog";
 import { ProjektVerlauf } from "@/components/projekt/ProjektVerlauf";
@@ -379,6 +381,7 @@ function Uebersicht({ projekt }: { projekt: ProjektMitKunde }) {
   return (
     <div className="space-y-4">
       <PlanungBereich projektId={projektId} />
+      <ProjektErstaufnahmen projektId={projektId} />
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Kennzahl titel="Stunden" wert={stunden(stundenGesamt)}
@@ -500,4 +503,11 @@ function ProjektTermine({ projektId, darf, onNeu, onWahl }: { projektId: string;
       )}
     </div>
   );
+}
+
+/** Was bei der Besichtigung erfasst wurde — auch für die Monteure (ohne Preise) */
+function ProjektErstaufnahmen({ projektId }: { projektId: string }) {
+  const { data = [] } = useErstaufnahmenZumProjekt(projektId);
+  if (!data.length) return null;
+  return <div className="space-y-2">{data.map((d) => <ErstaufnahmeBlock key={d.ea.id} daten={d} startOffen={data.length === 1} />)}</div>;
 }

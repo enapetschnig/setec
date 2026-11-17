@@ -577,6 +577,8 @@ export type Kopf = {
   projekt_id: string | null;
   kunde_id: string | null;
   angebot_id: string | null;
+  /** Angebot aus einer Erstaufnahme (seit 17.11.2026) — fehlt in älteren Sicherungen im Gerät */
+  erstaufnahme_id?: string | null;
   empf_name: string;
   empf_zusatz: string;
   empf_strasse: string;
@@ -607,6 +609,7 @@ export function kopfNeu(typ: BelegTyp, firma: Firma | null | undefined, heute: s
     projekt_id: null,
     kunde_id: null,
     angebot_id: null,
+    erstaufnahme_id: null,
     empf_name: "",
     empf_zusatz: "",
     empf_strasse: "",
@@ -636,6 +639,7 @@ export function kopfAusBeleg(b: Beleg): Kopf {
     projekt_id: b.projekt_id,
     kunde_id: b.kunde_id,
     angebot_id: b.angebot_id,
+    erstaufnahme_id: b.erstaufnahme_id ?? null,
     empf_name: b.empf_name ?? "",
     empf_zusatz: b.empf_zusatz ?? "",
     empf_strasse: b.empf_strasse ?? "",
@@ -668,6 +672,7 @@ export function kopfZuDb(k: Kopf) {
     projekt_id: k.projekt_id,
     kunde_id: k.kunde_id,
     angebot_id: k.angebot_id,
+    erstaufnahme_id: k.typ === "angebot" ? k.erstaufnahme_id ?? null : null,
     empf_name: oderNull(k.empf_name),
     empf_zusatz: oderNull(k.empf_zusatz),
     empf_strasse: oderNull(k.empf_strasse),

@@ -2,7 +2,9 @@
 
 Demo-App für einen Elektrobetrieb: **Chef** (Büro, Angebote, Rechnungen) und
 **Monteure** (Stunden, Material, Regieberichte, Fotos). Alles hängt am
-**Projekt** mit fortlaufender Nummer `2026-0001`. Ziel: die einfachste
+**Projekt** mit fortlaufender Nummer `2026-0001` — das Projekt entsteht aber erst
+mit dem Auftrag; davor gibt es Termin, Erstaufnahme (`EA-2026-001`) und Angebot
+ohne Projekt (seit 17.11.2026, Abschnitt „Erstaufnahme“). Ziel: die einfachste
 Software für Elektriker — am Handy auf der Baustelle bedienbar.
 
 > Leitlinien
@@ -681,7 +683,8 @@ Bewusst einfach, kein eigenes Kalkulationsblatt:
   keine EK/Minuten. Annehmen prüft: Link gültig, Angebot offen und nicht abgelaufen,
   Stand (`updated_at`) unverändert, Haken, Unterschrift-PNG liegt unter
   `angebot-bestaetigung/<token>/` (Upload nur mit gültigem Link, PNG ≤ 512 KB, ≤ 5 je
-  Link). Dann wie von Hand: Angebot `angenommen`, Projekt `angebot` → `aktiv`. Gespeichert
+  Link). Dann wie von Hand: Angebot `angenommen`, Projekt per `projekt_aus_angebot_intern`
+  (angelegt, falls das Angebot noch keines hat; sonst `angebot` → `aktiv`). Gespeichert
   werden Name, Zeit, Betrag, Unterschrift — keine IP. Alles landet in `angebot_verlauf`;
   Annahmen und Rückfragen sind ungelesen → Startseite „Zu erledigen“, bis der Chef das
   Angebot öffnet.
@@ -710,6 +713,38 @@ Bewusst einfach, kein eigenes Kalkulationsblatt:
 - Demo: `supabase/demo/04-angebote.sql` (6 PV-Vorlagen, AN „Brunner“ offen mit Link
   `/angebot/DEMO-pv-brunner-angebot-bestaetigen-2026`, AN „Reisinger“ online angenommen);
   die Demo-Unterschrift lädt `unterschriften.py` hoch.
+
+### Erstaufnahme, Angebot ohne Projekt, Annahme (Stufe 3, seit 17.11.2026)
+
+Migration `20261117120000_erstaufnahme.sql`, Logik `lib/erstaufnahme.ts` (getestet),
+Seiten `/erstaufnahmen`, `/erstaufnahmen/neu`, `/erstaufnahmen/:id`, Bausteine
+`components/erstaufnahme/`. Ablauf: `docs/ABLAUF-TERMIN-BIS-RECHNUNG.md`.
+- **Erstaufnahme** (`erstaufnahmen`, Nummer `EA-2026-001` per Trigger): Kunde, Adresse,
+  Termin (höchstens eine je Termin), Wunsch (Diktat), Notiz, Messwerte (`messwerte`
+  jsonb: Bezeichnung/Wert/Einheit, Vorschläge wie Zählerplatz, Hauptsicherung,
+  Schleifenimpedanz …), Skizze. Status-Pille `offen` → `angebot` (Trigger, sobald ein
+  Angebot daran hängt) → `auftrag` oder `kein_auftrag`. Menü „Erstaufnahmen“ und „+ Neu“
+  für alle; Handy einspaltig, Tablet/PC zweispaltig; speichert von selbst.
+- **Fotos** (`erstaufnahme_fotos`, Speicher `projekt-dateien/ea/<id>/…`): mit Beschriftung,
+  „Zeichnen“ (Pfeile/Kreise/Text in Farben, Stift mit Handballen-Schutz) legt ein neues Bild
+  ab und **behält das Original** (`original_pfad`). Eine Datei, auf die noch ein
+  Erstaufnahme-Foto zeigt, löscht niemand aus dem Speicher (restriktive Policy
+  `erstaufnahme_dateien_bleiben`; „Foto löschen“ im Projekt entfernt nur die Zeile).
+- **Rechte**: alle Aktiven lesen, anlegen, ändern; Status/Projekt setzen und löschen nur
+  der Chef (Trigger `erstaufnahme_schutz`, RLS).
+- **Angebot ohne Projekt**: „Angebot erstellen“ (Chef) öffnet den Editor mit Kunde, Betreff
+  aus dem Wunsch und `belege.erstaufnahme_id`; der Editor zeigt oben den Block
+  „Erstaufnahme“ (Wunsch, Messwerte, Fotos). Mehrere Angebote je Erstaufnahme gehen
+  (Varianten, „Kopieren“ behält den Bezug). `belegSpeichern` legt **kein** Projekt mehr an;
+  alte Angebote mit Projekt laufen weiter wie bisher.
+- **Annahme → Projekt**: `projekt_aus_angebot(p_beleg)` (security definer, nur Chef,
+  idempotent) legt das Projekt an (Kunde, Name = Betreff, Adresse aus Erstaufnahme/Kunde,
+  Status `aktiv`) bzw. aktiviert das vorhandene, hängt Angebot, Erstaufnahme (Status
+  `auftrag`), Termin und alle Fotos (als `dateien`, Feld `erstaufnahme_foto_id`) dran.
+  Aufgerufen vom Chef („Angenommen“, auch vor Rechnung/Teilrechnung) und online von
+  `angebot_annehmen` über die interne `projekt_aus_angebot_intern` (anon hat keinen
+  direkten Zugriff). „Gleich Projekt“ (`projekt_aus_erstaufnahme`) überspringt das
+  Angebot; „Kein Auftrag“ schließt ab. Das Projekt zeigt seine Erstaufnahmen.
 
 ### Kalender, Teams und Fuhrpark (Seiten `/kalender`, `/fuhrpark`)
 
@@ -742,9 +777,11 @@ Migrationen `20261110100000_fuhrpark_teams_plantafel.sql` und
   - Büro: ohne Kunde.
   Titel wird vorgeschlagen („Service Huber“), solange keiner getippt ist. Danach
   Team, Leute, Geräte, Zeit wie bisher. Aus dem Projekt geöffnet sind Kunde und
-  Projekt vorbelegt. Später (Stufe 2/3): auf „Besichtigung“ ein Knopf
-  „Erstaufnahme“, auf „Service“ „Regiebericht“ (Kunde/Adresse/Termin vorbelegt) —
-  `RegieEditor` kann bisher nur das Projekt vorbelegen.
+  Projekt vorbelegt. Am Termin (Info-Fenster, Termin-Dialog, Einsatz auf der
+  Startseite; für Chef und eingeteilte Monteure, `terminWeiter` in `lib/kalender.ts`):
+  „Besichtigung“ → Knopf „Erstaufnahme“ (`/erstaufnahmen/neu?termin=…`, gibt es zum
+  Termin schon eine, öffnet sie), „Service“ → „Regiebericht“
+  (`/regie/neu?kunde=…&termin=…`, mit Projekt `?projekt=…&termin=…`).
 - **Aufbau** (wie SETECs alter Taifun-Terminplaner): Spalten = Leute nach Gruppen,
   Zeilen = Tage der Woche mit den Stunden laut Betrieb (Einstellungen → „Kalender“,
   `firma.plan_von/plan_bis`, Standard 6–18, `planStunden`; weiter, wenn ein Termin
@@ -1021,8 +1058,9 @@ Migration `20261113114000_projekte_foerderung_planung_saetze.sql`, Bausteine in 
 ### Nummern
 
 `naechste_nummer(typ, datum)` (nur intern): Projekt `2026-0001`, Angebot
-`AN-2026-001`, Rechnung `RE-2026-001`, Regiebericht `RB-2026-001`.
-Projekt- und Regienummer vergibt ein Trigger beim Anlegen, Belegnummern
+`AN-2026-001`, Rechnung `RE-2026-001`, Regiebericht `RB-2026-001`,
+Erstaufnahme `EA-2026-001`.
+Projekt-, Regie- und Erstaufnahmenummer vergibt ein Trigger beim Anlegen, Belegnummern
 `beleg_fertigstellen(id)` (rechnet dabei auch Netto/USt/Brutto aus den Positionen).
 
 ### Preise — nur über `src/lib/preise.ts`
@@ -1048,8 +1086,10 @@ Projekt- und Regienummer vergibt ein Trigger beim Anlegen, Belegnummern
    heutigen Stunden am Projekt) → Material (Katalog, reinreden, scannen, frei)
    → Fotos → Kunde unterschreibt am Handy → PDF teilen. Danach steht er unter
    Rechnungen → „Noch nicht verrechnet“.
-4. **Angebot vor Ort (Chef)**: „Angebot“ → Kunde (neu anlegen geht direkt) →
-   Projekt wird automatisch angelegt (Status Angebot) → Räume als Titel →
+4. **Angebot vor Ort (Chef)**: Besichtigung → „Erstaufnahme“ (Wunsch diktieren,
+   Messwerte, Fotos mit Zeichnung, Skizze) → „Angebot erstellen“ — oder direkt
+   „Angebot“ → Kunde (neu anlegen geht direkt) → **kein Projekt**, das entsteht
+   erst bei Annahme (Chef „Angenommen“ oder Kunde online) → Räume als Titel →
    Leistungen antippen (+/−) oder **diktieren** („Küche: 6 Steckdosen, 2
    Wechselschalter, 1 Herdanschluss“) → Vorschläge bestätigen → PDF.
 5. **Rechnung aus dem Projekt (Chef)**: Projekt → „Rechnung“ → Assistent zeigt

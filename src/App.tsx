@@ -25,6 +25,8 @@ const AnlageDetail = lazy(() => import("./pages/AnlageDetail"));
 const PruefungSeite = lazy(() => import("./pages/PruefungSeite"));
 const Lager = lazy(() => import("./pages/Lager"));
 const Regieberichte = lazy(() => import("./pages/Regieberichte"));
+const Erstaufnahmen = lazy(() => import("./pages/Erstaufnahmen"));
+const ErstaufnahmeDetail = lazy(() => import("./pages/ErstaufnahmeDetail"));
 const RegieDetail = lazy(() => import("./pages/RegieDetail"));
 const Belege = lazy(() => import("./pages/Belege"));
 const BelegeWeiter = lazy(() => import("./pages/Belege").then((m) => ({ default: m.BelegeWeiter })));
@@ -112,6 +114,9 @@ const App = () => (
                 <Route path="/anlagen" element={<S><Anlagen /></S>} />
                 <Route path="/anlagen/:id" element={<S><AnlageDetail /></S>} />
                 <Route path="/pruefungen/:id" element={<S><PruefungSeite /></S>} />
+                <Route path="/erstaufnahmen" element={<S><Erstaufnahmen /></S>} />
+                <Route path="/erstaufnahmen/neu" element={<S><ErstaufnahmeDetail /></S>} />
+                <Route path="/erstaufnahmen/:id" element={<S><ErstaufnahmeDetail /></S>} />
                 <Route path="/regie" element={<S><Regieberichte /></S>} />
                 <Route path="/regie/neu" element={<S><RegieSeite /></S>} />
                 <Route path="/regie/:id" element={<S><RegieSeite /></S>} />
