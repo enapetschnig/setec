@@ -13,24 +13,27 @@ import type { Artikel, Beleg, Leistung } from "@/lib/types";
  * „springend“ über den Index (lieferant, artikelnummer): je Lieferant eine
  * winzige Abfrage, auch bei 200.000 Artikeln.
  */
+export async function artikelLieferantenLaden(nurAktive = false): Promise<string[]> {
+  const liste: string[] = [];
+  let letzter: string | null = null;
+  for (let i = 0; i < 100; i++) {
+    let q = supabase.from("artikel").select("lieferant");
+    if (nurAktive) q = q.eq("aktiv", true);
+    if (letzter !== null) q = q.gt("lieferant", letzter);
+    const { data, error } = await q.order("lieferant").limit(1);
+    if (error) throw error;
+    if (!data?.length) break;
+    letzter = data[0].lieferant;
+    liste.push(letzter);
+  }
+  return liste;
+}
+
 export function useLieferanten() {
   return useQuery({
     queryKey: ["artikel", "lieferanten"],
     staleTime: 5 * 60_000,
-    queryFn: async () => {
-      const liste: string[] = [];
-      let letzter: string | null = null;
-      for (let i = 0; i < 100; i++) {
-        let q = supabase.from("artikel").select("lieferant");
-        if (letzter !== null) q = q.gt("lieferant", letzter);
-        const { data, error } = await q.order("lieferant").limit(1);
-        if (error) throw error;
-        if (!data?.length) break;
-        letzter = data[0].lieferant;
-        liste.push(letzter);
-      }
-      return liste;
-    },
+    queryFn: () => artikelLieferantenLaden(),
   });
 }
 

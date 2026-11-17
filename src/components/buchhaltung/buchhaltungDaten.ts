@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { archivieren } from "@/lib/belegArchiv";
 import { isoTag } from "@/lib/format";
+import { alleZeilen, inHaeppchen } from "@/lib/abfrage";
 import type { Kunde } from "@/lib/types";
 import type { AltRechnung, Kategorie, Richtung } from "./buchhaltungLogik";
 
@@ -49,11 +50,10 @@ export async function kategorieLoeschen(id: string): Promise<void> {
 
 /** Kategorie an Rechnungen setzen. Beim Eingang geht die Art für die Buchhaltung mit. */
 export async function kategorieSetzen(richtung: Richtung, ids: string[], kategorie: Kategorie | null): Promise<void> {
-  if (!ids.length) return;
-  const { error } = richtung === "ausgang"
-    ? await supabase.from("belege").update({ kategorie_id: kategorie?.id ?? null }).in("id", ids)
-    : await supabase.from("eingangsrechnungen").update({ kategorie_id: kategorie?.id ?? null, ...(kategorie?.art ? { kategorie: kategorie.art } : {}) }).in("id", ids);
-  if (error) throw error;
+  // in Häppchen: hunderte markierte Rechnungen sprengen sonst die URL
+  await inHaeppchen(ids, (teil) => richtung === "ausgang"
+    ? supabase.from("belege").update({ kategorie_id: kategorie?.id ?? null }).in("id", teil).select("id")
+    : supabase.from("eingangsrechnungen").update({ kategorie_id: kategorie?.id ?? null, ...(kategorie?.art ? { kategorie: kategorie.art } : {}) }).in("id", teil).select("id"));
 }
 
 // ── Listen je Zeitraum ───────────────────────────────────────────────────
@@ -77,12 +77,11 @@ export function useAusgang(von: string, bis: string) {
   return useQuery({
     queryKey: ["buchhaltung", "ausgang", von, bis],
     queryFn: async () => {
-      const { data, error } = await supabase.from("belege")
+      const data = await alleZeilen((a, b) => supabase.from("belege")
         .select("id, nummer, datum, faellig_am, status, altbestand, netto, ust, brutto, kategorie_id, empf_name, betreff, projekte(nummer, name), zahlungen(betrag, art), beleg_positionen(bezeichnung)")
         .eq("typ", "rechnung").neq("status", "entwurf").gte("datum", von).lte("datum", bis)
-        .order("datum", { ascending: false }).order("nummer", { ascending: false });
-      if (error) throw error;
-      return (data ?? []) as unknown as AusgangZeile[];
+        .order("datum", { ascending: false }).order("nummer", { ascending: false }).order("id").range(a, b));
+      return data as unknown as AusgangZeile[];
     },
   });
 }
@@ -91,12 +90,11 @@ export function useEingangZeitraum(von: string, bis: string) {
   return useQuery({
     queryKey: ["buchhaltung", "eingang", von, bis],
     queryFn: async () => {
-      const { data, error } = await supabase.from("eingangsrechnungen")
+      const data = await alleZeilen((a, b) => supabase.from("eingangsrechnungen")
         .select("id, lieferant, nummer, datum, faellig_am, bezahlt_am, netto, ust, brutto, kategorie, kategorie_id, datei_pfad, freigabe, lastschrift, bar_bezahlt, eingang_positionen(bezeichnung)")
         .gte("datum", von).lte("datum", bis)
-        .order("datum", { ascending: false }).order("lieferant");
-      if (error) throw error;
-      return (data ?? []) as unknown as EingangZeile[];
+        .order("datum", { ascending: false }).order("lieferant").order("id").range(a, b));
+      return data as unknown as EingangZeile[];
     },
   });
 }
@@ -128,11 +126,10 @@ export function useAltrechnungen() {
   return useQuery({
     queryKey: ["buchhaltung", "alt"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("belege")
+      const data = await alleZeilen((von, bis) => supabase.from("belege")
         .select("id, nummer, datum, faellig_am, status, netto, ust, brutto, ust_satz, empf_name, kunde_id, kategorie_id, zahlungen(id, betrag, art, datum), mahnungen(stufe)")
-        .eq("altbestand", true).order("datum", { ascending: false }).order("nummer", { ascending: false });
-      if (error) throw error;
-      return (data ?? []) as unknown as AltZeile[];
+        .eq("altbestand", true).order("datum", { ascending: false }).order("nummer", { ascending: false }).order("id").range(von, bis));
+      return data as unknown as AltZeile[];
     },
   });
 }

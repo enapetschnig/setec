@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Camera, Download, FileText, Image as BildIcon, MoreVertical, PencilRuler, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { alleZeilen } from "@/lib/abfrage";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
@@ -35,10 +36,8 @@ export function useProjektDateien(projektId: string) {
   const abfrage = useQuery({
     queryKey: ["dateien", projektId],
     queryFn: async () => {
-      const { data, error } = await supabase.from("dateien").select("*, profiles(vorname, nachname, farbe)")
-        .eq("projekt_id", projektId).order("created_at", { ascending: false });
-      if (error) throw error;
-      const liste = (data ?? []) as DateiMitPerson[];
+      const liste = await alleZeilen<DateiMitPerson>((a, b) => supabase.from("dateien").select("*, profiles(vorname, nachname, farbe)")
+        .eq("projekt_id", projektId).order("created_at", { ascending: false }).order("id").range(a, b));
       const urls = await signierteAdressen(liste.map((d) => d.pfad));
       return { liste, urls };
     },

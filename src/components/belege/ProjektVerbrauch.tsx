@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, FolderInput, HardHat } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { alleZeilen } from "@/lib/abfrage";
 import { Button } from "@/components/ui/button";
 import { stunden, zahl } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -26,13 +27,13 @@ export function ProjektVerbrauch({
   const { data, isLoading, error } = useQuery({
     queryKey: ["projekt_verbrauch", projektId, belegId],
     queryFn: async () => {
-      const [zt, mt] = await Promise.all([
-        supabase.from("zeiten").select("id, stunden, user_id, rechnung_id, profiles(vorname, nachname)").eq("projekt_id", projektId),
-        supabase.from("material_buchungen").select("id, art, menge, einheit, bezeichnung, artikel_id, rechnung_id, artikel(bezeichnung, einheit)")
-          .eq("projekt_id", projektId).in("art", ["ausfassung", "rueckgabe", "direkt"]),
+      const [ztDaten, mtDaten] = await Promise.all([
+        alleZeilen((a, b) => supabase.from("zeiten").select("id, stunden, user_id, rechnung_id, profiles(vorname, nachname)")
+          .eq("projekt_id", projektId).order("id").range(a, b)),
+        alleZeilen((a, b) => supabase.from("material_buchungen").select("id, art, menge, einheit, bezeichnung, artikel_id, rechnung_id, artikel(bezeichnung, einheit)")
+          .eq("projekt_id", projektId).in("art", ["ausfassung", "rueckgabe", "direkt"]).order("id").range(a, b)),
       ]);
-      if (zt.error) throw new Error(zt.error.message);
-      if (mt.error) throw new Error(mt.error.message);
+      const zt = { data: ztDaten }, mt = { data: mtDaten };
       const zeiten: VerbrauchZeit[] = (zt.data ?? []).map((z) => ({
         id: z.id, stunden: Number(z.stunden), user_id: z.user_id, rechnung_id: z.rechnung_id,
         name: [z.profiles?.vorname, z.profiles?.nachname].filter(Boolean).join(" ") || "Mitarbeiter",

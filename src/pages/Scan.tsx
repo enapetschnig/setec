@@ -29,7 +29,7 @@ import {
 import { platzSchluessel, useAngebotMaterial, useHauptbilder, useLagerplaetze } from "@/components/material/artikelDaten";
 import { ausfassVorschlag, verbrauchtKarte } from "@/components/material/artikelLogik";
 import { ArtikelVorschau } from "@/components/material/ArtikelVorschau";
-import { alleZeilen } from "@/lib/abfrage";
+import { alleZeilen, inHaeppchen } from "@/lib/abfrage";
 import { aufBestellungenVerteilen, type OffenePosition } from "@/components/bestellung/bestellLogik";
 import { useLagerorte, useNeuLaden, useProjekte } from "@/hooks/useDaten";
 import { useSitzung } from "@/hooks/useSitzung";
@@ -758,14 +758,17 @@ export default function Scan() {
     if (modus === "zugang" && istChef && lagerortId) {
       const ids = [...new Set(listeRef.current.flatMap((z) => (z.artikel ? [z.artikel.id] : [])))];
       if (ids.length) {
-        const { data, error } = await supabase.from("bestell_positionen")
-          .select("id, artikel_id, menge, geliefert, bestellungen!inner(status, lagerort_id, bestellt_am, nummer)")
-          .in("artikel_id", ids).eq("bestellungen.lagerort_id", lagerortId).in("bestellungen.status", ["bestellt", "teilgeliefert"]);
-        if (error) {
-          toast.error("Offene Bestellungen nicht geladen", { description: fehlerText(error) });
+        let data;
+        try {
+          // viele Artikel (Inventur) → IDs in Häppchen
+          data = await inHaeppchen(ids, (teil) => supabase.from("bestell_positionen")
+            .select("id, artikel_id, menge, geliefert, bestellungen!inner(status, lagerort_id, bestellt_am, nummer)")
+            .in("artikel_id", teil).eq("bestellungen.lagerort_id", lagerortId).in("bestellungen.status", ["bestellt", "teilgeliefert"]));
+        } catch (error) {
+          toast.error("Offene Bestellungen nicht geladen", { description: fehlerText(error as { message: string }) });
           return;
         }
-        offen = [...(data ?? [])].sort((a, b) =>
+        offen = [...data].sort((a, b) =>
           (a.bestellungen.bestellt_am ?? "").localeCompare(b.bestellungen.bestellt_am ?? "") || a.bestellungen.nummer.localeCompare(b.bestellungen.nummer));
       }
     }

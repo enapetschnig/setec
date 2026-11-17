@@ -174,6 +174,11 @@ Hier arbeitet der Zweig `elektriker` und wird nach `main` gepusht — vor eigene
   fehlende Felder auf NULL statt auf den Spalten-Standard → `not null` knallt.
   Bei Mehrfach-Inserts immer alle Felder angeben.
 - `beleg_positionen.gesamt` ist eine generierte Spalte — nie schreiben.
+- **Supabase liefert je Abfrage höchstens 1000 Zeilen** (auch bei `.limit(5000)`)
+  und schneidet still ab. Listen, die wachsen (Kontakte, Belege, Eingang, Anlagen,
+  Buchungen …), mit `alleZeilen` aus `lib/abfrage.ts` laden (`.order(…).order("id")
+  .range(von, bis)`); lange `.in(…)`-Listen mit `inHaeppchen`; Zahlen lieber per
+  `count: "exact", head: true`.
 - Verrechnet wird an der Quelle (`rechnung_id` an Stunde, Materialbuchung,
   Regiebericht); verrechnete und unterschriebene Buchungen sind per Trigger
   festgeschrieben.

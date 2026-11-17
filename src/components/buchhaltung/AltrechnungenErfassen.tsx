@@ -10,6 +10,7 @@ import { useBeimOeffnen } from "@/components/stamm/Felder";
 import { fehlerText } from "@/components/stamm/stammDaten";
 import { useKunden, useNeuLaden } from "@/hooks/useDaten";
 import { supabase } from "@/integrations/supabase/client";
+import { inHaeppchen } from "@/lib/abfrage";
 import { csvZerlegen } from "@/lib/csvImport";
 import type { ZahlenFormat } from "@/lib/csvImport";
 import { euro, isoTag } from "@/lib/format";
@@ -97,8 +98,9 @@ export function AltrechnungenErfassen({ art, onClose }: { art: "tabelle" | "csv"
     setSpeichert(true);
     try {
       const nummern = gueltig.map((x) => x.rechnung!.nummer);
-      const { data: schon } = await supabase.from("belege").select("nummer").in("nummer", nummern);
-      if (schon?.length) {
+      // hunderte Nummern auf einmal → in Häppchen, sonst wird die Adresse zu lang
+      const schon = await inHaeppchen(nummern, (teil) => supabase.from("belege").select("nummer").in("nummer", teil), 100);
+      if (schon.length) {
         toast.error(`Diese Nummer gibt es schon: ${schon.map((s) => s.nummer).join(", ")}`, { description: "Altrechnungen brauchen eine eigene Nummer — z. B. mit einem Kürzel davor." });
         return;
       }

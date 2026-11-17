@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { alleZeilen } from "@/lib/abfrage";
 import type { Tables } from "@/integrations/supabase/types";
 
 /**
@@ -26,11 +27,12 @@ export function useKundenLieferscheine(kundeId?: string, aktiv = true) {
     queryKey: ["kls", "liste", kundeId ?? "alle"],
     enabled: aktiv,
     queryFn: async () => {
-      let q = supabase.from("kunden_lieferscheine").select(FELDER);
-      if (kundeId) q = q.eq("kunde_id", kundeId);
-      const { data, error } = await q.order("datum", { ascending: false }).order("created_at", { ascending: false });
-      if (error) throw error;
-      return (data ?? []) as unknown as KlsVoll[];
+      const data = await alleZeilen((von, bis) => {
+        let q = supabase.from("kunden_lieferscheine").select(FELDER);
+        if (kundeId) q = q.eq("kunde_id", kundeId);
+        return q.order("datum", { ascending: false }).order("created_at", { ascending: false }).order("id").range(von, bis);
+      });
+      return data as unknown as KlsVoll[];
     },
   });
 }

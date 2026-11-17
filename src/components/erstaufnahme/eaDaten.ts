@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { alleZeilen } from "@/lib/abfrage";
 import { fehlerText } from "@/components/stamm/stammDaten";
 import { signierteAdressen } from "@/lib/upload";
 import { eaPfad, messwerteBereinigen, ortZerlegen, type Messwert } from "@/lib/erstaufnahme";
@@ -20,9 +21,9 @@ export function useErstaufnahmen() {
   return useQuery({
     queryKey: ["erstaufnahmen", "liste"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("erstaufnahmen").select(AUSWAHL).order("created_at", { ascending: false }).limit(1000);
-      if (error) throw error;
-      return (data ?? []) as unknown as EaZeile[];
+      const data = await alleZeilen((von, bis) => supabase.from("erstaufnahmen").select(AUSWAHL)
+        .order("created_at", { ascending: false }).order("id").range(von, bis));
+      return data as unknown as EaZeile[];
     },
   });
 }

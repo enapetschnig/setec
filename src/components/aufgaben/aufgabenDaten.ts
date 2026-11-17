@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { alleZeilen } from "@/lib/abfrage";
 import { bildVerkleinern, sichererDateiname } from "@/lib/upload";
 import { zaehlen } from "@/lib/aufgaben";
 import { isoTag } from "@/lib/format";
@@ -22,13 +23,14 @@ export function useAufgaben(filter: { projektId?: string } = {}) {
     queryKey: ["aufgaben", "liste", filter],
     queryFn: async () => {
       const seit = new Date(Date.now() - 90 * 86_400_000).toISOString();
-      let q = supabase.from("aufgaben").select(FELDER)
-        .or(`status.neq.erledigt,erledigt_am.gte.${seit}`)
-        .order("faellig_am", { ascending: true, nullsFirst: false }).limit(1000);
-      if (filter.projektId) q = q.eq("projekt_id", filter.projektId);
-      const { data, error } = await q;
-      if (error) throw error;
-      return (data ?? []) as AufgabeMitInfo[];
+      const data = await alleZeilen((von, bis) => {
+        let q = supabase.from("aufgaben").select(FELDER)
+          .or(`status.neq.erledigt,erledigt_am.gte.${seit}`)
+          .order("faellig_am", { ascending: true, nullsFirst: false }).order("id");
+        if (filter.projektId) q = q.eq("projekt_id", filter.projektId);
+        return q.range(von, bis);
+      });
+      return data as AufgabeMitInfo[];
     },
   });
 }

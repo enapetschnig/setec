@@ -7,6 +7,7 @@ import {
   Landmark, Mail, MapPin, MessageCircle, MoreVertical, Package, Pencil, Phone, Receipt, ScanBarcode, Trash2,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { alleZeilen } from "@/lib/abfrage";
 import { Seite } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import {
@@ -75,9 +76,13 @@ function useZaehler(projektId: string, istChef: boolean): Partial<Record<Ordner,
     queryKey: ["dateien", "zahl", projektId],
     enabled: !!projektId,
     queryFn: async () => {
-      const { data } = await supabase.from("dateien").select("art").eq("projekt_id", projektId);
-      const fotos = (data ?? []).filter((d) => d.art === "foto").length;
-      return { fotos, dokumente: (data ?? []).length - fotos };
+      // gezählt in der Datenbank — eine Liste käme bei über 1000 Fotos abgeschnitten an
+      const [alle, nurFotos] = await Promise.all([
+        supabase.from("dateien").select("id", { count: "exact", head: true }).eq("projekt_id", projektId),
+        supabase.from("dateien").select("id", { count: "exact", head: true }).eq("projekt_id", projektId).eq("art", "foto"),
+      ]);
+      const fotos = nurFotos.count ?? 0;
+      return { fotos, dokumente: (alle.count ?? 0) - fotos };
     },
   });
   const zeiten = useQuery(zaehlen("zeiten", "zeiten"));
@@ -344,11 +349,9 @@ function Uebersicht({ projekt }: { projekt: ProjektMitKunde }) {
   const { data: material } = useQuery({
     queryKey: ["material", "projekt-wert", projektId],
     queryFn: async () => {
-      const { data, error } = await supabase.from("material_buchungen")
+      return alleZeilen((a, b) => supabase.from("material_buchungen")
         .select("art, menge, ek_preis, artikel(ek_preis, vk_preis, listenpreis, aufschlag)")
-        .eq("projekt_id", projektId).in("art", ["ausfassung", "rueckgabe", "direkt"]);
-      if (error) throw error;
-      return data ?? [];
+        .eq("projekt_id", projektId).in("art", ["ausfassung", "rueckgabe", "direkt"]).order("id").range(a, b));
     },
   });
 

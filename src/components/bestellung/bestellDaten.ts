@@ -1,5 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { alleZeilen } from "@/lib/abfrage";
+import { artikelLieferantenLaden } from "@/components/stamm/stammDaten";
 import type { Tables } from "@/integrations/supabase/types";
 import { weitereLieferantenLaden } from "@/components/material/artikelDaten";
 import { mitBestemLieferant } from "@/components/material/artikelLogik";
@@ -40,11 +42,10 @@ export function useBestellungen(aktiv = true) {
     queryKey: ["bestellungen", "liste"],
     enabled: aktiv,
     queryFn: async () => {
-      const { data, error } = await supabase.from("bestellungen")
+      const data = await alleZeilen((von, bis) => supabase.from("bestellungen")
         .select(`${KOPF}, bestell_positionen(menge, ek_preis, geliefert)`)
-        .order("datum", { ascending: false }).order("created_at", { ascending: false });
-      if (error) throw error;
-      return (data ?? []) as unknown as BestellungKurz[];
+        .order("datum", { ascending: false }).order("created_at", { ascending: false }).order("id").range(von, bis));
+      return data as unknown as BestellungKurz[];
     },
   });
 }
@@ -87,14 +88,15 @@ export function useLieferungen(bestellungId: string | undefined, positionIds: st
 
 /** Je Artikel: was schon bestellt (oder im Entwurf) und noch nicht geliefert ist. */
 export async function offeneBestellMengen(projektId?: string): Promise<Map<string, number>> {
-  let q = supabase.from("bestell_positionen")
-    .select("artikel_id, menge, geliefert, bestellungen!inner(status, projekt_id)")
-    .in("bestellungen.status", ["entwurf", "bestellt", "teilgeliefert"]);
-  q = projektId ? q.eq("bestellungen.projekt_id", projektId) : q.is("bestellungen.projekt_id", null);
-  const { data, error } = await q;
-  if (error) throw error;
+  // je Seite eine frische Abfrage — der Builder hängt order/range sonst an die alte an
+  const data = await alleZeilen((von, bis) => {
+    const q = supabase.from("bestell_positionen")
+      .select("artikel_id, menge, geliefert, bestellungen!inner(status, projekt_id)")
+      .in("bestellungen.status", ["entwurf", "bestellt", "teilgeliefert"]);
+    return (projektId ? q.eq("bestellungen.projekt_id", projektId) : q.is("bestellungen.projekt_id", null)).order("id").range(von, bis);
+  });
   const m = new Map<string, number>();
-  for (const p of data ?? []) m.set(p.artikel_id, runden3((m.get(p.artikel_id) ?? 0) + offeneMenge(p)));
+  for (const p of data) m.set(p.artikel_id, runden3((m.get(p.artikel_id) ?? 0) + offeneMenge(p)));
   return m;
 }
 
@@ -108,13 +110,14 @@ export function useLieferanten() {
     queryKey: ["bestellungen", "lieferanten"],
     staleTime: 5 * 60_000,
     queryFn: async () => {
+      // Artikel „springend“ je Lieferant (auch bei 100.000 Artikeln), der Rest in Seiten zu 1000
       const [a, b, k] = await Promise.all([
-        supabase.from("artikel").select("lieferant").eq("aktiv", true).neq("lieferant", LIEFERANT_OHNE).limit(2000),
-        supabase.from("bestellungen").select("lieferant").limit(500),
-        supabase.from("kunden").select("lieferant:name").eq("art", "lieferant").limit(500),
+        artikelLieferantenLaden(true),
+        alleZeilen((von, bis) => supabase.from("bestellungen").select("lieferant").order("id").range(von, bis)),
+        alleZeilen((von, bis) => supabase.from("kunden").select("lieferant:name").eq("art", "lieferant").order("id").range(von, bis)),
       ]);
       const namen = new Set<string>();
-      for (const z of [...(a.data ?? []), ...(b.data ?? []), ...(k.data ?? [])]) if (z.lieferant?.trim()) namen.add(z.lieferant.trim());
+      for (const n of [...a.filter((l) => l !== LIEFERANT_OHNE), ...b.map((z) => z.lieferant), ...k.map((z) => z.lieferant)]) if (n?.trim()) namen.add(n.trim());
       return [...namen].sort((x, y) => x.localeCompare(y, "de"));
     },
   });

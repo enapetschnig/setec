@@ -8,6 +8,7 @@ import {
   Landmark, ListTodo, PhoneCall,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { alleZeilen } from "@/lib/abfrage";
 import { WunschKnopf } from "@/components/wunsch/WunschMelden";
 import { KontoMenue } from "@/components/KontoMenue";
 import { StartListe } from "@/components/rahmen/StartListe";
@@ -129,8 +130,10 @@ export default function Index() {
     queryKey: ["belege", "start"],
     enabled: istChef,
     queryFn: async () => {
-      const [{ data: belege }, { count: wartend }, { data: online }] = await Promise.all([
-        supabase.from("belege").select("id, typ, status, brutto, faellig_am, gueltig_bis").in("status", ["entwurf", "offen"]),
+      // Summe offener Rechnungen über alle Seiten — nach dem Altbestand-Import weit über 1000
+      const [belege, { count: wartend }, { data: online }] = await Promise.all([
+        alleZeilen((von, bis) => supabase.from("belege").select("id, typ, status, brutto, faellig_am, gueltig_bis")
+          .in("status", ["entwurf", "offen"]).order("id").range(von, bis)),
         supabase.from("profiles").select("id", { count: "exact", head: true }).eq("aktiv", false).eq("gesperrt", false),
         // Kunde hat online angenommen oder nachgefragt — bis der Chef das Angebot öffnet
         supabase.from("angebot_verlauf").select("beleg_id, art, name, belege(nummer)").eq("gelesen", false).in("art", ["angenommen", "rueckfrage"]),
@@ -211,9 +214,8 @@ export default function Index() {
     queryKey: ["termine", "erledigt"],
     enabled: istChef,
     queryFn: async () => {
-      const { data, error } = await supabase.from("termine").select("id, projekt_id").eq("status", "erledigt").not("projekt_id", "is", null);
-      if (error) throw error;
-      return data ?? [];
+      return alleZeilen((von, bis) => supabase.from("termine").select("id, projekt_id")
+        .eq("status", "erledigt").not("projekt_id", "is", null).order("id").range(von, bis));
     },
   });
   const erledigtOffen = [...new Set(erledigte.map((t) => t.projekt_id as string))].filter((id) => {

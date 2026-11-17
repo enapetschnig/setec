@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { alleZeilen } from "@/lib/abfrage";
 import type { Kunde } from "@/lib/types";
 import { brauchtGeo, geoAnfrage, nominatimLesen, nominatimUrl, type LieferantBeleg } from "./kontaktLogik";
 
@@ -11,9 +12,10 @@ export function useLieferantBelege(kontaktId: string | null | undefined, aktiv: 
     queryKey: ["eingang", "kontakt", kontaktId],
     enabled: !!kontaktId && aktiv,
     queryFn: async () => {
-      const { data, error } = await supabase.rpc("kontakt_belege", { p_kontakt: kontaktId! });
-      if (error) throw error;
-      return (data ?? []) as LieferantBeleg[];
+      // ein großer Händler hat über die Jahre leicht mehr als 1000 Belege — in Seiten
+      const data = await alleZeilen((von, bis) => supabase.rpc("kontakt_belege", { p_kontakt: kontaktId! })
+        .order("datum", { ascending: false, nullsFirst: false }).order("quelle").order("id").range(von, bis));
+      return data as LieferantBeleg[];
     },
   });
 }

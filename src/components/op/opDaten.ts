@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { fehlerText } from "@/components/stamm/stammDaten";
+import { alleZeilen } from "@/lib/abfrage";
 import type { Beleg, Mahnung, Zahlung } from "@/lib/types";
 import type { MahnVorschlag, ZahlungArt } from "./opLogik";
 
@@ -34,11 +35,10 @@ export function useOffenePosten(aktiv = true) {
     queryKey: ["op", "liste"],
     enabled: aktiv,
     queryFn: async () => {
-      const { data, error } = await supabase.from("belege").select(FELDER)
+      const data = await alleZeilen((von, bis) => supabase.from("belege").select(FELDER)
         .eq("typ", "rechnung").eq("status", "offen")
-        .order("faellig_am", { ascending: true, nullsFirst: false }).order("datum");
-      if (error) throw error;
-      return (data ?? []) as unknown as OpBeleg[];
+        .order("faellig_am", { ascending: true, nullsFirst: false }).order("datum").order("id").range(von, bis));
+      return data as unknown as OpBeleg[];
     },
   });
 }

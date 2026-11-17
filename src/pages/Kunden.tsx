@@ -1,4 +1,4 @@
-import { lazy, Suspense, useMemo, useState } from "react";
+import { lazy, Suspense, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { ChevronRight, List, Map as KarteIcon, Pencil, Plus, Search, SearchX, UserRound, Users } from "lucide-react";
 import { Seite } from "@/components/PageHeader";
@@ -20,15 +20,15 @@ import { cn } from "@/lib/utils";
 // Leaflet nur laden, wenn jemand die Karte öffnet
 const KontakteKarte = lazy(() => import("@/components/kontakte/KontakteKarte"));
 
-/** Alle Wörter müssen vorkommen — Name, Ort, Nummer (mit oder ohne „K“), Ansprechpartner, Straße, Telefon, E-Mail, UID, Schreibweisen, Ansprechpersonen */
-function passt(k: Kunde, suchtext: string, personen: string[] = []) {
-  const woerter = suchtext.toLowerCase().split(/\s+/).filter(Boolean);
-  if (!woerter.length) return true;
-  const text = [k.name, k.ort, k.plz, k.strasse, k.ansprechpartner, k.telefon, k.email, `k${k.nummer}`, String(k.nummer), k.uid,
+/** Suchtext eines Kontakts — Name, Ort, Nummer (mit oder ohne „K“), Ansprechpartner, Straße, Telefon, E-Mail, UID, Schreibweisen, Ansprechpersonen */
+function suchText(k: Kunde, personen: string[] = []) {
+  return [k.name, k.ort, k.plz, k.strasse, k.ansprechpartner, k.telefon, k.email, `k${k.nummer}`, String(k.nummer), k.uid,
     k.kundennummer_extern, ...(k.namen ?? []), ...personen]
     .filter(Boolean).join(" ").toLowerCase();
-  return woerter.every((w) => text.includes(w));
 }
+
+/** Am Handy erst so viele Zeilen zeichnen, der Rest per Knopf — über 1000 Kontakte bleiben flüssig */
+const ZEILEN_SCHRITT = 100;
 
 type ArtFilter = "alle" | KontaktArt;
 const ART_FILTER: ArtFilter[] = ["alle", "kunde", "lieferant", "partner"];
@@ -107,10 +107,17 @@ export default function KundenSeite() {
     return z;
   }, [kunden]);
 
-  const treffer = useMemo(
-    () => kunden.filter((k) => (art === "alle" || kontaktArt(k.art) === art) && passt(k, text, personenText.get(k.id))),
-    [kunden, text, art, personenText],
-  );
+  // Suchtexte einmal je Datenstand bauen, nicht bei jedem Tastendruck für jeden Kontakt
+  const suchTexte = useMemo(() => new Map(kunden.map((k) => [k.id, suchText(k, personenText.get(k.id))])), [kunden, personenText]);
+  // Tippen bleibt flüssig: die Liste rechnet mit dem nachlaufenden Suchtext
+  const suche = useDeferredValue(text);
+  const treffer = useMemo(() => {
+    const woerter = suche.toLowerCase().split(/\s+/).filter(Boolean);
+    return kunden.filter((k) => (art === "alle" || kontaktArt(k.art) === art)
+      && (!woerter.length || woerter.every((w) => suchTexte.get(k.id)?.includes(w))));
+  }, [kunden, suche, art, suchTexte]);
+  const [zeilen, setZeilen] = useState(ZEILEN_SCHRITT);
+  useEffect(() => setZeilen(ZEILEN_SCHRITT), [suche, art]);
   const gewaehlt = kunden.find((k) => k.id === gewaehltId) ?? null;
   const gewaehltArt = gewaehlt ? kontaktArt(gewaehlt.art) : "kunde";
   const neuArt: KontaktArt = art === "alle" ? "kunde" : art;
@@ -195,7 +202,7 @@ export default function KundenSeite() {
         </Leer>
       ) : (
         <ul className="divide-y overflow-hidden rounded-lg border bg-card">
-          {treffer.map((k) => {
+          {treffer.slice(0, zeilen).map((k) => {
             const kArt = kontaktArt(k.art);
             const anzahlP = projekteJeKunde.get(k.id)?.length ?? 0;
             const m = merkmale(anlagenJeKunde.get(k.id) ?? []);
@@ -220,6 +227,14 @@ export default function KundenSeite() {
               </li>
             );
           })}
+          {treffer.length > zeilen && (
+            <li>
+              <button type="button" onClick={() => setZeilen((n) => n + 4 * ZEILEN_SCHRITT)}
+                className="flex min-h-12 w-full items-center justify-center px-4 text-sm font-medium text-primary hover:bg-muted/50">
+                Weitere {zahl(Math.min(4 * ZEILEN_SCHRITT, treffer.length - zeilen))} von {zahl(treffer.length - zeilen)} anzeigen
+              </button>
+            </li>
+          )}
         </ul>
       )}
     </div>

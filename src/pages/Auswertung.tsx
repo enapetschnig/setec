@@ -11,7 +11,7 @@ import { Avatar, Karte, Kennzahl, Leer, ProjektStatusBadge } from "@/components/
 import { useIstPc } from "@/components/AppLayout";
 import { useProjekte, useProjektZahlen } from "@/hooks/useDaten";
 import { useSitzung } from "@/hooks/useSitzung";
-import { alleZeilen, csvHerunterladen } from "@/lib/abfrage";
+import { alleZeilen, csvHerunterladen, inHaeppchen } from "@/lib/abfrage";
 import { abwesenheitStunden, abwesenheitsTage, lohnSumme, produktivProzent } from "@/lib/zeitkonto";
 import { ABWESENHEIT_ART, STUNDEN_ART, TON_KLASSE, type AbwesenheitArt, type StundenArt } from "@/lib/types";
 import { datum, euro, isoTag, stunden, tageDazu, uhrzeit, zahl } from "@/lib/format";
@@ -476,8 +476,10 @@ function Nachkalkulation() {
   const { data: positionen = [] } = useQuery({
     queryKey: ["belege", "auswertung-positionen", angebotIds],
     enabled: angebotIds.length > 0,
-    queryFn: () => alleZeilen((a, b) => supabase.from("beleg_positionen")
-      .select("id, beleg_id, art, menge, einheit, minuten").in("beleg_id", angebotIds).order("id").range(a, b)),
+    // viele Angebote → IDs in Häppchen (URL-Länge), je Häppchen alle Seiten
+    queryFn: () => inHaeppchen(angebotIds, (teil) => alleZeilen((a, b) => supabase.from("beleg_positionen")
+      .select("id, beleg_id, art, menge, einheit, minuten").in("beleg_id", teil).order("id").range(a, b))
+      .then((data) => ({ data, error: null }))),
   });
   const saetze = saetzeFuer(0);
 

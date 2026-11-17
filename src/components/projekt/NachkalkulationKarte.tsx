@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { alleZeilen } from "@/lib/abfrage";
 import { Karte, StatusPille } from "@/components/Bausteine";
 import { useProjektEingang } from "@/components/eingang/eingangDaten";
 import { useMitarbeiterSaetze } from "@/components/projekt/nachkalkulationDaten";
@@ -60,11 +61,9 @@ export function NachkalkulationKarte({ projekt, zeiten }: {
     queryKey: ["material", "projekt-kalkulation", projekt.id],
     enabled: istChef,
     queryFn: async () => {
-      const { data, error } = await supabase.from("material_buchungen")
+      return alleZeilen((a, b) => supabase.from("material_buchungen")
         .select("art, menge, ek_preis, regiebericht_id, artikel(ek_preis, vk_preis, listenpreis)")
-        .eq("projekt_id", projekt.id).in("art", ["ausfassung", "rueckgabe", "direkt"]);
-      if (error) throw error;
-      return data ?? [];
+        .eq("projekt_id", projekt.id).in("art", ["ausfassung", "rueckgabe", "direkt"]).order("id").range(a, b));
     },
   });
   if (!istChef || !angebot) return null;

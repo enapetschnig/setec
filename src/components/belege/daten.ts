@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { alleZeilen } from "@/lib/abfrage";
 import { belegStatus, type Beleg, type Position, type Projekt } from "@/lib/types";
 import type { KatalogLeistung } from "./editor";
 
@@ -19,11 +20,12 @@ export function useBelege(projektId?: string, aktiv = true) {
     queryKey: ["belege", "liste", projektId ?? "alle"],
     enabled: aktiv,
     queryFn: async () => {
-      let q = supabase.from("belege").select(LISTEN_FELDER);
-      if (projektId) q = q.eq("projekt_id", projektId);
-      const { data, error } = await q.order("datum", { ascending: false }).order("created_at", { ascending: false });
-      if (error) throw error;
-      return (data ?? []) as unknown as BelegListenEintrag[];
+      const data = await alleZeilen((von, bis) => {
+        let q = supabase.from("belege").select(LISTEN_FELDER);
+        if (projektId) q = q.eq("projekt_id", projektId);
+        return q.order("datum", { ascending: false }).order("created_at", { ascending: false }).order("id").range(von, bis);
+      });
+      return data as unknown as BelegListenEintrag[];
     },
   });
 }

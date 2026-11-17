@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 import type { Firma, Kunde } from "@/lib/types";
 import { datum as datumText } from "@/lib/format";
+import { alleZeilen } from "@/lib/abfrage";
 import { fehlerText } from "@/components/stamm/stammDaten";
 import { empfaengerAusKunde, kopfNeu, leerePosition, neueId, preisText } from "@/components/belege/editor";
 import { belegSpeichern } from "@/components/belege/speichern";
@@ -31,9 +32,9 @@ export function useAnlagen() {
   return useQuery({
     queryKey: ["anlagen", "liste"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("anlagen").select(ANLAGE_FELDER).order("naechste_pruefung", { nullsFirst: false }).order("bezeichnung");
-      if (error) throw error;
-      return (data ?? []) as AnlageMitKunde[];
+      const data = await alleZeilen((von, bis) => supabase.from("anlagen").select(ANLAGE_FELDER)
+        .order("naechste_pruefung", { nullsFirst: false }).order("bezeichnung").order("id").range(von, bis));
+      return data as AnlageMitKunde[];
     },
   });
 }

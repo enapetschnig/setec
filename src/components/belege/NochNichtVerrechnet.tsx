@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { CalendarCheck, ClipboardSignature, Receipt, Wrench } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { alleZeilen } from "@/lib/abfrage";
 import { Button } from "@/components/ui/button";
 import { useProjekte, useProjektZahlen } from "@/hooks/useDaten";
 import { datumKurz, stunden } from "@/lib/format";
@@ -51,9 +52,8 @@ function useErledigteEinsaetze() {
   return useQuery({
     queryKey: ["termine", "erledigt"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("termine").select("id, projekt_id").eq("status", "erledigt").not("projekt_id", "is", null);
-      if (error) throw error;
-      return data ?? [];
+      return alleZeilen((von, bis) => supabase.from("termine").select("id, projekt_id")
+        .eq("status", "erledigt").not("projekt_id", "is", null).order("id").range(von, bis));
     },
   });
 }

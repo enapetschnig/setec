@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { ChevronRight, ClipboardSignature, Lock } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { alleZeilen } from "@/lib/abfrage";
 import { Avatar, StatusPille } from "@/components/Bausteine";
 import { useMitarbeiter } from "@/hooks/useDaten";
 import { datumKurz, isoTag, stunden, uhrzeit } from "@/lib/format";
@@ -16,19 +17,18 @@ export type ZeitMitInfo = Zeit & {
 export function useZeitenListe(filter: { von?: string; bis?: string; userId?: string; projektId?: string }) {
   return useQuery({
     queryKey: ["zeiten", "liste", filter],
-    queryFn: async () => {
+    // alle Seiten — Projekt- und Monatssummen rechnen auf dieser Liste
+    queryFn: () => alleZeilen<ZeitMitInfo>((a, b) => {
       let q = supabase.from("zeiten")
         .select("*, projekte(nummer, name), profiles(vorname, nachname, farbe), regieberichte(nummer, status)")
         .order("datum", { ascending: false }).order("von", { ascending: false, nullsFirst: false })
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false }).order("id");
       if (filter.von) q = q.gte("datum", filter.von);
       if (filter.bis) q = q.lte("datum", filter.bis);
       if (filter.userId) q = q.eq("user_id", filter.userId);
       if (filter.projektId) q = q.eq("projekt_id", filter.projektId);
-      const { data, error } = await q.limit(1000);
-      if (error) throw error;
-      return (data ?? []) as ZeitMitInfo[];
-    },
+      return q.range(a, b);
+    }),
   });
 }
 

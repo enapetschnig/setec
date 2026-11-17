@@ -1,20 +1,44 @@
-const SEITE = 1000;
+export const SEITE = 1000;
 
 /**
  * Holt alle Zeilen in Seiten zu 1000 — Supabase liefert pro Abfrage höchstens
- * 1000 Zeilen und schneidet den Rest still ab. Die Abfrage braucht eine
- * eindeutige Sortierung (z. B. nach id), sonst doppeln oder fehlen Zeilen.
+ * 1000 Zeilen und schneidet den Rest still ab (auch bei `.limit(5000)`).
+ * Die Abfrage braucht eine eindeutige Sortierung (`.order(…).order("id")`),
+ * sonst doppeln oder fehlen Zeilen an den Seitengrenzen.
+ *
+ *   alleZeilen((von, bis) => supabase.from("kunden").select("*").order("name").order("id").range(von, bis))
  */
 export async function alleZeilen<T>(
   abfrage: (von: number, bis: number) => PromiseLike<{ data: T[] | null; error: unknown }>,
+  seite = SEITE,
 ): Promise<T[]> {
   const alle: T[] = [];
-  for (let von = 0; ; von += SEITE) {
-    const { data, error } = await abfrage(von, von + SEITE - 1);
+  for (let von = 0; ; von += seite) {
+    const { data, error } = await abfrage(von, von + seite - 1);
     if (error) throw error;
     alle.push(...(data ?? []));
-    if (!data || data.length < SEITE) return alle;
+    if (!data || data.length < seite) return alle;
   }
+}
+
+/**
+ * `.in("id", ids)` mit sehr vielen Werten sprengt die URL — in Häppchen zu
+ * `groesse` (Standard 150 UUIDs ≈ 6 KB) nacheinander abfragen und die
+ * Ergebnisse aneinanderhängen. Doppelte Werte fallen weg, leere Liste → keine Abfrage.
+ */
+export async function inHaeppchen<W, T = unknown>(
+  werte: readonly W[],
+  abfrage: (teil: W[]) => PromiseLike<{ data: T[] | null; error: unknown }>,
+  groesse = 150,
+): Promise<T[]> {
+  const eindeutig = [...new Set(werte)];
+  const alle: T[] = [];
+  for (let i = 0; i < eindeutig.length; i += groesse) {
+    const { data, error } = await abfrage(eindeutig.slice(i, i + groesse));
+    if (error) throw error;
+    alle.push(...(data ?? []));
+  }
+  return alle;
 }
 
 export type CsvZelle = string | number | null | undefined | { text: string };

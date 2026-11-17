@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { alleZeilen } from "@/lib/abfrage";
 import type { Fahrzeug, Kunde, Lagerort, Profil, Projekt, ProjektZahlen, Team } from "@/lib/types";
 
 export type ProjektMitKunde = Projekt & { kunden: Pick<Kunde, "id" | "name" | "ort" | "telefon" | "email"> | null };
@@ -11,12 +12,12 @@ export function useProjekte() {
   return useQuery({
     queryKey: ["projekte"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const data = await alleZeilen((von, bis) => supabase
         .from("projekte")
         .select(PROJEKT_FELDER)
-        .order("nummer", { ascending: false });
-      if (error) throw error;
-      return (data ?? []) as ProjektMitKunde[];
+        .order("nummer", { ascending: false }).order("id")
+        .range(von, bis));
+      return data as ProjektMitKunde[];
     },
   });
 }
@@ -38,23 +39,21 @@ export function useProjektZahlen() {
   return useQuery({
     queryKey: ["projekt_zahlen"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("projekt_zahlen").select("*");
-      if (error) throw error;
+      const data = await alleZeilen((von, bis) =>
+        supabase.from("projekt_zahlen").select("*").order("projekt_id").range(von, bis));
       const nachId: Record<string, ProjektZahlen> = {};
-      (data ?? []).forEach((z) => { if (z.projekt_id) nachId[z.projekt_id] = z; });
+      data.forEach((z) => { if (z.projekt_id) nachId[z.projekt_id] = z; });
       return nachId;
     },
   });
 }
 
+/** Alle Kontakte (Kunden, Lieferanten, Partner) — in Seiten, sonst fehlen ab 1000 die letzten still. */
 export function useKunden() {
   return useQuery({
     queryKey: ["kunden"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("kunden").select("*").order("name");
-      if (error) throw error;
-      return (data ?? []) as Kunde[];
-    },
+    queryFn: () => alleZeilen<Kunde>((von, bis) =>
+      supabase.from("kunden").select("*").order("name").order("id").range(von, bis)),
   });
 }
 

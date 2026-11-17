@@ -220,14 +220,13 @@ export function useProjektBuchungen(projektId: string | null | undefined) {
     queryKey: ["material", "buchungen", projektId],
     enabled: !!projektId,
     queryFn: async () => {
-      const { data, error } = await supabase.from("material_buchungen")
+      const data = await alleZeilen((a, b) => supabase.from("material_buchungen")
         .select(BUCHUNG_MIT_BEZUG)
         .eq("projekt_id", projektId!)
         .is("regiebericht_id", null)
         .in("art", ["ausfassung", "rueckgabe", "direkt"])
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return (data ?? []) as unknown as BuchungMitBezug[];
+        .order("created_at", { ascending: false }).order("id").range(a, b));
+      return data as unknown as BuchungMitBezug[];
     },
   });
 }

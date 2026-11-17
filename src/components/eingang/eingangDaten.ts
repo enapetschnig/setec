@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { dezimalLesen } from "@/lib/format";
+import { alleZeilen, inHaeppchen } from "@/lib/abfrage";
 import { bildVerkleinern, sichererDateiname } from "@/lib/upload";
 import type { EingangAnteil, EingangPosition, Eingangsrechnung, Lieferschein } from "@/lib/types";
 import type { AnteilEntwurf, PositionEntwurf } from "./eingangLogik";
@@ -24,10 +25,9 @@ export function useEingangsrechnungen(aktiv = true) {
     queryKey: ["eingang", "liste"],
     enabled: aktiv,
     queryFn: async () => {
-      const { data, error } = await supabase.from("eingangsrechnungen").select(FELDER)
-        .order("datum", { ascending: false }).order("created_at", { ascending: false });
-      if (error) throw error;
-      return (data ?? []) as unknown as EingangMitAnteilen[];
+      const data = await alleZeilen((von, bis) => supabase.from("eingangsrechnungen").select(FELDER)
+        .order("datum", { ascending: false }).order("created_at", { ascending: false }).order("id").range(von, bis));
+      return data as unknown as EingangMitAnteilen[];
     },
   });
 }
@@ -41,11 +41,10 @@ export function useLastschriftJeLieferant(aktiv = true) {
     queryKey: ["eingang", "lastschrift"],
     enabled: aktiv,
     queryFn: async () => {
-      const { data, error } = await supabase.from("eingangsrechnungen").select("lieferant, lastschrift, lastschrift_tag")
-        .order("datum", { ascending: false }).order("created_at", { ascending: false });
-      if (error) throw error;
+      const data = await alleZeilen((von, bis) => supabase.from("eingangsrechnungen").select("lieferant, lastschrift, lastschrift_tag")
+        .order("datum", { ascending: false }).order("created_at", { ascending: false }).order("id").range(von, bis));
       const je = new Map<string, { lastschrift: boolean; tag: number | null }>();
-      (data ?? []).forEach((r) => {
+      data.forEach((r) => {
         const s = lieferantSchluessel(r.lieferant);
         if (s && !je.has(s)) je.set(s, { lastschrift: !!r.lastschrift, tag: r.lastschrift_tag ?? null });
       });
@@ -60,13 +59,12 @@ export function useLastschriftJeLieferant(aktiv = true) {
  */
 export async function lastschriftUebertragen(lieferant: string, lastschrift: boolean, tag: number | null, ausser: string): Promise<number> {
   const schluessel = lieferantSchluessel(lieferant);
-  const { data, error } = await supabase.from("eingangsrechnungen").select("id, lieferant, lastschrift, lastschrift_tag").is("bezahlt_am", null);
-  if (error) throw error;
-  const ids = (data ?? []).filter((r) => r.id !== ausser && lieferantSchluessel(r.lieferant) === schluessel
+  const data = await alleZeilen((von, bis) => supabase.from("eingangsrechnungen")
+    .select("id, lieferant, lastschrift, lastschrift_tag").is("bezahlt_am", null).order("id").range(von, bis));
+  const ids = data.filter((r) => r.id !== ausser && lieferantSchluessel(r.lieferant) === schluessel
     && (r.lastschrift !== lastschrift || (r.lastschrift_tag ?? null) !== tag)).map((r) => r.id);
   if (!ids.length) return 0;
-  const { error: e } = await supabase.from("eingangsrechnungen").update({ lastschrift, lastschrift_tag: tag }).in("id", ids);
-  if (e) throw e;
+  await inHaeppchen(ids, (teil) => supabase.from("eingangsrechnungen").update({ lastschrift, lastschrift_tag: tag }).in("id", teil).select("id"));
   return ids.length;
 }
 
@@ -204,8 +202,7 @@ export async function freigabeSetzen(id: string, freigabe: "offen" | "freigegebe
 
 /** Mehrere freigegebene als überwiesen markieren */
 export async function ueberwiesen(ids: string[], am: string) {
-  const { error } = await supabase.from("eingangsrechnungen").update({ bezahlt_am: am }).in("id", ids).eq("freigabe", "freigegeben");
-  if (error) throw error;
+  await inHaeppchen(ids, (teil) => supabase.from("eingangsrechnungen").update({ bezahlt_am: am }).in("id", teil).eq("freigabe", "freigegeben").select("id"));
 }
 
 // ── Lieferscheine ────────────────────────────────────────────────────────

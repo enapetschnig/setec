@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { alleZeilen } from "@/lib/abfrage";
 import { isoTag, stundenAusVonBis } from "@/lib/format";
 import { materialText, regieberichtLaden, type RegieMaterial, type RegieVoll } from "@/lib/regiePdf";
 import type { Profil, Regiebericht, Zeit } from "@/lib/types";
@@ -33,11 +34,12 @@ export function useRegieberichte(projektId?: string) {
   return useQuery({
     queryKey: projektId ? ["regieberichte", "projekt", projektId] : ["regieberichte", "liste"],
     queryFn: async () => {
-      let q = supabase.from("regieberichte").select(LISTEN_FELDER);
-      if (projektId) q = q.eq("projekt_id", projektId);
-      const { data, error } = await q.order("datum", { ascending: false }).order("nummer", { ascending: false });
-      if (error) throw error;
-      return (data ?? []) as unknown as RegieListenEintrag[];
+      const data = await alleZeilen((von, bis) => {
+        let q = supabase.from("regieberichte").select(LISTEN_FELDER);
+        if (projektId) q = q.eq("projekt_id", projektId);
+        return q.order("datum", { ascending: false }).order("nummer", { ascending: false }).order("id").range(von, bis);
+      });
+      return data as unknown as RegieListenEintrag[];
     },
   });
 }

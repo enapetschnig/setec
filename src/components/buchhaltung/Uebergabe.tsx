@@ -12,7 +12,7 @@ import { Switch } from "@/components/ui/switch";
 import { useNeuLaden } from "@/hooks/useDaten";
 import { useSitzung } from "@/hooks/useSitzung";
 import { supabase } from "@/integrations/supabase/client";
-import { alsText, csvFeld, type CsvZelle } from "@/lib/abfrage";
+import { alleZeilen, alsText, csvFeld, type CsvZelle } from "@/lib/abfrage";
 import { archivLaden } from "@/lib/belegArchiv";
 import {
   aufwandKonto, buchungenText, debitorKonto, eingangNummer, erloesKonto, KONTEN_TEXT, kontrolle, personenkontenText, summen, windows1252,
@@ -52,17 +52,19 @@ export function Uebergabe({ zeitraum }: { zeitraum: Zeitraum }) {
     queryKey: ["buchhaltung", "monat", von],
     enabled: !!firma,
     queryFn: async () => {
-      const [b, e, u, d, alt] = await Promise.all([
-        supabase.from("belege").select("id, nummer, datum, faellig_am, status, netto, ust, brutto, ust_satz, reverse_charge, empf_name, empf_uid, teil_nr, storno_von, kategorie_id, kunden(nummer, name, strasse, plz, ort, uid)")
-          .eq("typ", "rechnung").eq("altbestand", false).neq("status", "entwurf").gte("datum", von).lte("datum", bis).order("datum").order("nummer"),
-        supabase.from("eingangsrechnungen").select("id, lieferant, nummer, datum, faellig_am, netto, ust, brutto, ust_satz, reverse_charge, kategorie, kategorie_id, datei_pfad, bezahlt_am, bar_bezahlt, lastschrift")
-          .gte("datum", von).lte("datum", bis).order("datum").order("lieferant"),
-        supabase.from("fibu_uebergabe_belege").select("beleg_id, eingang_id"),
+      // alles in Seiten zu 1000 — übergebene Belege werden mit jedem Monat mehr
+      const [bZeilen, eZeilen, uZeilen, d, alt] = await Promise.all([
+        alleZeilen((a, z) => supabase.from("belege").select("id, nummer, datum, faellig_am, status, netto, ust, brutto, ust_satz, reverse_charge, empf_name, empf_uid, teil_nr, storno_von, kategorie_id, kunden(nummer, name, strasse, plz, ort, uid)")
+          .eq("typ", "rechnung").eq("altbestand", false).neq("status", "entwurf").gte("datum", von).lte("datum", bis).order("datum").order("nummer").order("id").range(a, z)),
+        alleZeilen((a, z) => supabase.from("eingangsrechnungen").select("id, lieferant, nummer, datum, faellig_am, netto, ust, brutto, ust_satz, reverse_charge, kategorie, kategorie_id, datei_pfad, bezahlt_am, bar_bezahlt, lastschrift")
+          .gte("datum", von).lte("datum", bis).order("datum").order("lieferant").order("id").range(a, z)),
+        alleZeilen((a, z) => supabase.from("fibu_uebergabe_belege").select("beleg_id, eingang_id").order("beleg_id").order("eingang_id").range(a, z)),
         supabase.from("belege").select("id", { count: "exact", head: true }).eq("typ", "rechnung").eq("status", "entwurf").gte("datum", von).lte("datum", bis),
         supabase.from("belege").select("id", { count: "exact", head: true }).eq("altbestand", true).gte("datum", von).lte("datum", bis),
       ]);
-      const fehler = b.error ?? e.error ?? u.error ?? d.error ?? alt.error;
+      const fehler = d.error ?? alt.error;
       if (fehler) throw fehler;
+      const b = { data: bZeilen }, e = { data: eZeilen }, u = { data: uZeilen };
       // Liegt das Original schon im Archiv? Besser jetzt wissen als im ZIP vermissen
       const imArchiv = await Promise.all((b.data ?? []).map(async (x) => {
         const { data: f } = await supabase.storage.from("beleg-archiv").list("", { search: x.id, limit: 1 });

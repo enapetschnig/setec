@@ -12,18 +12,16 @@ import { Feld, leerNull, useBeimOeffnen, Zusatz } from "@/components/stamm/Felde
 import { fehlerText } from "@/components/stamm/stammDaten";
 import { useNeuLaden } from "@/hooks/useDaten";
 import { cn } from "@/lib/utils";
+import { alleZeilen } from "@/lib/abfrage";
 
 export type KontaktPerson = Tables<"kontakt_personen">;
 
-/** Ansprechpersonen aller Kontakte — wenige Zeilen, einmal laden (Liste, Suche, Kontakt) */
+/** Ansprechpersonen aller Kontakte — einmal laden (Liste, Suche, Kontakt), in Seiten zu 1000 */
 export function useKontaktPersonen() {
   return useQuery({
     queryKey: ["kunden", "personen"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("kontakt_personen").select("*").order("name").limit(5000);
-      if (error) throw error;
-      return (data ?? []) as KontaktPerson[];
-    },
+    queryFn: () => alleZeilen<KontaktPerson>((von, bis) =>
+      supabase.from("kontakt_personen").select("*").order("name").order("id").range(von, bis)),
   });
 }
 

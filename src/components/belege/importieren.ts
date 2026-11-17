@@ -9,6 +9,11 @@ import {
   type EditorPosition, type Quelle,
 } from "./editor";
 import { abzugPosition } from "./teilrechnung";
+import { alleZeilen } from "@/lib/abfrage";
+
+/** Alle Seiten, im Ergebnis-Format von supabase-js ({ data, error }) */
+const seiten = <T,>(abfrage: (von: number, bis: number) => PromiseLike<{ data: T[] | null; error: unknown }>) =>
+  alleZeilen(abfrage).then((data) => ({ data, error: null as { message: string } | null }));
 
 /**
  * „Rechnung aus dem Projekt“: alles, was am Projekt noch nicht verrechnet
@@ -147,12 +152,13 @@ export async function importDatenLaden(projektId: string, belegId: string | null
 
   const [rb, zt, mt, an, ea, tr, ms] = await Promise.all([
     supabase.from("regieberichte").select("id, nummer, datum, arbeiten, status, rechnung_id").eq("projekt_id", projektId).order("datum"),
-    supabase.from("zeiten")
+    // Stunden und Material in Seiten — ein großes Projekt hat leicht über 1000 Buchungen
+    seiten((a, b) => supabase.from("zeiten")
       .select("id, datum, stunden, taetigkeit, user_id, regiebericht_id, art, profiles(vorname, nachname, lohnart)")
-      .eq("projekt_id", projektId).or(frei).order("datum").order("created_at"),
-    supabase.from("material_buchungen")
+      .eq("projekt_id", projektId).or(frei).order("datum").order("created_at").order("id").range(a, b)),
+    seiten((a, b) => supabase.from("material_buchungen")
       .select("id, art, menge, ek_preis, einheit, bezeichnung, artikel_id, regiebericht_id, created_at, artikel(bezeichnung, einheit, vk_preis, aufschlag, ek_preis, listenpreis)")
-      .eq("projekt_id", projektId).in("art", ["ausfassung", "rueckgabe", "direkt"]).or(frei).order("created_at"),
+      .eq("projekt_id", projektId).in("art", ["ausfassung", "rueckgabe", "direkt"]).or(frei).order("created_at").order("id").range(a, b)),
     supabase.from("belege").select("id, nummer, betreff, status, netto").eq("projekt_id", projektId).eq("typ", "angebot")
       .in("status", ["offen", "angenommen"]).order("datum"),
     supabase.from("eingang_anteile")
@@ -265,12 +271,12 @@ export async function regieImportLaden(
 
   const frei = belegId ? `rechnung_id.is.null,rechnung_id.eq.${belegId}` : "rechnung_id.is.null";
   const [zt, mt, ms] = await Promise.all([
-    supabase.from("zeiten")
+    seiten((a, b) => supabase.from("zeiten")
       .select("id, datum, stunden, taetigkeit, user_id, regiebericht_id, art, profiles(vorname, nachname, lohnart)")
-      .in("regiebericht_id", ids).or(frei).order("datum").order("created_at"),
-    supabase.from("material_buchungen")
+      .in("regiebericht_id", ids).or(frei).order("datum").order("created_at").order("id").range(a, b)),
+    seiten((a, b) => supabase.from("material_buchungen")
       .select("id, art, menge, ek_preis, einheit, bezeichnung, artikel_id, regiebericht_id, created_at, artikel(bezeichnung, einheit, vk_preis, aufschlag, ek_preis, listenpreis)")
-      .in("regiebericht_id", ids).in("art", ["ausfassung", "rueckgabe", "direkt"]).or(frei).order("created_at"),
+      .in("regiebericht_id", ids).in("art", ["ausfassung", "rueckgabe", "direkt"]).or(frei).order("created_at").order("id").range(a, b)),
     supabase.from("mitarbeiter_saetze").select("user_id, gueltig_ab, lohnkosten, verrechnungssatz").not("verrechnungssatz", "is", null),
   ]);
   for (const r of [zt, mt, ms]) if (r.error) throw new Error(r.error.message);
