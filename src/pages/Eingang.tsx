@@ -65,11 +65,6 @@ export default function Eingang() {
   const pc = useIstPc();
   const heute = isoTag();
   const [params, setParams] = useSearchParams();
-  const f = params.get("filter");
-  const filter: Filter = FILTER.some((x) => x.wert === f) ? f as Filter : f === "unbezahlt" ? "freigegeben" : f === "ueberwiesen" ? "bezahlt" : "pruefen";
-  /** Unter „Bezahlt“: nach Zahlweg (überwiesen, Lastschrift, bar) */
-  const w = params.get("weg");
-  const weg: Zahlweg | null = filter === "bezahlt" && ZAHLWEGE.some((x) => x.wert === w) ? w as Zahlweg : null;
   const { firma } = useSitzung();
   const neuLaden = useNeuLaden();
   /** Zu überweisen: abgewählte bleiben stehen */
@@ -78,6 +73,13 @@ export default function Eingang() {
   const [suche, setSuche] = useState("");
   const [offen, setOffen] = useState<EingangMitAnteilen | "neu" | null>(null);
   const { data: alle = [], isLoading, error, refetch } = useEingangsrechnungen();
+  const f = params.get("filter");
+  // ohne Wahl „Zu prüfen“ — ist dort nichts, gleich die Rechnungen des Jahres statt einer leeren Liste
+  const filter: Filter = FILTER.some((x) => x.wert === f) ? f as Filter : f === "unbezahlt" ? "freigegeben" : f === "ueberwiesen" ? "bezahlt"
+    : isLoading || alle.some((r) => passt(r, "pruefen")) ? "pruefen" : "alle";
+  /** Unter „Bezahlt“: nach Zahlweg (überwiesen, Lastschrift, bar) */
+  const w = params.get("weg");
+  const weg: Zahlweg | null = filter === "bezahlt" && ZAHLWEGE.some((x) => x.wert === w) ? w as Zahlweg : null;
   const { data: odoo } = useOdooZeilen("eingangsrechnungen");
   const [jahr, setJahr] = useJahrWahl("eingang");
   const jahre = useMemo(() => jahreAus(alle.map((r) => r.datum), new Date().getFullYear()), [alle]);
@@ -213,32 +215,42 @@ export default function Eingang() {
     >
       <div className="space-y-3">
         <JahrWahl jahre={jahre} jahr={jahr} onWahl={setJahr} ueberAlle={ueberAlle} />
-        <div className="flex flex-wrap gap-2">
-          {FILTER.map((x) => (
-            <button
-              key={x.wert}
-              type="button"
-              onClick={() => filterSetzen(x.wert)}
-              className={cn(
-                "inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium transition-colors",
-                filter === x.wert ? "border-primary bg-primary-soft text-primary" : "bg-card hover:bg-muted",
-              )}
-            >
-              {x.text}
-              <span className={cn("zahl text-xs", filter === x.wert ? "text-primary" : "text-muted-foreground")}>{anzahl[x.wert] ?? 0}</span>
-            </button>
-          ))}
+        {/* eine Zeile zum Wischen wie bei Rechnungen; leere Filter nur, wenn gewählt */}
+        <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 lg:pb-0" role="group" aria-label="Status">
+          {FILTER.map((x) => {
+            const k = anzahl[x.wert] ?? 0;
+            if (k === 0 && x.wert !== "alle" && x.wert !== filter) return null;
+            return (
+              <button
+                key={x.wert}
+                type="button"
+                onClick={() => filterSetzen(x.wert)}
+                aria-pressed={filter === x.wert}
+                className={cn(
+                  "inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium transition-colors",
+                  filter === x.wert ? "border-primary bg-primary-soft text-primary" : "bg-card text-muted-foreground hover:bg-muted",
+                )}
+              >
+                {x.text}
+                <span className="zahl text-xs opacity-70">{k}</span>
+              </button>
+            );
+          })}
         </div>
         {filter === "bezahlt" && (
-          <div className="flex flex-wrap gap-1.5" role="group" aria-label="Wie bezahlt">
-            {[{ wert: null, text: "Alle" }, ...ZAHLWEGE].map((x) => (
-              <button key={x.wert ?? "alle"} type="button" onClick={() => wegSetzen(x.wert as Zahlweg | null)}
-                className={cn("inline-flex min-h-11 items-center gap-1.5 rounded-md border px-3 text-sm transition-colors",
-                  weg === x.wert ? "border-primary bg-primary-soft font-medium text-primary" : "bg-card hover:bg-muted")}>
-                {x.text}
-                <span className="zahl text-xs text-muted-foreground">{x.wert ? bezahlte.filter((r) => zahlweg(r) === x.wert).length : bezahlte.length}</span>
-              </button>
-            ))}
+          <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 lg:pb-0" role="group" aria-label="Wie bezahlt">
+            {[{ wert: null, text: "Alle" }, ...ZAHLWEGE].map((x) => {
+              const k = x.wert ? bezahlte.filter((r) => zahlweg(r) === x.wert).length : bezahlte.length;
+              if (k === 0 && x.wert !== null && weg !== x.wert) return null;
+              return (
+                <button key={x.wert ?? "alle"} type="button" onClick={() => wegSetzen(x.wert as Zahlweg | null)} aria-pressed={weg === x.wert}
+                  className={cn("inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md border px-3 text-sm transition-colors",
+                    weg === x.wert ? "border-primary bg-primary-soft font-medium text-primary" : "bg-card text-muted-foreground hover:bg-muted")}>
+                  {x.text}
+                  <span className="zahl text-xs opacity-70">{k}</span>
+                </button>
+              );
+            })}
           </div>
         )}
         <div className="relative lg:max-w-md">
