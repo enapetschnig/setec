@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useSearchParams } from "react-router-dom";
-import { Check, ChevronRight, Download, Inbox, Loader2, Paperclip, Plus, Search, X } from "lucide-react";
+import { Check, ChevronRight, Download, Inbox, Loader2, MailOpen, Paperclip, Plus, Search, X } from "lucide-react";
+import { bilanzText, postfachAbrufen, usePostfaecher } from "@/lib/postfach";
 import { Seite } from "@/components/PageHeader";
 import { Leer, StatusPille } from "@/components/Bausteine";
 import { Button } from "@/components/ui/button";
@@ -70,6 +71,24 @@ export default function Eingang() {
   const { data: kategorien = [] } = useKategorien();
   const katName = (r: EingangMitAnteilen) => kategorien.find((k) => k.id === r.kategorie_id)?.name ?? kategorieText(r.kategorie);
   const { data: kontakte = [] } = useKunden();
+  // Postfach (Einstellungen → E-Mail): Rechnungen aus Mails holen — sonst alle 15 Minuten von selbst
+  const { data: postfaecher = [] } = usePostfaecher();
+  const einlesen = postfaecher.filter((p) => p.aktiv && p.rechnungen_einlesen);
+  const [ruftAb, setRuftAb] = useState(false);
+  const abrufen = async () => {
+    setRuftAb(true);
+    try {
+      const b = await postfachAbrufen();
+      await neuLaden("eingang", "postfaecher");
+      const text = bilanzText(b);
+      if (b.meldungen.length) toast.warning(text, { description: b.meldungen.join(" · "), duration: 15_000 });
+      else toast.success(text, { duration: 8_000 });
+    } catch (e) {
+      toast.error("Postfach nicht abgerufen", { description: (e as Error).message });
+    } finally {
+      setRuftAb(false);
+    }
+  };
 
   // ?offen=<id> aus dem Lieferanten-Kontakt: diese Rechnung gleich öffnen
   const offenParam = params.get("offen");
@@ -163,9 +182,18 @@ export default function Eingang() {
       untertitel={isLoading ? undefined : `${alle.length} ${alle.length === 1 ? "Rechnung" : "Rechnungen"}`}
       breit
       aktionen={
-        <Button className="h-11 gap-1.5 px-3 sm:px-4" onClick={() => setOffen("neu")}>
-          <Plus className="h-4 w-4" />{pc ? "Rechnung erfassen" : "Neu"}
-        </Button>
+        <div className="flex gap-2">
+          {einlesen.length > 0 && (
+            <Button variant="outline" className="h-11 gap-1.5 px-3 sm:px-4" disabled={ruftAb} onClick={() => void abrufen()}
+              title={`Rechnungen aus ${einlesen.map((p) => p.adresse).join(", ")} holen (passiert auch alle 15 Minuten von selbst)`}>
+              {ruftAb ? <Loader2 className="h-4 w-4 animate-spin" /> : <MailOpen className="h-4 w-4" />}{pc ? (ruftAb ? "Liest Mails …" : "Postfach abrufen") : ""}
+              {!pc && <span className="sr-only">Postfach abrufen</span>}
+            </Button>
+          )}
+          <Button className="h-11 gap-1.5 px-3 sm:px-4" onClick={() => setOffen("neu")}>
+            <Plus className="h-4 w-4" />{pc ? "Rechnung erfassen" : "Neu"}
+          </Button>
+        </div>
       }
     >
       <div className="space-y-3">
@@ -249,6 +277,7 @@ export default function Eingang() {
                         {z !== "zugeordnet" && <StatusPille eintrag={EINGANG_STATUS[z]} />}
                         {zahl === "ueberfaellig" && schritt !== "abgelehnt" && <StatusPille eintrag={EINGANG_STATUS.ueberfaellig} />}
                         {ueberweisen && !ibanPruefen(r.iban) && <StatusPille eintrag={{ ton: "gelb", text: "IBAN fehlt" }} />}
+                        {r.postfach_mail_id && <StatusPille eintrag={{ ton: "blau", text: "aus E-Mail" }} />}
                       </div>
                       <p className="flex items-center gap-1 truncate text-xs text-muted-foreground">
                         {r.datei_pfad && <Paperclip className="h-3 w-3 shrink-0" aria-label="mit Beleg" />}

@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { mailAdresse } from "./bestaetigung";
 import type { Datenblatt } from "./datenblattLogik";
 import { blobBase64, empfaengerLesen, type MailArt, type MailVorgabe } from "./mail";
+import { standardAbsender, usePostfaecher } from "@/lib/postfach";
 
 /**
  * Angebot oder Rechnung per E-Mail an den Kunden — mit dem PDF als Anhang
@@ -19,6 +20,8 @@ import { blobBase64, empfaengerLesen, type MailArt, type MailVorgabe } from "./m
  * hängt die Function das abgelegte Original an, beim Angebot das PDF wie beim
  * Herunterladen plus die gewählten Datenblätter. „Mail-App öffnen“ (mailto:)
  * bleibt als Ausweichweg — dort ohne Anhang.
+ * Mit Postfach (Einstellungen → E-Mail, „Senden“ an) geht die Mail über Gmail
+ * von dieser Adresse; mehrere → Auswahl „Senden von“ (Vorgabe: Standard-Absender).
  */
 export function BelegMailDialog({
   open, onOpenChange, belegId, lieferscheinId, art, vorgabe, anhangName, vorbereiten, datenblaetter = [], startGewaehlt,
@@ -43,6 +46,10 @@ export function BelegMailDialog({
   const [text, setText] = useState(vorgabe.text);
   const [gewaehlt, setGewaehlt] = useState<Set<string>>(new Set(startGewaehlt ?? datenblaetter.map((d) => d.pfad)));
   const [sendet, setSendet] = useState(false);
+  const { data: postfaecher = [] } = usePostfaecher(open);
+  const absender = postfaecher.filter((p) => p.aktiv && p.senden).map((p) => p.adresse).sort();
+  const [von, setVon] = useState<string | null>(null);
+  const vonGilt = von && absender.includes(von) ? von : standardAbsender(postfaecher);
 
   // Beim Öffnen frisch vorbelegen (Link, Anzahl Datenblätter können sich geändert haben)
   useEffect(() => {
@@ -51,6 +58,7 @@ export function BelegMailDialog({
     setBetreff(vorgabe.betreff);
     setText(vorgabe.text);
     setGewaehlt(new Set(startGewaehlt ?? datenblaetter.map((d) => d.pfad)));
+    setVon(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -68,6 +76,7 @@ export function BelegMailDialog({
           ...(lieferscheinId ? { kunden_lieferschein_id: lieferscheinId } : { beleg_id: belegId }), an: empfaenger.join(", "), betreff: betreff.trim(), text: text.trim(), pdf_name: anhangName,
           ...(pdf ? { pdf: await blobBase64(pdf) } : {}),
           datenblaetter: datenblaetter.filter((d) => gewaehlt.has(d.pfad)).map((d) => d.pfad),
+          ...(vonGilt ? { von: vonGilt } : {}),
         },
       });
       if (error) {
@@ -94,7 +103,7 @@ export function BelegMailDialog({
       open={open}
       onOpenChange={onOpenChange}
       titel={`${art} per E-Mail`}
-      beschreibung="Mit PDF im Anhang — Antworten des Kunden kommen an die Firmen-Mail."
+      beschreibung={vonGilt ? `Mit PDF im Anhang — von ${vonGilt}, liegt danach in Gmail unter „Gesendet“.` : "Mit PDF im Anhang — Antworten des Kunden kommen an die Firmen-Mail."}
       gesperrt={sendet}
       ungespeichert={geaendert && !sendet}
       fuss={
@@ -109,6 +118,14 @@ export function BelegMailDialog({
       }
     >
       <div className="max-w-2xl space-y-4">
+        {absender.length > 1 && (
+          <div className="space-y-1.5">
+            <Label htmlFor="mail-von">Senden von</Label>
+            <select id="mail-von" className="h-11 w-full rounded-md border bg-card px-3 text-base sm:text-sm" value={vonGilt ?? ""} onChange={(e) => setVon(e.target.value)}>
+              {absender.map((a) => <option key={a} value={a}>{a}</option>)}
+            </select>
+          </div>
+        )}
         <div className="space-y-1.5">
           <Label htmlFor="mail-an">An</Label>
           <Input id="mail-an" type="email" inputMode="email" autoComplete="email" className="h-11" value={an} multiple

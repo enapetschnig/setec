@@ -1434,6 +1434,7 @@ export type Database = {
           lastschrift_tag: number | null
           netto: number
           notiz: string | null
+          postfach_mail_id: string | null
           nummer: string | null
           reverse_charge: boolean
           skonto_bis: string | null
@@ -1468,6 +1469,7 @@ export type Database = {
           lastschrift_tag?: number | null
           netto?: number
           notiz?: string | null
+          postfach_mail_id?: string | null
           nummer?: string | null
           reverse_charge?: boolean
           skonto_bis?: string | null
@@ -1502,6 +1504,7 @@ export type Database = {
           lastschrift_tag?: number | null
           netto?: number
           notiz?: string | null
+          postfach_mail_id?: string | null
           nummer?: string | null
           reverse_charge?: boolean
           skonto_bis?: string | null
@@ -2803,6 +2806,96 @@ export type Database = {
           jahr?: number
           letzte?: number
           typ?: string
+        }
+        Relationships: []
+      }
+      postfaecher: {
+        Row: {
+          adresse: string
+          aktiv: boolean
+          created_at: string
+          geprueft_am: string | null
+          id: string
+          letzter_fehler: string | null
+          rechnungen_einlesen: boolean
+          senden: boolean
+          standard_absender: boolean
+          updated_at: string
+          zuletzt_abgerufen: string | null
+        }
+        Insert: {
+          adresse: string
+          aktiv?: boolean
+          created_at?: string
+          geprueft_am?: string | null
+          id?: string
+          letzter_fehler?: string | null
+          rechnungen_einlesen?: boolean
+          senden?: boolean
+          standard_absender?: boolean
+          updated_at?: string
+          zuletzt_abgerufen?: string | null
+        }
+        Update: {
+          adresse?: string
+          aktiv?: boolean
+          created_at?: string
+          geprueft_am?: string | null
+          id?: string
+          letzter_fehler?: string | null
+          rechnungen_einlesen?: boolean
+          senden?: boolean
+          standard_absender?: boolean
+          updated_at?: string
+          zuletzt_abgerufen?: string | null
+        }
+        Relationships: []
+      }
+      postfach_mails: {
+        Row: {
+          betreff: string | null
+          created_at: string
+          datum: string | null
+          eingangsrechnung_id: string | null
+          ergebnis: string
+          fehler: string | null
+          id: string
+          message_id: string
+          postfach: string
+          postfach_id: string | null
+          updated_at: string
+          versuche: number
+          von: string | null
+        }
+        Insert: {
+          betreff?: string | null
+          created_at?: string
+          datum?: string | null
+          eingangsrechnung_id?: string | null
+          ergebnis?: string
+          fehler?: string | null
+          id?: string
+          message_id: string
+          postfach: string
+          postfach_id?: string | null
+          updated_at?: string
+          versuche?: number
+          von?: string | null
+        }
+        Update: {
+          betreff?: string | null
+          created_at?: string
+          datum?: string | null
+          eingangsrechnung_id?: string | null
+          ergebnis?: string
+          fehler?: string | null
+          id?: string
+          message_id?: string
+          postfach?: string
+          postfach_id?: string | null
+          updated_at?: string
+          versuche?: number
+          von?: string | null
         }
         Relationships: []
       }

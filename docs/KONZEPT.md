@@ -1148,3 +1148,54 @@ Material an Kunden ohne Projekt (Theke, Sonderbestellung) samt Retour:
 (RPC `kunden_lieferschein_abschliessen`: Nummer LS-, Lagerbuchung) → Kunde
 unterschreibt → PDF/Druck/Mail (`beleg-mail`) → „Rechnung schreiben“. Details
 `.claude/rules/kunden-lieferscheine.md`.
+
+## E-Mail-Postfach (Google Workspace) (17.11.2026)
+
+Postfächer des Betriebs über die **Gmail-API** — ein Dienstkonto mit
+domänenweiter Delegierung (Supabase-Secret `GOOGLE_MAIL_DIENSTKONTO` = base64
+des JSON, nie im Browser). Die Freigabe macht der Admin der Firma **einmal** in
+der Google Admin-Konsole (Sicherheit → API-Steuerung → Domainweite
+Delegierung: Client-ID `110267341647112633213`, Bereiche
+`gmail.modify,gmail.send`); weitere Adressen derselben Domain brauchen keine
+neue Freigabe. Migration `20261117140000_postfach.sql`.
+
+- **Einstellungen → E-Mail** (nur Chef, `components/postfach/Postfach.tsx`):
+  Liste `postfaecher` (Adresse, „Rechnungen einlesen“, „Senden“, höchstens ein
+  „Standard-Absender“, RLS nur Chef). „Verbindung testen“ ruft
+  `postfach-abruf {aktion:"testen"}`: Token + 3 neueste Betreffzeilen; Fehler
+  verständlich (`fehlerDeuten`: unauthorized_client → Freigabe fehlt, mit den
+  3 Schritten, Client-ID und Bereichen zum Kopieren; invalid_grant → Adresse
+  prüfen; Gmail API aus). Startseite (Chef): Karte „E-Mail verbinden“, solange
+  kein Postfach erfolgreich getestet ist („Später“ = 3 Tage, localStorage).
+- **Senden** (`beleg-mail`): gibt es ein aktives Postfach mit „Senden“, geht die
+  Mail über Gmail (`messages/send`, Upload als message/rfc822, bis 24 MB
+  Anhang) von `von` aus dem Mail-Dialog (Auswahl „Senden von“ bei mehreren),
+  sonst Standard-Absender, sonst das einzige — liegt danach in Gmail unter
+  „Gesendet“. Fehler → Meldung, **kein** stiller Rückfall auf Resend. Ohne
+  Postfach wie bisher Resend (noreply@handwerkapp.at, Antwort an Firmen-Mail).
+  MIME in `_shared/mime.ts` (multipart/mixed + alternative, Betreff und
+  Dateinamen RFC 2047/2231, vitest `src/lib/postfach.test.ts`).
+- **Einlesen** (`postfach-abruf {aktion:"abrufen"}`, Kern `_shared/abruf.ts`):
+  je Postfach mit „Rechnungen einlesen“ Mails `has:attachment newer_than:14d
+  -in:sent …` (gelesen oder nicht — die Tabelle merkt, was schon dran war).
+  Je Mail zuerst eine Zeile in `postfach_mails` (unique Postfach + Message-ID,
+  `in_arbeit`) → Knopf und Cron nie doppelt; Fehler bis 3 Versuche. PDF- und
+  Bild-Anhänge (keine Logos < 30 KB, höchstens 4 je Mail, 6 KI-Lesungen je
+  Lauf) liest Claude (`_shared/beleg.ts`, dieselbe Logik wie `ki` →
+  beleg_lesen, Modus „email“: nur Rechnungen AN den Betrieb, eigene Rechnungen
+  zählen nicht). Rechnung → Eingangsrechnung „zu prüfen“ mit Datei im Bucket
+  `eingangsrechnungen`, Positionen, Lieferant zugeordnet (`lieferantZuordnen`:
+  Kontakt-Name/Schreibweisen, ohne Rechtsform, Absender-Domain, bisherige
+  Schreibweise), Lastschrift/IBAN wie zuletzt beim Händler,
+  `postfach_mail_id` (Pille „aus E-Mail“ auf `/eingang`). Gleicher Lieferant +
+  Nummer → „doppelt“, nicht neu. Gmail: Label „App: verarbeitet“ (wird
+  angelegt), als gelesen nur bei Rechnungen, nichts gelöscht/verschoben.
+- **Auslösen**: Knopf „Postfach abrufen“ auf `/eingang` (wenn ein Postfach
+  einliest) und **pg_cron** alle 15 Minuten (`postfach_abruf_anstossen()` →
+  pg_net mit Kopf `x-postfach-secret`; Adresse und Geheimnis in
+  `postfach_verbindung`, nur per SQL eingetragen, nicht im Repo). Die Function
+  prüft sonst JWT + Chef (`verify_jwt = false` in `config.toml`).
+- **Tests**: `node tests/postfach-echttest.mjs <dienstkonto.json> <postfach> [an]`
+  (Token, Lesen, Testmail — nur ePower-Postfach, ohne Datenbank);
+  `tests/postfach-abruf-test.mjs` (Abruf gegen die Docker-Testumgebung des
+  Roboters, ZZTEST-Mails, räumt sie in den Papierkorb).

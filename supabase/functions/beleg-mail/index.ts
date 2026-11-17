@@ -18,8 +18,15 @@
 // Kunden-Lieferschein (16.11.2026): statt beleg_id `kunden_lieferschein_id` —
 //   nur abgeschlossen (mit Nummer), das PDF kommt wie beim Angebot von der App;
 //   Vermerk in kunden_lieferscheine.gesendet_an/gesendet_am.
-// Secrets: RESEND_API_KEY, optional RESEND_FROM.
+// Postfach (17.11.2026): steht in `postfaecher` ein aktives Postfach mit „Senden“,
+//   geht die Mail über die Gmail-API aus diesem Postfach (liegt dann dort unter
+//   „Gesendet“): `von` aus dem Aufruf, sonst der Standard-Absender, sonst das
+//   einzige. Fehler beim Gmail-Senden → Meldung, KEIN Rückfall auf Resend.
+//   Ohne solches Postfach wie bisher über Resend.
+// Secrets: RESEND_API_KEY, optional RESEND_FROM; GOOGLE_MAIL_DIENSTKONTO fürs Postfach.
 import { createClient } from "npm:@supabase/supabase-js@2.119.0";
+import { dienstkontoLesen, Gmail } from "../_shared/gmail.ts";
+import { mailBauen } from "../_shared/mime.ts";
 
 const KOPF = {
   "Access-Control-Allow-Origin": "*",
@@ -161,44 +168,74 @@ Deno.serve(async (req) => {
       .eq("art", "gesendet").eq("wer", user.id).gte("created_at", new Date(Date.now() - 3_600_000).toISOString());
     if ((count ?? 0) >= 30) return antwort({ error: "In der letzten Stunde gingen schon 30 Mails hinaus. Bitte später wieder." }, 429);
 
+    // Absender: Postfach mit „Senden“ (Gmail) oder Resend
+    const { data: postfaecher, error: eP } = await dienst.from("postfaecher")
+      .select("adresse, standard_absender").eq("aktiv", true).eq("senden", true).order("adresse");
+    if (eP) throw eP;
+    const gewuenscht = typeof ein.von === "string" && ein.von.trim() ? ein.von.trim().toLowerCase() : null;
+    let postfach: string | null = null;
+    if (postfaecher?.length) {
+      if (gewuenscht) {
+        if (!postfaecher.some((p) => p.adresse === gewuenscht)) return antwort({ error: `Von „${gewuenscht}“ darf die App nicht senden — in Einstellungen → E-Mail „Senden“ einschalten.` }, 400);
+        postfach = gewuenscht;
+      } else {
+        postfach = (postfaecher.find((p) => p.standard_absender) ?? postfaecher[0]).adresse;
+      }
+    }
+
     if (ein.nur_pruefen === true) {
       return antwort({
-        ok: true, probe: true, from, an, reply_to: replyTo ?? null, betreff,
+        ok: true, probe: true, weg: postfach ? "gmail" : "resend", from: postfach ? `${firmenName} <${postfach}>` : from, an,
+        reply_to: postfach ? null : replyTo ?? null, betreff,
         anhaenge: anhaenge.map((a) => ({ name: a.filename, bytes: a.content.length })),
       });
     }
 
-    const schluessel = Deno.env.get("RESEND_API_KEY");
-    if (!schluessel) return antwort({ error: "Mailversand ist nicht eingerichtet (RESEND_API_KEY fehlt)." }, 503);
-    let r: Response;
-    try {
-      r = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${schluessel}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          from, to: an, ...(replyTo ? { reply_to: replyTo } : {}), subject: betreff, text, html: textZuHtml(text),
-          attachments: anhaenge.map((a) => ({ filename: a.filename, content: base64(a.content) })),
-        }),
-        signal: AbortSignal.timeout(60_000),
-      });
-    } catch (e) {
-      return antwort({ error: `Keine Antwort vom Mailversand (${(e as Error).message}) — bitte prüfen, ob die Mail ankam, bevor du erneut sendest.` }, 502);
-    }
-    const rueck = await r.text();
-    if (!r.ok) {
-      let meldung = rueck;
-      try { meldung = String(JSON.parse(rueck)?.message ?? rueck); } catch { /* Rohtext */ }
-      return antwort({ error: `Mail ging nicht hinaus: ${meldung.slice(0, 300)}` }, 502);
-    }
     let id: string | null = null;
-    try { id = JSON.parse(rueck)?.id ?? null; } catch { /* nur fürs Protokoll */ }
+    if (postfach) {
+      // Gmail nimmt höchstens 25 MB Anhang (base64 macht daraus ~34 MB)
+      if (gesamt > 24 * 1024 * 1024) return antwort({ error: "Über das Postfach gehen höchstens 24 MB Anhänge — weniger Datenblätter wählen." }, 400);
+      try {
+        const g = await Gmail.oeffnen(dienstkontoLesen(Deno.env.get("GOOGLE_MAIL_DIENSTKONTO")), postfach);
+        id = await g.senden(mailBauen({
+          von: postfach, vonName: firmenName, an, betreff, text, html: textZuHtml(text),
+          anhaenge: anhaenge.map((a) => ({ dateiname: a.filename, inhalt: a.content })),
+        }));
+      } catch (e) {
+        return antwort({ error: `Mail ging über ${postfach} nicht hinaus: ${(e as Error).message} — nichts gesendet. Einstellungen → E-Mail → „Verbindung testen“.` }, 502);
+      }
+    } else {
+      const schluessel = Deno.env.get("RESEND_API_KEY");
+      if (!schluessel) return antwort({ error: "Mailversand ist nicht eingerichtet (RESEND_API_KEY fehlt)." }, 503);
+      let r: Response;
+      try {
+        r = await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${schluessel}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            from, to: an, ...(replyTo ? { reply_to: replyTo } : {}), subject: betreff, text, html: textZuHtml(text),
+            attachments: anhaenge.map((a) => ({ filename: a.filename, content: base64(a.content) })),
+          }),
+          signal: AbortSignal.timeout(60_000),
+        });
+      } catch (e) {
+        return antwort({ error: `Keine Antwort vom Mailversand (${(e as Error).message}) — bitte prüfen, ob die Mail ankam, bevor du erneut sendest.` }, 502);
+      }
+      const rueck = await r.text();
+      if (!r.ok) {
+        let meldung = rueck;
+        try { meldung = String(JSON.parse(rueck)?.message ?? rueck); } catch { /* Rohtext */ }
+        return antwort({ error: `Mail ging nicht hinaus: ${meldung.slice(0, 300)}` }, 502);
+      }
+      try { id = JSON.parse(rueck)?.id ?? null; } catch { /* nur fürs Protokoll */ }
+    }
 
     const { error: eV } = lsId
       ? await dienst.from("kunden_lieferscheine").update({ gesendet_an: an.join(", "), gesendet_am: new Date().toISOString() }).eq("id", b.id)
       : await dienst.from("angebot_verlauf").insert({
         beleg_id: b.id, art: "gesendet", name: an.join(", "), text: betreff, wer: user.id, gelesen: true,
       });
-    return antwort({ ok: true, id, an, vermerkt: !eV });
+    return antwort({ ok: true, id, an, von: postfach, vermerkt: !eV });
   } catch (e) {
     return antwort({ error: String((e as Error).message || e) }, 400);
   }

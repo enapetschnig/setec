@@ -2,7 +2,8 @@ import { stundensaetzeLesen } from "@/lib/kalkulation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { Ban, Building2, ImagePlus, KeyRound, Loader2, LogOut, Plus, Smartphone, Trash2, User, Users } from "lucide-react";
+import { Ban, Building2, ImagePlus, KeyRound, Loader2, LogOut, Mail, Plus, Smartphone, Trash2, User, Users } from "lucide-react";
+import { PostfachEinstellungen } from "@/components/postfach/Postfach";
 import { Rueckfrage, type Frage } from "@/components/Rueckfrage";
 import { supabase } from "@/integrations/supabase/client";
 import { Seite } from "@/components/PageHeader";
@@ -36,10 +37,11 @@ import { cn } from "@/lib/utils";
 import { KUNDE } from "@/kunde.config";
 import { SCHRIFTGROESSEN, schriftLesen, schriftSetzen, type Schriftgroesse } from "@/lib/schrift";
 
-type Bereich = "betrieb" | "konto" | "app";
+type Bereich = "betrieb" | "email" | "konto" | "app";
 
 const BEREICHE: { wert: Bereich; text: string; icon: typeof User; nurChef?: boolean }[] = [
   { wert: "betrieb", text: "Betrieb", icon: Building2, nurChef: true },
+  { wert: "email", text: "E-Mail", icon: Mail, nurChef: true },
   { wert: "konto", text: "Mein Konto", icon: User },
   { wert: "app", text: "Handy", icon: Smartphone },
 ];
@@ -77,6 +79,7 @@ export default function Einstellungen() {
       </div>
 
       {bereich === "betrieb" && <Betrieb />}
+      {bereich === "email" && <PostfachEinstellungen />}
       {bereich === "konto" && <Konto />}
       {bereich === "app" && (
         <Karte titel={`${KUNDE.kurzname} als App`}>

@@ -20,55 +20,17 @@
 // Secret: ANTHROPIC_API_KEY (supabase secrets set …)
 import Anthropic from "npm:@anthropic-ai/sdk@1.7.0";
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.119.0";
+import { belegAusDatei, strukturiert } from "../_shared/beleg.ts";
 
 const KOPF = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
-const MODELL = "claude-opus-5-5";
-
-/** Inhaltsblock der Anfrage (Bild, PDF, Text) */
-type Block = Record<string, unknown>;
 
 const antwort = (daten: unknown, status = 200) =>
   new Response(JSON.stringify(daten), { status, headers: { ...KOPF, "Content-Type": "application/json" } });
 
-// ── Schemas (strukturierte Ausgabe) ───────────────────────────────────────
-const POSITION = {
-  type: "object",
-  additionalProperties: false,
-  required: ["artikelnummer", "bezeichnung", "menge", "einheit", "einzelpreis", "gesamt", "lieferschein_nr"],
-  properties: {
-    artikelnummer: { type: "string", description: "Artikelnummer des Lieferanten, wie gedruckt — leer, wenn unbekannt" },
-    bezeichnung: { type: "string" },
-    menge: { type: ["number", "null"] },
-    einheit: { type: "string", description: "Stk, m, Ring, Pkg … — leer, wenn unbekannt" },
-    einzelpreis: { type: ["number", "null"], description: "netto je Einheit nach Rabatt; null auf Lieferscheinen ohne Preis" },
-    gesamt: { type: ["number", "null"], description: "Zeilenbetrag netto" },
-    lieferschein_nr: { type: "string", description: "Lieferschein, zu dem die Zeile gehört (Rechnungen mit mehreren Lieferscheinen) — leer, wenn unbekannt" },
-  },
-};
-const BELEG = {
-  type: "object",
-  additionalProperties: false,
-  required: ["art", "lieferant", "nummer", "datum", "faellig_am", "netto", "ust_satz", "brutto", "iban", "skonto_prozent", "skonto_bis", "lieferschein_nummern", "positionen", "hinweis"],
-  properties: {
-    art: { type: "string", enum: ["lieferschein", "rechnung", "gutschrift", "unklar"] },
-    lieferant: { type: "string", description: "leer, wenn unbekannt" },
-    nummer: { type: "string", description: "Beleg- bzw. Rechnungsnummer — leer, wenn unbekannt" },
-    datum: { type: "string", description: "JJJJ-MM-TT — leer, wenn unbekannt" },
-    faellig_am: { type: "string", description: "JJJJ-MM-TT, aus Zahlungsziel berechnet wenn nötig — leer, wenn unbekannt" },
-    netto: { type: ["number", "null"] },
-    ust_satz: { type: ["number", "null"] },
-    brutto: { type: ["number", "null"] },
-    iban: { type: "string", description: "IBAN des Lieferanten ohne Leerzeichen — leer, wenn unbekannt" },
-    skonto_prozent: { type: ["number", "null"] },
-    skonto_bis: { type: "string", description: "JJJJ-MM-TT — leer, wenn unbekannt" },
-    lieferschein_nummern: { type: "array", items: { type: "string" } },
-    positionen: { type: "array", items: POSITION },
-    hinweis: { type: "string", description: "Was unleserlich oder unsicher war, kurz, auf Deutsch — leer, wenn unbekannt" },
-  },
-};
+// ── Schemas (strukturierte Ausgabe; Beleg-Schema in _shared/beleg.ts) ─────
 const KOMPONENTEN = {
   type: "object",
   additionalProperties: false,
@@ -118,60 +80,13 @@ const AUSWAHL = {
   },
 };
 
-// ── Claude ────────────────────────────────────────────────────────────────
-async function strukturiert<T>(
-  client: Anthropic,
-  system: string,
-  inhalt: Block[],
-  schema: Record<string, unknown>,
-  effort: "low" | "medium" | "high",
-): Promise<T> {
-  const r = await client.beta.messages.create({
-    model: MODELL,
-    max_tokens: 16000,
-    betas: ["server-side-fallback-2026-07-01"],
-    // bei einer Ablehnung durch die Sicherheitsfilter springt ein anderes Modell ein
-    fallbacks: "default",
-    system,
-    output_config: { effort, format: { type: "json_schema", schema } },
-    messages: [{ role: "user", content: inhalt }],
-  } as never);
-  if (r.stop_reason === "refusal") throw new Error("Die KI hat die Anfrage abgelehnt.");
-  if (r.stop_reason === "max_tokens") throw new Error("Der Beleg ist zu lang für einen Durchgang.");
-  const text = (r.content as { type: string; text?: string }[]).filter((b) => b.type === "text").map((b) => b.text ?? "").join("");
-  return JSON.parse(text) as T;
-}
-
-/** Leere Texte der KI („unbekannt“) als null an die App */
-const leerZuNull = (x: unknown): unknown =>
-  x === "" ? null : Array.isArray(x) ? x.map(leerZuNull)
-    : x && typeof x === "object" ? Object.fromEntries(Object.entries(x).map(([k, v]) => [k, leerZuNull(v)])) : x;
-
-const zuBase64 = (daten: Uint8Array) => {
-  let s = "";
-  for (let i = 0; i < daten.length; i += 0x8000) s += String.fromCharCode(...daten.subarray(i, i + 0x8000));
-  return btoa(s);
-};
-
 async function belegLesen(client: Anthropic, sb: SupabaseClient, bucket: string, pfad: string) {
   if (bucket !== "lieferscheine" && bucket !== "eingangsrechnungen") throw new Error("Unbekannter Speicherort.");
   const { data, error } = await sb.storage.from(bucket).download(pfad);
   if (error || !data) throw new Error("Datei nicht gefunden oder kein Zugriff.");
   const bytes = new Uint8Array(await data.arrayBuffer());
-  if (bytes.length > 20 * 1024 * 1024) throw new Error("Die Datei ist zu groß (höchstens 20 MB).");
   const mime = data.type || (pfad.toLowerCase().endsWith(".pdf") ? "application/pdf" : "image/jpeg");
-  const b64 = zuBase64(bytes);
-  const datei: Block = mime === "application/pdf"
-    ? { type: "document", source: { type: "base64", media_type: "application/pdf", data: b64 } }
-    : { type: "image", source: { type: "base64", media_type: ["image/png", "image/webp", "image/gif"].includes(mime) ? mime : "image/jpeg", data: b64 } };
-  const heute = new Date().toISOString().slice(0, 10);
-  return leerZuNull(await strukturiert(client,
-    `Du liest Belege eines österreichischen Elektrobetriebs (Lieferscheine und Rechnungen von Großhändlern und Subunternehmern). ` +
-    `Übernimm Zahlen genau wie gedruckt, Dezimalkomma → Punkt. Erfinde nichts: fehlende oder unleserliche Zahlen sind null, fehlende Texte leer. ` +
-    `Jede Artikelzeile ist eine Position; Zwischensummen, Fracht-Hinweise ohne Betrag und Überschriften nicht. ` +
-    `Fracht, Kupferzuschlag, Verpackung MIT Betrag sind eigene Positionen. Heute ist ${heute}.`,
-    [datei, { type: "text", text: bucket === "lieferscheine" ? "Lies diesen Lieferschein." : "Lies diese Rechnung." }],
-    BELEG, "medium"));
+  return await belegAusDatei(client, bytes, mime, bucket === "lieferscheine" ? "lieferschein" : "rechnung");
 }
 
 type Komponente = { gruppe: string; was: string; suche: string[]; menge: number; einheit: string; begruendung: string };

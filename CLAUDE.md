@@ -132,6 +132,17 @@ Die Rolle `postgres` darf `session_replication_role` nicht setzen — das
 Zurücksetzen schaltet die Festschreib-Trigger per `alter table … disable
 trigger user` nur innerhalb der eigenen Transaktion aus.
 
+## E-Mail-Postfach (Gmail, seit 17.11.2026)
+
+Einstellungen → E-Mail: Postfächer (`postfaecher`) einlesen/senden über ein Dienstkonto mit
+domänenweiter Delegierung (Secret `GOOGLE_MAIL_DIENSTKONTO`, Client-ID 110267341647112633213).
+Edge Function `postfach-abruf` (testen/abrufen, `verify_jwt = false`, pg_cron alle 15 Min über
+`postfach_verbindung`), Senden in `beleg-mail`. Gemeinsamer Code in `supabase/functions/_shared/`
+(gmail, mime, postfach, abruf, beleg — `ki` nutzt beleg.ts mit). Das Postfach trägt **Stefan selbst
+ein** — nie eines bei SETEC anlegen; Echttests nur mit hallo@epowergmbh.at
+(`tests/postfach-echttest.mjs`, `tests/postfach-abruf-test.mjs` gegen die Testumgebung). Details KONZEPT
+„E-Mail-Postfach“.
+
 ## KI (Edge Function `ki`)
 
 `supabase/functions/ki/index.ts`, Modell `claude-opus-5-5`, Secret
