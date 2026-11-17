@@ -41,7 +41,7 @@ const Handyansicht = lazy(() => import("./pages/Handyansicht"));
 const Eingang = lazy(() => import("./pages/Eingang"));
 const OffenePosten = lazy(() => import("./pages/OffenePosten"));
 const Buchhaltung = lazy(() => import("./pages/Buchhaltung"));
-const Plantafel = lazy(() => import("./pages/Plantafel"));
+const Kalender = lazy(() => import("./pages/Kalender"));
 const Fuhrpark = lazy(() => import("./pages/Fuhrpark"));
 const Lieferscheine = lazy(() => import("./pages/Lieferscheine"));
 const KundenLieferscheine = lazy(() => import("./pages/KundenLieferscheine"));
@@ -98,8 +98,8 @@ const App = () => (
                 <Route path="/zeiten" element={<S><Zeiten /></S>} />
                 <Route path="/aufgaben" element={<S><Aufgaben /></S>} />
                 <Route path="/dokumente" element={<S><Dokumente /></S>} />
-                <Route path="/kalender" element={<Navigate to="/plantafel" replace />} />
-                <Route path="/plantafel" element={<S><Plantafel /></S>} />
+                <Route path="/kalender" element={<S><Kalender /></S>} />
+                <Route path="/plantafel" element={<Navigate to="/kalender" replace />} />
                 <Route path="/fuhrpark" element={<S><Fuhrpark /></S>} />
                 <Route path="/lieferscheine" element={<S><Lieferscheine /></S>} />
                 <Route path="/kunden-lieferscheine" element={<S chef><KundenLieferscheine /></S>} />

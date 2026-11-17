@@ -111,7 +111,7 @@ export function TeamsDialog({ open, onOpenChange }: { open: boolean; onOpenChang
   };
 
   return (
-    <FormularDialog open={open} onOpenChange={onOpenChange} titel="Teams" beschreibung="Wer arbeitet meistens zusammen, mit welchem Bus? Auf der Plantafel zieht ein Team seine Leute und seinen Bus mit."
+    <FormularDialog open={open} onOpenChange={onOpenChange} titel="Teams" beschreibung="Wer arbeitet meistens zusammen, mit welchem Bus? Im Kalender zieht ein Team seine Leute und seinen Bus mit."
       gesperrt={speichert} ungespeichert={JSON.stringify(liste) !== basis || JSON.stringify(gruppen) !== gruppenBasis}
       fuss={(
         <>

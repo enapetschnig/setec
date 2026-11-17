@@ -127,7 +127,7 @@ Anfrage (Telefon/Mail)
 
 ## Reihenfolge der Umsetzung
 
-1. Kalender (Termin-Art, Kunde zuerst, Geräte-Spalten, nur noch Wochenplan, Mitarbeiter-Sicht).
+1. Kalender (Termin-Art, Kunde zuerst, Geräte-Spalten, nur noch Wochenplan, Mitarbeiter-Sicht) — umgesetzt 17.11.2026 (Knöpfe Erstaufnahme/Regiebericht am Termin folgen mit Stufe 2/3).
 2. Regiebericht ohne Projekt + Material am Handy (Katalog/Sprache) + „Noch nicht verrechnet“ unter Rechnungen.
 3. Erstaufnahme + Angebot ohne Projekt + Annahme → Projekt mit allen Daten.
 

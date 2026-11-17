@@ -3303,6 +3303,7 @@ export type Database = {
       }
       termine: {
         Row: {
+          art: string
           begonnen_am: string | null
           beschreibung: string | null
           bis: string | null
@@ -3317,6 +3318,7 @@ export type Database = {
           geaendert_am: string | null
           geaendert_von: string | null
           id: string
+          kunde_id: string | null
           mitarbeiter: string[]
           ort: string | null
           projekt_id: string | null
@@ -3327,6 +3329,7 @@ export type Database = {
           von: string | null
         }
         Insert: {
+          art?: string
           begonnen_am?: string | null
           beschreibung?: string | null
           bis?: string | null
@@ -3341,6 +3344,7 @@ export type Database = {
           geaendert_am?: string | null
           geaendert_von?: string | null
           id?: string
+          kunde_id?: string | null
           mitarbeiter?: string[]
           ort?: string | null
           projekt_id?: string | null
@@ -3351,6 +3355,7 @@ export type Database = {
           von?: string | null
         }
         Update: {
+          art?: string
           begonnen_am?: string | null
           beschreibung?: string | null
           bis?: string | null
@@ -3365,6 +3370,7 @@ export type Database = {
           geaendert_am?: string | null
           geaendert_von?: string | null
           id?: string
+          kunde_id?: string | null
           mitarbeiter?: string[]
           ort?: string | null
           projekt_id?: string | null
@@ -3387,6 +3393,13 @@ export type Database = {
             columns: ["geaendert_von"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "termine_kunde_id_fkey"
+            columns: ["kunde_id"]
+            isOneToOne: false
+            referencedRelation: "kunden"
             referencedColumns: ["id"]
           },
           {

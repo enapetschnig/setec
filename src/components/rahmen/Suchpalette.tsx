@@ -104,7 +104,7 @@ export function Suchpalette() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [text, offen, istChef]);
 
-  // Seiten (Titel und Stichworte: „Kalender“ → Plantafel, „Lohnzettel“ → Dokumente) und Neu-Aktionen per Teilwort
+  // Seiten (Titel und Stichworte: „Plantafel“ → Kalender, „Lohnzettel“ → Dokumente) und Neu-Aktionen per Teilwort
   const q = sauber(text).toLowerCase();
   const passt = (t: string) => !q || t.toLowerCase().includes(q);
   const projektTreffer: Treffer[] = useMemo(() => (text.trim().length < 2 ? [] : projekteSuchen(projekte, text).slice(0, 5).map((x) => ({

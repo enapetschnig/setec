@@ -62,6 +62,14 @@ describe("Termin prüfen", () => {
     expect(terminFehler({ ...t, von: "15:00", bis: "07:00", bisDatum: "2026-10-28" })).toBeNull();
   });
 
+  it("Art: Montage braucht ein Projekt, Besichtigung/Service einen Kunden, Büro nichts", () => {
+    expect(terminFehler({ ...t, art: "montage", kundeId: "k1", projektId: "" })).toMatch(/Projekt/);
+    expect(terminFehler({ ...t, art: "montage", kundeId: "k1", projektId: "p1" })).toBeNull();
+    expect(terminFehler({ ...t, art: "besichtigung", kundeId: "", projektId: "" })).toMatch(/Kunde/);
+    expect(terminFehler({ ...t, art: "service", kundeId: "k1", projektId: "" })).toBeNull();
+    expect(terminFehler({ ...t, art: "buero", kundeId: "", projektId: "" })).toBeNull();
+  });
+
   it("„Bis“ vor dem Datum wird gemeldet statt still verworfen", () => {
     expect(terminFehler({ ...t, bisDatum: "2026-10-20" })).toMatch(/vor dem Datum/);
   });

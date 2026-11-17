@@ -17,7 +17,7 @@ const SCHNELL: Record<string, NeuArt> = {
   "/kunden": "kontakt",
   "/angebote": "angebot",
   "/rechnungen": "rechnung",
-  "/plantafel": "termin",
+  "/kalender": "termin",
   "/zeiten": "zeit",
   "/aufgaben": "aufgabe",
   "/regie": "regie",

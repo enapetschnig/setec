@@ -55,7 +55,7 @@ export default function Fuhrpark() {
       aktionen={istChef && <Button className="h-11 gap-1.5" onClick={() => setOffen({ fahrzeug: null })}><Plus className="h-4 w-4" /> Neu</Button>}>
 
       {!isLoading && sichtbar.length === 0 && (
-        <Leer icon={Bus} text="Noch nichts im Fuhrpark. Busse, Steiger und Maschinen anlegen — dann lassen sie sich auf der Plantafel einteilen.">
+        <Leer icon={Bus} text="Noch nichts im Fuhrpark. Busse, Steiger und Maschinen anlegen — dann lassen sie sich im Kalender einteilen.">
           {istChef && <Button className="h-11 gap-1.5" onClick={() => setOffen({ fahrzeug: null })}><Plus className="h-4 w-4" /> Fahrzeug anlegen</Button>}
         </Leer>
       )}

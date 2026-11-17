@@ -702,88 +702,81 @@ Bewusst einfach, kein eigenes Kalkulationsblatt:
   `/angebot/DEMO-pv-brunner-angebot-bestaetigen-2026`, AN „Reisinger“ online angenommen);
   die Demo-Unterschrift lädt `unterschriften.py` hoch.
 
-### Plantafel, Teams und Fuhrpark (Seiten `/plantafel`, `/fuhrpark`)
+### Kalender, Teams und Fuhrpark (Seiten `/kalender`, `/fuhrpark`)
 
-Migration `20261110100000_fuhrpark_teams_plantafel.sql`, Logik in
-`lib/plantafel.ts` und `lib/fuhrpark.ts` (getestet):
-- `fahrzeuge`: Busse, PKW, Steiger, Anhänger, Maschinen, Messgeräte —
-  Kennzeichen, Pickerl/Service/Prüfung bis, gemietet, stillgelegt.
+Migrationen `20261110100000_fuhrpark_teams_plantafel.sql` und
+`20261117100000_kalender_art_kunde.sql`, Logik in `lib/kalender.ts`,
+`lib/terminplaner.ts`, `lib/plantafel.ts` (Konflikte, Projektfarben) und
+`lib/fuhrpark.ts` (alle getestet). Ablauf und Hintergrund:
+`docs/ABLAUF-TERMIN-BIS-RECHNUNG.md` (Abschnitt 1), Besprechung 17.11.2026.
+- `fahrzeuge`: Busse, PKW, Steiger, Anhänger, Maschinen (Kernbohrgerät),
+  Messgeräte — Kennzeichen, Pickerl/Service/Prüfung bis, gemietet, stillgelegt.
   `fahrzeug_eintraege` = Bordbuch (Service, Reparatur, Prüfung, Schaden,
   Tanken); Monteure melden Schäden und Tanken, alles andere der Chef.
-- `teams`: Name, Farbe, Leitung, Mitglieder, Stamm-Bus. Ein Einsatz
-  (`termine`) hat `team_id`, `mitarbeiter[]` und `fahrzeuge[]`.
-- Plantafel und Kalender sind eins: ein Menüpunkt „Plantafel“ (nur Chef; Suche findet
-  auch „Kalender“, „Wochenplan“, „Gantt“), alle Ansichten auf denselben Daten
-  (`termine`, Teams, Abwesenheiten; `/kalender` leitet auf `/plantafel`). Umschalter
-  oben **„Gantt | Wochenplan“** (PC, gemerkt in `elektro.plantafel.sicht`, Standard
-  Gantt), am Handy **„Tagesplan | Liste“** (eigener Schlüssel
-  `elektro.plantafel.sicht.handy`, Standard Tagesplan). Am PC füllt die Seite Breite
-  und Höhe (`PageHeader voll`); das Gantt zeigt Woche, 2 Wochen, Monat, 3 Monate
-  (`components/plantafel/Gantt.tsx`) oder „Kalender“ als Monatsblatt mit Tagesliste
-  (`components/plantafel/Monat.tsx`, Alle/Meine).
-- **Leere Stelle antippen oder aufziehen** (Chef, Gantt-Personenzeile, Wochenplan,
-  Tagesplan): kleine Wahl `ZellWahl` „Einsatz | Abwesenheit“ an der Stelle. Einsatz →
-  `TerminDialog` mit Person, Tag(en) und Uhrzeit; Abwesenheit → `AbwesenheitDialog` mit
-  Person und Tag(en) vorbelegt (Chef-Eintrag gilt sofort). Auf einer Abwesenheit:
-  Bearbeiten (Dialog lädt die ganze Zeile per `abwesenheitId`), Löschen (zweistufig)
-  oder „Trotzdem Einsatz“. Gantt-Zeilen von Teams/Geräten öffnen gleich das Formular.
-- Gantt nach Vorbild Steinbrecher: Kopf mit Monat, KW und Tag (darunter
-  „x frei“, Namen im Tooltip), Wochenende/Feiertag gelb bzw. rosa, rote
-  Heute-Linie. **Tag im Kopf antippen** = Wochenplan dieser Woche, an den Tag
-  gerollt (`springTag`). Abwesenheiten als Fläche in der Personenzeile in den
-  Farben des Wochenplans (Urlaub/ZA grün, Krank rot, Schule/Arzt gelb), antippen =
-  bearbeiten/löschen. Zeilen 32/34 px hoch, damit man am Tablet trifft. Jeder Balken trägt die Farbe seines Projekts (`projektFarbe`,
-  12 kräftige Farben, Schrift per `textAuf`), Wochenenden sind Lücken
-  (`arbeitsStuecke`). Zeilen: je Team ein Kopf (zuklappbar, Bus als Auswahl —
-  der Bus eines Teams hat keine eigene Zeile) mit seinen Leuten, „+ Neues
-  Team“ (Namen tippen oder eine Person hereinziehen = Team mit ihr als
-  Leitung), „Ohne Team“, „Geräte & Fahrzeuge“ (zuklappbar: Steiger,
-  Anhänger, Maschinen, Messgeräte, Busse ohne Team; „+ Gerät“ legt eines an),
-  „Nicht eingeteilt“. In der Personenzeile erscheinen Einsätze des eigenen Teams nur
-  als dünner Strich, eigene Einsätze als Balken.
-- Balken antippen = kleines Fenster am Balken (`BalkenInfo`: Projekt, Zeit,
-  Ort, Leute herausnehmen, Geräte an/ab, Erledigt, Löschen); erst
-  „Bearbeiten“ öffnet das große Formular.
-- Rechts die Seitenliste „Noch nicht eingeplant“ (zuklappbar, `elektro.plantafel.streifen`):
-  Projekte „In Arbeit“ ohne Einsatz ab heute mit Kunde und Ort (Suche findet alle
-  laufenden, auch die noch im Angebot) — auf eine Zeile ziehen = Einsatz bis Freitag
-  7:00–15:30, antippen = Formular mit dem Projekt. Ziehen (Maus, am Tablet langer Druck): Balken = verschieben,
-  auch in eine andere Zeile (`ablegen`); mit Strg/Alt = kopieren; Ränder =
-  länger/kürzer; leere Tage aufziehen = neuer Einsatz; Person am Griff ⋮⋮ auf
-  einen Balken (`zuweisen`) oder ein Team (Mitglied wechseln); Gerät am Griff
-  auf einen Balken = mitnehmen, Bus/PKW auf ein Team = Bus des Teams; Projekt
-  auf die Steigerzeile = Einsatz nur mit dem Steiger. Ein Balken aus der
-  Gerätezeile auf ein Team behält das Gerät (Leute und Geräte tauschen nur
-  untereinander). Bus tauschen
-  ändert auch die Einsätze des Teams ab heute. Alles mit Rückgängig (Knopf,
-  Strg+Z). Konflikte (doppelt, abwesend) als roter Knopf in der Leiste.
-- Am Handy eine Liste je Tag der Woche, Alle oder Meine (Monteur: Meine),
-  mit Abwesenheiten, Farbstreifen je Projekt.
-- **Wochenplan** (früher „Terminplaner“; `components/plantafel/Terminplaner.tsx`,
-  Logik `lib/terminplaner.ts`, getestet) — Achsen getauscht wie SETECs alter
-  Taifun-Kalender: Spalten = Leute nach Gruppen, Zeilen = Tage der Woche mit
-  den Stunden laut Betrieb (Einstellungen → „Plantafel“, `firma.plan_von/plan_bis`,
-  Standard 6–18, `planStunden`; weiter, wenn ein Einsatz früher/später liegt), Sa/So
-  nur mit Einträgen. Gruppen (`gruppenBilden`): Geschäftsführung, eigene Gruppen
-  (`profiles.gruppe`, z. B. „Büro“, im Teams-Dialog pflegbar), Teams in ihrer
-  Reihenfolge, „Ohne Team“; eigene Gruppe geht vor Team, ein Chef ohne beides
-  ist Geschäftsführung (Migration `20261113112000_profil_gruppe.sql`).
-  Einsätze als Blöcke (Kunde, Titel, Zeit; Projektfarbe, ohne Projekt blau),
-  Überlappendes nebeneinander (`nebeneinander`), Abwesenheit als Fläche:
-  Urlaub/ZA grün, Krank rot, Schule/Arzt gelb. Filter Alle/Gruppe/Person,
-  rechts (ab 1280 px) Monatskalender zum Springen. Leere Zelle antippen = Wahl
-  (halbe Stunde, 2 h lang); am PC aufziehen (`zeitraumAus`): im Tag = genau diese
-  Uhrzeit, über mehrere Tage = Zeitraum (Uhrzeit aus dem Ziehen, sonst 7:00–15:30),
-  gestrichelte Vorschau; Block = `BalkenInfo`; ziehen = andere Zeit/Tag/Person (`planVerschieben`, 15-Min.-
-  Raster, Person wird getauscht), unterer Rand = Ende; „Rückgängig“ im Hinweis.
-  Handy: „Tag“ (Leute untereinander, Zeit quer) oder „Person“ (Mo–Fr,
-  Stunden nach unten), wischen = nächster Tag bzw. nächste Person.
-- **Rechte** (Migration `20261116150000_termine_nur_chef.sql`): Einsätze legt nur der
+- `teams`: Name, Farbe, Leitung, Mitglieder, Stamm-Bus (Teams-Dialog im Kalender).
+  Ein Termin (`termine`) hat `team_id`, `mitarbeiter[]` und `fahrzeuge[]`.
+- **Der Kalender ist der einzige Ort zum Einteilen** (seit 17.11.2026; Gantt,
+  Monatsblatt und der Umschalter „Gantt | Wochenplan“ sind weg — Stefan: „Ich seh
+  zu wenig“). Menüpunkt „Kalender“ für alle (Suche findet auch „Plantafel“,
+  „Einteilung“, „Wochenplan“), `/plantafel` leitet auf `/kalender`
+  (`pages/Kalender.tsx`, `components/plantafel/Terminplaner.tsx`). Immer eine Woche.
+- **Termin-Art** `termine.art`: `montage` (Farbe des Projekts, ohne Projekt orange),
+  `besichtigung` (weiß mit Rand), `service` (blau), `buero` (grau) — `terminFarbe`.
+  `termine.kunde_id` (Bestand nachgetragen aus dem Projekt; Art des Bestands:
+  mit Projekt `montage`, sonst `buero`). Legende unter der Liste bzw. in der Leiste.
+- **Neuer Termin** (`TerminDialog`): zuerst die Art, dann der Kunde (`KundeWahl`:
+  suchen oder „+ Neuer Kunde“ mit Adress-Vorschlägen), dann
+  - Montage: nur Projekte **dieses** Kunden „In Arbeit“ (`kundenProjekte`; hat er
+    genau eines, ist es gewählt), Ort = Projektadresse; Pflicht: Projekt;
+  - Besichtigung/Service: „Wo?“ = Adresse des Kunden oder eines seiner Projekte
+    (`ortVorschlaege`) oder frei — **kein Projekt**; Pflicht: Kunde;
+  - Büro: ohne Kunde.
+  Titel wird vorgeschlagen („Service Huber“), solange keiner getippt ist. Danach
+  Team, Leute, Geräte, Zeit wie bisher. Aus dem Projekt geöffnet sind Kunde und
+  Projekt vorbelegt. Später (Stufe 2/3): auf „Besichtigung“ ein Knopf
+  „Erstaufnahme“, auf „Service“ „Regiebericht“ (Kunde/Adresse/Termin vorbelegt) —
+  `RegieEditor` kann bisher nur das Projekt vorbelegen.
+- **Aufbau** (wie SETECs alter Taifun-Terminplaner): Spalten = Leute nach Gruppen,
+  Zeilen = Tage der Woche mit den Stunden laut Betrieb (Einstellungen → „Kalender“,
+  `firma.plan_von/plan_bis`, Standard 6–18, `planStunden`; weiter, wenn ein Termin
+  früher/später liegt), Sa/So nur mit Einträgen. Gruppen (`gruppenBilden`):
+  Geschäftsführung, eigene Gruppen (`profiles.gruppe`, im Teams-Dialog pflegbar),
+  Teams in ihrer Reihenfolge, „Ohne Team“ (Migration `20261113112000_profil_gruppe.sql`).
+  Termine als Blöcke (Kunde, Titel, Zeit), Überlappendes nebeneinander
+  (`nebeneinander`), Abwesenheit als Fläche: Urlaub/ZA grün, Krank rot, Schule/Arzt
+  gelb. Filter Alle/Gruppe/Person, „Gehe zu“ Datum, ab 1536 px rechts Monatskalender.
+- **Geräte & Fahrzeuge** rechts als zuklappbare Spaltengruppe
+  (`elektro.kalender.geraete`; aktive, Reihenfolge `geraeteSpalten`: Steiger,
+  Maschinen, Anhänger, Messgeräte, Busse, PKW). In der Spalte eines Geräts stehen alle
+  Termine mit ihm in `fahrzeuge[]`; doppelt belegt (`konflikte` → `geraetDoppelt`)
+  = Zelle und Block rot. Gerät am Griff ⋮⋮ auf einen Termin ziehen = mitnehmen;
+  im kleinen Fenster an-/abhaken; leere Gerätezelle antippen = Termin mit dem Gerät.
+- **Chef**: leere Zelle antippen = Wahl `ZellWahl` „Einsatz | Abwesenheit“ (halbe
+  Stunde, 2 h lang; auf einer Abwesenheit: bearbeiten, löschen, „Trotzdem Einsatz“);
+  am PC aufziehen (`zeitraumAus`): im Tag = genau diese Uhrzeit, über mehrere Tage =
+  Zeitraum (sonst 7:00–15:30), gestrichelte Vorschau. Block antippen = `BalkenInfo`
+  (Art, Kunde, Projekt, Zeit, Ort, Leute herausnehmen, Geräte an/ab, Erledigt,
+  Löschen; „Bearbeiten“ = Formular). Ziehen = andere Zeit/Tag/Person
+  (`planVerschieben`, 15-Min.-Raster), unterer Rand = Ende; „Rückgängig“ im Hinweis.
+  Konflikte (doppelt, abwesend, Gerät doppelt) als roter Knopf in der Leiste.
+- Rechts **„Noch nicht eingeplant“** (PC, Chef; zuklappbar, `elektro.plantafel.streifen`,
+  `components/plantafel/NichtEingeplant.tsx`): Projekte „In Arbeit“ ohne Termin ab
+  heute (`nichtEingeplant`; Suche findet alle laufenden, auch im Angebot). Auf eine
+  Person oder ein Gerät an einem Tag ziehen = Montage bis Freitag 7:00–15:30 mit
+  Kunde (`einsatzAusProjekt`, Rückgängig im Hinweis), antippen = Formular mit dem Projekt.
+- **Monteur**: Menüpunkt Kalender nur lesend (`darf` = Chef): eigene Spalte und
+  eigene Termine hervorgehoben, Abwesenheit anderer nur „abwesend“ (Sicht
+  `abwesenheit_kalender`), Termin antippen → „Öffnen“ (Formular nur lesen, „Erledigt“,
+  wenn er dabei ist). Dazu die Startseite „Heute/Morgen“ (`EinsatzBereich`).
+- **Handy**: „Tag“ (Leute untereinander, Zeit quer), „Person“ (Mo–Fr, Stunden nach
+  unten; wischen = nächster Tag bzw. nächste Person) oder „Woche“ (Liste je Tag,
+  Meine/Alle; Monteur startet mit Woche/Meine) — gemerkt in `elektro.kalender.handy`.
+- **Rechte** (Migration `20261116150000_termine_nur_chef.sql`): Termine legt nur der
   Chef an, verschiebt und löscht sie (RLS `termine_anlegen/_aendern/_loeschen`). Ein
-  Monteur darf bei Einsätzen, in denen er eingeteilt ist, nur den Status setzen
-  (Trigger `termin_nur_status` vergleicht die Zeile ohne Status-Spalten). In der
-  Oberfläche: „+ Neu → Termin“, „Termin eintragen“ (Start, Projekt) nur Chef;
-  `TerminDialog` für Monteure nur lesend mit „Erledigt“, wenn er dabei ist.
+  Monteur darf bei Terminen, in denen er eingeteilt ist, nur den Status setzen
+  (Trigger `termin_nur_status`). „+ Neu → Termin“, „Termin eintragen“ nur Chef.
+- **Mitteilungen**: `termin_push` meldet Tag, Zeit, Ort, Titel, Leute **und
+  Geräte** (`fahrzeuge`, seit `20261117100000`) — eine reine Status-Änderung nicht.
 - **Material im Einsatz** (`EinsatzDetails`, aufklappbar): „Material laut Angebot (n)“
   ohne Preise aus `useAngebotMaterial`, schon Ausgefasstes abgezogen
   (`ausfassVorschlag` + `verbrauchtKarte`, wie beim Ausfassen), Knopf „Jetzt ausfassen“
@@ -810,9 +803,10 @@ Ende nach 19, über 10 h, Überschneidung, Lücke über 1 h. Auch als CSV.
 Monteur am Handy: nur Täglich (Stunden, Scannen, Regieberichte), Baustelle
 (Lieferscheine), Sonstiges (Mein Konto); „Meine Aufgaben“ nur, wenn ihm eine
 zugeteilt ist, ohne „+ Aufgabe“; Projekte, Aufgaben, Änderungswünsche sind `nurChef`
-— `START_MONTEUR` in `pages/Index.tsx`. Kontakte, Plantafel, Lager, Fuhrpark,
+— `START_MONTEUR` in `pages/Index.tsx`. Kontakte, Lager, Fuhrpark,
 Anlagen, Dokumente, Artikel sind `nurChef` im Menü. Das Büro hat eigene Punkte
 „Artikel & Leistungen“ (ein Katalog, Reiter) und „Mitarbeiter & Zugänge“.
+Den Kalender sehen auch Monteure (nur lesen).
 
 PC: unter dem Gruß die Schnellaktionen Neues Projekt, Neue Rechnung, Termin
 eintragen; dann „Zu erledigen“ (nur am PC — am Handy ist die Startseite nur das Menü) (online angenommen, Rückfragen, überfällig,
@@ -827,12 +821,12 @@ Menü nach dem Vorbild Lengauer Stockner (`components/rahmen/`), alle Ziele in
 - **Seitenleiste** (`Seitenleiste.tsx`): SETEC-Schwarz, 240 px, ab 1024 px einklappbar auf
   56 px (gemerkt in `localStorage` `setec.seitenleiste`); Tablet 768–1023 px immer
   schmal. Oben Querlogo, „Suchen … Strg K“ und das goldene „+ Neu“.
-  Gruppe ohne Etikett (Start, Projekte, Kontakte, Angebote, Rechnungen, Plantafel), dann
+  Gruppe ohne Etikett (Start, Projekte, Kontakte, Angebote, Rechnungen, Kalender), dann
   beim Chef BÜRO vor BAUSTELLE (am Laptop sieht er Eingangsrechnungen & Co. ohne
   Scrollen), beim Monteur BAUSTELLE vor BÜRO; einzeln zuklappbar (`menue.zu`; die
   Gruppe der offenen Seite ist offen, zugeklappt nur bis zum Seitenwechsel). Aktiv:
   hellere Fläche und goldener Strich links. „+“ beim Überfahren an Projekte, Kontakte,
-  Angebote, Rechnungen, Plantafel, Stunden, Aufgaben, Regieberichte legt gleich an.
+  Angebote, Rechnungen, Kalender, Stunden, Aufgaben, Regieberichte legt gleich an.
   Im Fuß Einstellungen, Änderungswünsche, Handyansicht und das Konto (`KontoMenue leiste`).
 - **„+ Neu“** (`NeuMenue.tsx`, `NeuRahmen` einmal im Rahmen): Projekt, Angebot,
   Angebot vor Ort, Rechnung, Termin, Aufgabe, Kontakt, Stunden, Regiebericht, Foto
@@ -840,7 +834,7 @@ Menü nach dem Vorbild Lengauer Stockner (`components/rahmen/`), alle Ziele in
   die Seite. `neuStarten(art)` startet eine Aktion von überall.
 - **Suche** (`Suchpalette.tsx`): Strg+K, am Handy die Lupe im Kopf der Startseite
   (Vollbild). Projekte, Kontakte, Belege (nur Chef), Seiten, Neu anlegen; Pfeile +
-  Enter. Seiten werden über Titel und `stichworte` gefunden („Kalender“ → Plantafel,
+  Enter. Seiten werden über Titel und `stichworte` gefunden („Plantafel“ → Kalender,
   „Lohnzettel“ → Dokumente, „Mitarbeiter“ → Einstellungen).
 - **Startseite am Handy/Tablet** (`StartListe.tsx`): Kopf mit Logo, Datum und
   Gruß, Lupe, Melden, Konto. Menü als große Karten mit „… öffnen“ und leichtem

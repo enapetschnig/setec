@@ -126,7 +126,7 @@ export function FahrzeugDialog({
     const { error } = await supabase.from("fahrzeuge").update({ aktiv: !fahrzeug.aktiv }).eq("id", fahrzeug.id);
     setSpeichert(false);
     if (error) return toast.error("Nicht gespeichert", { description: fehlerText(error) });
-    toast.success(fahrzeug.aktiv ? "Stillgelegt — erscheint nicht mehr auf der Plantafel" : "Wieder in Betrieb");
+    toast.success(fahrzeug.aktiv ? "Stillgelegt — erscheint nicht mehr im Kalender" : "Wieder in Betrieb");
     await neuLaden("fahrzeuge");
     onOpenChange(false);
   };
@@ -232,7 +232,7 @@ export function FahrzeugDialog({
           <div className="flex items-center justify-between gap-3 rounded-lg border bg-card p-3">
             <Label htmlFor="f-miete" className="cursor-pointer">
               <span className="block text-sm font-medium">Gemietet</span>
-              <span className="block text-xs font-normal text-muted-foreground">z. B. Steiger vom Verleih — auf der Plantafel, ohne Service und Pickerl</span>
+              <span className="block text-xs font-normal text-muted-foreground">z. B. Steiger vom Verleih — im Kalender, ohne Service und Pickerl</span>
             </Label>
             <Switch id="f-miete" checked={w.gemietet} onCheckedChange={(gemietet) => setz({ gemietet })} />
           </div>

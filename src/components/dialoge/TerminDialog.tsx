@@ -15,16 +15,19 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Avatar, StatusPille } from "@/components/Bausteine";
 import { useKalenderAbwesenheit } from "@/components/zeiten/personalDaten";
-import { ProjektWahl } from "@/components/ProjektWahl";
+import { KundeWahl } from "@/components/KundeWahl";
 import { useBeimOeffnen } from "@/components/stamm/Felder";
 import { fehlerText } from "@/components/stamm/stammDaten";
-import { useFahrzeuge, useMitarbeiter, useNeuLaden, useProjekte, useTeams } from "@/hooks/useDaten";
+import { useFahrzeuge, useKunden, useMitarbeiter, useNeuLaden, useProjekte, useTeams } from "@/hooks/useDaten";
 import { useSitzung } from "@/hooks/useSitzung";
 import { isoTag } from "@/lib/format";
-import { EINSATZ_STATUS, FAHRZEUG_ART, TEAM_FARBEN, type FahrzeugArt, type Termin } from "@/lib/types";
+import { adresseZeile, kundenProjekte, ortVorschlaege, TERMIN_ARTEN, terminArt, terminFarbe, titelVorschlag, type TerminArt } from "@/lib/kalender";
+import { EINSATZ_STATUS, FAHRZEUG_ART, PROJEKT_STATUS, TEAM_FARBEN, type FahrzeugArt, type Kunde, type Termin } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 export type TerminWerte = {
+  art: TerminArt;
+  kundeId: string;
   titel: string;
   datum: string;
   bisDatum: string;
@@ -41,7 +44,11 @@ export type TerminWerte = {
 };
 
 /** Was am Termin nicht stimmt — null, wenn er so gespeichert werden kann */
-export function terminFehler(w: Pick<TerminWerte, "titel" | "datum" | "bisDatum" | "ganztags" | "von" | "bis">): string | null {
+export function terminFehler(
+  w: Pick<TerminWerte, "titel" | "datum" | "bisDatum" | "ganztags" | "von" | "bis"> & Partial<Pick<TerminWerte, "art" | "kundeId" | "projektId">>,
+): string | null {
+  if ((w.art === "besichtigung" || w.art === "service") && !w.kundeId) return "Bitte den Kunden wählen";
+  if (w.art === "montage" && !w.projektId) return "Bitte ein Projekt „In Arbeit“ wählen — ohne Projekt: Art „Service“ oder „Büro“";
   if (!w.titel.trim()) return "Bitte einen Titel eingeben";
   if (!w.datum) return "Bitte ein Datum wählen";
   if (w.bisDatum && w.bisDatum < w.datum) return "„Bis“ liegt vor dem Datum";
@@ -54,8 +61,13 @@ export function terminFehler(w: Pick<TerminWerte, "titel" | "datum" | "bisDatum"
 }
 
 /**
- * Termin im Kalender — mit Einteilung: Wer ist dabei? Ein Projekt füllt
- * Titel und Ort vor, solange dort noch nichts steht.
+ * Termin im Kalender: zuerst die Art, dann der Kunde (suchen oder „+ Neuer
+ * Kunde“), dann
+ * - Montage: nur Projekte DIESES Kunden „In Arbeit“, Ort = Projektadresse
+ * - Besichtigung / Service: Adresse des Kunden, eines seiner Projekte oder frei — kein Projekt
+ * - Büro: ohne Kunde
+ * Danach Team, Leute, Geräte, Zeit. Aus dem Projekt geöffnet: Kunde und Projekt vorbelegt.
+ * Später (Stufe 2/3): Besichtigung → „Erstaufnahme“, Service → „Regiebericht“.
  */
 export function TerminDialog({
   open, onOpenChange, termin, datum: vorDatum, bisDatum: vorBis, projektId: vorProjekt, mitarbeiterId, teamId, fahrzeugId, von: vorVon, bis: vorBisZeit,
@@ -79,6 +91,7 @@ export function TerminDialog({
   const neuLaden = useNeuLaden();
   const { profil, istChef } = useSitzung();
   const { data: projekte = [] } = useProjekte();
+  const { data: kunden = [] } = useKunden();
   const { data: mitarbeiter = [] } = useMitarbeiter();
   const { data: teams = [] } = useTeams();
   const { data: fahrzeugListe = [] } = useFahrzeuge();
@@ -93,6 +106,8 @@ export function TerminDialog({
     let v: TerminWerte;
     if (termin) {
       v = {
+        art: terminArt(termin.art),
+        kundeId: termin.kunde_id ?? projekte.find((x) => x.id === termin.projekt_id)?.kunde_id ?? "",
         titel: termin.titel,
         datum: termin.datum,
         bisDatum: termin.bis_datum || "",
@@ -114,7 +129,8 @@ export function TerminDialog({
         bisDatum: vorBis && vorBis > (vorDatum || "") ? vorBis : "",
         titel: p?.name ?? "",
         projektId: p?.id ?? "",
-        ort: p ? [p.strasse, [p.plz, p.ort].filter(Boolean).join(" ")].filter(Boolean).join(", ") : "",
+        kundeId: p?.kunde_id ?? "",
+        ort: adresseZeile(p),
         dabei: mitarbeiterId ? [mitarbeiterId] : profil && !teamId && !fahrzeugId ? [profil.id] : [],
         fahrzeuge: fahrzeugId ? [fahrzeugId] : [],
         ...(vorVon ? { von: vorVon, bis: vorBisZeit && vorBisZeit > vorVon ? vorBisZeit : vorVon } : {}),
@@ -146,15 +162,51 @@ export function TerminDialog({
     return { ...x, teamId: neu?.id ?? "", dabei, fahrzeuge: fz };
   });
 
-  const projektWaehlen = (id: string) => {
-    const p = projekte.find((x) => x.id === id);
-    setW((x) => ({
-      ...x,
-      projektId: id,
-      ...(p && !x.ort ? { ort: [p.strasse, [p.plz, p.ort].filter(Boolean).join(" ")].filter(Boolean).join(", ") } : {}),
-      ...(p && !x.titel ? { titel: p.name } : {}),
-    }));
-  };
+  const kundeVon = (id: string) => kunden.find((k) => k.id === id);
+  const projektVon = (id: string) => projekte.find((p) => p.id === id);
+  /** Titel nur nachführen, solange er leer ist oder noch der alte Vorschlag */
+  const vorschlagVon = (x: TerminWerte) => titelVorschlag(x.art, kundeVon(x.kundeId)?.name, projektVon(x.projektId)?.name);
+  const mitTitel = (alt: TerminWerte, neu: TerminWerte): TerminWerte =>
+    !alt.titel.trim() || alt.titel === vorschlagVon(alt) || alt.titel === projektVon(alt.projektId)?.name ? { ...neu, titel: vorschlagVon(neu) } : neu;
+
+  const artWaehlen = (art: TerminArt) => setW((x) => {
+    const neu: TerminWerte = {
+      ...x, art,
+      kundeId: art === "buero" ? "" : x.kundeId,
+      projektId: art === "montage" ? x.projektId : "",
+    };
+    // Montage: hat der Kunde genau ein Projekt in Arbeit, gleich dieses
+    if (art === "montage" && !neu.projektId && neu.kundeId) {
+      const liste = kundenProjekte(projekte, neu.kundeId);
+      if (liste.length === 1) { neu.projektId = liste[0].id; neu.ort = adresseZeile(liste[0]) || neu.ort; }
+    }
+    if ((art === "besichtigung" || art === "service") && !neu.ort) neu.ort = adresseZeile(kundeVon(neu.kundeId));
+    return mitTitel(x, neu);
+  });
+
+  const kundeWaehlen = (k: Kunde | null) => setW((x) => {
+    const id = k?.id ?? "";
+    const neu: TerminWerte = { ...x, kundeId: id };
+    const altKunde = adresseZeile(kundeVon(x.kundeId));
+    if (x.projektId && projektVon(x.projektId)?.kunde_id !== id) neu.projektId = "";
+    if (x.art === "montage" && !neu.projektId && id) {
+      const liste = kundenProjekte(projekte, id);
+      if (liste.length === 1) { neu.projektId = liste[0].id; neu.ort = adresseZeile(liste[0]); }
+    }
+    // Ort folgt dem Kunden, solange er nicht von Hand geändert wurde
+    if ((x.art === "besichtigung" || x.art === "service") && (!x.ort || x.ort === altKunde)) neu.ort = adresseZeile(k);
+    return mitTitel(x, neu);
+  });
+
+  const projektWaehlen = (id: string) => setW((x) => {
+    const p = projektVon(id);
+    const neu: TerminWerte = { ...x, projektId: id, ort: adresseZeile(p) || x.ort, kundeId: x.kundeId || p?.kunde_id || "" };
+    return mitTitel(x, neu);
+  });
+
+  const kunde = kundeVon(w.kundeId);
+  const kundenListe = kundenProjekte(projekte, w.kundeId, w.projektId);
+  const orte = ortVorschlaege(kunde, projekte.filter((p) => w.kundeId && p.kunde_id === w.kundeId && p.status !== "abgeschlossen"));
 
   // Einteilen, verschieben, löschen: nur der Chef. Wer eingeteilt ist, meldet erledigt.
   const nurLesen = !istChef;
@@ -166,13 +218,15 @@ export function TerminDialog({
     if (fehler) return toast.error(fehler);
     setSpeichert(true);
     const daten = {
+      art: w.art,
+      kunde_id: w.art === "buero" ? null : w.kundeId || null,
       titel: w.titel.trim(),
       datum: w.datum,
       bis_datum: w.bisDatum && w.bisDatum > w.datum ? w.bisDatum : null,
       ganztags: w.ganztags,
       von: w.ganztags ? null : w.von || null,
       bis: w.ganztags ? null : w.bis || null,
-      projekt_id: w.projektId || null,
+      projekt_id: w.art === "montage" ? w.projektId || null : null,
       ort: w.ort.trim() || null,
       beschreibung: w.beschreibung.trim() || null,
       mitarbeiter: w.dabei,
@@ -250,13 +304,87 @@ export function TerminDialog({
         {nurLesen && <p className="text-sm text-muted-foreground">Die Einteilung ändert nur der Chef.</p>}
         <fieldset disabled={nurLesen} className="min-w-0 space-y-5">
         <div className="space-y-2">
-          <Label htmlFor="t-projekt">Projekt <span className="font-normal text-muted-foreground">(optional)</span></Label>
-          <ProjektWahl id="t-projekt" wert={w.projektId} onChange={projektWaehlen} leerText="Kein Projekt" />
-          {w.projektId && (
-            <button type="button" className="min-h-11 text-xs text-muted-foreground hover:text-foreground" onClick={() => setze({ projektId: "" })}>
-              Projekt entfernen
-            </button>
-          )}
+          <Label>Art</Label>
+          <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Art des Termins">
+            {TERMIN_ARTEN.map((a) => {
+              const an = w.art === a.wert;
+              const f = terminFarbe(a.wert);
+              return (
+                <button key={a.wert} type="button" role="radio" aria-checked={an} onClick={() => artWaehlen(a.wert)} title={a.hinweis}
+                  className={cn("flex min-h-12 items-center gap-2 rounded-md border px-3 text-left text-sm font-medium transition-colors",
+                    an ? "border-primary bg-primary-soft text-primary ring-1 ring-primary" : "bg-card text-muted-foreground hover:bg-muted")}>
+                  <span className={cn("h-3.5 w-3.5 shrink-0 rounded-sm", a.wert !== "montage" && f.klasse)} style={a.wert === "montage" ? { background: f.streifen } : undefined} />
+                  <span className="min-w-0">
+                    <span className="block">{a.text}</span>
+                    <span className="block truncate text-[11px] font-normal text-muted-foreground">{a.hinweis}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {w.art !== "buero" && (
+          <div className="space-y-2">
+            <Label>Kunde</Label>
+            <KundeWahl wert={w.kundeId || null} onChange={kundeWaehlen} />
+          </div>
+        )}
+
+        {w.art === "montage" && (
+          <div className="space-y-2">
+            <Label>Projekt</Label>
+            {!w.kundeId && !w.projektId ? (
+              <p className="rounded-md border border-dashed px-3 py-2.5 text-sm text-muted-foreground">Zuerst den Kunden wählen — dann stehen hier seine Projekte „In Arbeit“.</p>
+            ) : kundenListe.length === 0 ? (
+              <p className="rounded-md border border-status-gelb bg-status-gelb/40 px-3 py-2.5 text-sm">
+                Kein Projekt „In Arbeit“ bei {kunde?.name ?? "diesem Kunden"}. Ein Projekt entsteht, wenn das Angebot angenommen ist — bis dahin Art „Besichtigung“ oder „Service“.
+              </p>
+            ) : (
+              <div className="grid gap-2" role="radiogroup" aria-label="Projekt">
+                {kundenListe.map((p) => {
+                  const an = w.projektId === p.id;
+                  return (
+                    <button key={p.id} type="button" role="radio" aria-checked={an} onClick={() => projektWaehlen(p.id)}
+                      className={cn("flex min-h-12 items-center gap-3 rounded-md border px-3 py-2 text-left transition-colors",
+                        an ? "border-primary bg-primary-soft ring-1 ring-primary" : "bg-card hover:bg-muted")}>
+                      <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: terminFarbe("montage", p).streifen }} />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-medium">{p.nummer} · {p.name}</span>
+                        {adresseZeile(p) && <span className="block truncate text-xs text-muted-foreground">{adresseZeile(p)}</span>}
+                      </span>
+                      {p.status !== "aktiv" && <StatusPille eintrag={PROJEKT_STATUS[p.status as keyof typeof PROJEKT_STATUS]} />}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {(w.art === "besichtigung" || w.art === "service") && orte.length > 0 && (
+          <div className="space-y-2">
+            <Label>Wo?</Label>
+            <div className="flex flex-wrap gap-2">
+              {orte.map((o) => {
+                const an = w.ort === o.text;
+                return (
+                  <button key={o.text} type="button" aria-pressed={an} onClick={() => setze({ ort: o.text })}
+                    className={cn("flex min-h-11 max-w-full flex-col items-start rounded-md border px-3 py-1.5 text-left text-sm transition-colors",
+                      an ? "border-primary bg-primary-soft text-primary" : "bg-card hover:bg-muted")}>
+                    <span className="max-w-full truncate font-medium">{o.text}</span>
+                    <span className="max-w-full truncate text-[11px] text-muted-foreground">{o.wo}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        <div className="space-y-2">
+          <Label htmlFor="t-ort">{w.art === "besichtigung" || w.art === "service" ? "Adresse (oder frei eintippen)" : "Ort"}</Label>
+          <AdresseFeld id="t-ort" className="h-12" wert={w.ort} onChange={(ort) => setze({ ort })} placeholder="Adresse – Vorschläge kommen beim Tippen"
+            onWaehlen={(a) => setze({ ort: `${a.strasse}, ${a.plz} ${a.ort}` })} />
         </div>
 
         <div className="space-y-2">
@@ -361,12 +489,6 @@ export function TerminDialog({
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="t-ort">Ort</Label>
-          <AdresseFeld id="t-ort" className="h-12" wert={w.ort} onChange={(ort) => setze({ ort })} placeholder="Adresse – Vorschläge kommen beim Tippen"
-            onWaehlen={(a) => setze({ ort: `${a.strasse}, ${a.plz} ${a.ort}` })} />
-        </div>
-
-        <div className="space-y-2">
           <Label htmlFor="t-beschr">Notiz</Label>
           <Textarea id="t-beschr" rows={3} value={w.beschreibung} onChange={(e) => setze({ beschreibung: e.target.value })} />
         </div>
@@ -390,5 +512,5 @@ export function TerminDialog({
 }
 
 function leer(datum: string): TerminWerte {
-  return { titel: "", datum, bisDatum: "", ganztags: false, von: "07:00", bis: "15:30", projektId: "", ort: "", beschreibung: "", dabei: [], dringend: false, teamId: "", fahrzeuge: [] };
+  return { art: "montage", kundeId: "", titel: "", datum, bisDatum: "", ganztags: false, von: "07:00", bis: "15:30", projektId: "", ort: "", beschreibung: "", dabei: [], dringend: false, teamId: "", fahrzeuge: [] };
 }

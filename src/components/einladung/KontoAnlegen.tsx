@@ -12,7 +12,7 @@ import { authFehler, emailFehler, emailVorschlag } from "@/lib/konto";
  * („Registrieren“). Vorname, Nachname, E-Mail (damit meldet man sich an und
  * bekommt „Passwort vergessen“), Passwort. Am Anfang ist jedes Konto sofort
  * freigeschaltet (Trigger handle_new_user); Chef-Rechte gibt der
- * Chef unter Einstellungen → Mitarbeiter, das Team in der Plantafel → Teams.
+ * Chef unter Einstellungen → Mitarbeiter, das Team im Kalender → Teams.
  */
 
 export function PasswortFeld({ id, autoComplete, autoFocus }: { id: string; autoComplete: string; autoFocus?: boolean }) {

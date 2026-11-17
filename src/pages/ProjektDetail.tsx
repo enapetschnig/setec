@@ -479,7 +479,7 @@ function ProjektTermine({ projektId, darf, onNeu, onWahl }: { projektId: string;
       {darf && (
         <div className="flex flex-wrap gap-2">
           <Button onClick={onNeu} className="h-12 gap-2"><CalendarPlus className="h-4 w-4" /> Termin eintragen</Button>
-          <Button variant="outline" className="h-12" asChild><Link to="/plantafel">Zur Plantafel</Link></Button>
+          <Button variant="outline" className="h-12" asChild><Link to="/kalender">Zum Kalender</Link></Button>
         </div>
       )}
       {!isLoading && termine.length === 0 ? <Leer icon={CalendarDays} text="Keine Termine zu diesem Projekt." /> : (

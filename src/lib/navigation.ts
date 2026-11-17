@@ -1,5 +1,5 @@
 import {
-  BarChart3, BookOpenCheck, MessageSquarePlus, Bus, FileCheck2, FileText, LayoutGrid, HandCoins, ClipboardSignature, Clock, FolderKanban, Home, Inbox, Package,
+  BarChart3, BookOpenCheck, MessageSquarePlus, Bus, CalendarDays, FileCheck2, FileText, HandCoins, ClipboardSignature, Clock, FolderKanban, Home, Inbox, Package,
   FolderArchive, ListTodo, PackageCheck, Receipt, ScanBarcode, Settings, ShieldCheck, ShoppingCart, Smartphone, UserCog, Users, Warehouse, type LucideIcon,
 } from "lucide-react";
 
@@ -34,7 +34,7 @@ export const NAVIGATION: NavEintrag[] = [
   { titel: "Kontakte", text: "Kunden, Lieferanten, Karte", nurChef: true, pfad: "/kunden", icon: Users, gruppe: "haupt", stichworte: "Kunde Lieferant Partner Telefon Adresse Karte PV-Anlage" },
   { titel: "Angebote", text: "Schreiben, vor Ort per Sprache, nachfassen", pfad: "/angebote", icon: FileText, gruppe: "haupt", nurChef: true, stichworte: "Vorlage Kostenvoranschlag Sprache" },
   { titel: "Rechnungen", text: "Aus dem Projekt, PDF mit Bezahl-QR", pfad: "/rechnungen", icon: Receipt, gruppe: "haupt", nurChef: true, stichworte: "Teilrechnung Schlussrechnung Storno Gutschrift" },
-  { titel: "Plantafel", text: "Einteilen: Gantt und Wochenplan, mit Kalender", textMonteur: "Wer fährt wann mit wem wohin", nurChef: true, pfad: "/plantafel", icon: LayoutGrid, gruppe: "haupt", stichworte: "Kalender Termin Einsatz Terminplaner Wochenplan Gantt Einteilung Team Bus Urlaub Krank Abwesenheit" },
+  { titel: "Kalender", text: "Einteilen: Leute, Geräte, Besichtigungen, Urlaub", textMonteur: "Wo bin ich wann — und wer ist abwesend", pfad: "/kalender", icon: CalendarDays, gruppe: "haupt", stichworte: "Plantafel Einteilung Wochenplan Terminplaner Termin Einsatz Montage Besichtigung Service Team Bus Steiger Gerät Urlaub Krank Abwesenheit" },
 
   { titel: "Stunden", text: "Meine Woche und mein Monat, Stunden buchen", pfad: "/zeiten", icon: Clock, gruppe: "baustelle", stichworte: "Zeiten Arbeitszeit Zeitkonto Urlaub Krank Abwesenheit Monat" },
   { titel: "Aufgaben", text: "Wer muss was bis wann erledigen", textMonteur: "Was ich erledigen soll — abhaken", nurChef: true, pfad: "/aufgaben", icon: ListTodo, gruppe: "baustelle", stichworte: "To-do erledigen Erinnerung" },

@@ -98,7 +98,7 @@ DEMO_CHEF_PASSWORT=… scripts/demo-zuruecksetzen.sh
 
 Das Skript schiebt den Verlauf (`supabase/demo/daten_schieben.py`) um ganze Wochen bis in die laufende Woche.
 `03-verlauf.sql` schreibt außerdem drei Monate Stunden mit Von–Bis für alle
-Monteure bis gestern und plant die Teams acht Wochen voraus (Plantafel).
+Monteure bis gestern und plant die Teams acht Wochen voraus (Kalender).
 
 Einzeln: `scripts/demo-dateien-loeschen.mjs`, dann `supabase/demo/01-stamm.sql`,
 danach `demo-dateien-loeschen.mjs --archiv` (abgelegte Rechnungs-PDFs — erst

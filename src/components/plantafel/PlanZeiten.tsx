@@ -42,7 +42,7 @@ export function PlanZeiten() {
   );
 
   return (
-    <Karte titel="Plantafel">
+    <Karte titel="Kalender">
       <p className="mb-3 text-sm text-muted-foreground">
         Welche Stunden der Wochenplan zeigt. Einsätze davor oder danach sind trotzdem zu sehen.
       </p>

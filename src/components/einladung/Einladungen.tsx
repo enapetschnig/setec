@@ -74,7 +74,7 @@ export function EinladenKarte() {
     <Karte titel="Neue Mitarbeiter">
       <p className="text-sm text-muted-foreground">
         Jeder registriert sich selbst über diesen einen Link — der erkennt das Handy, zeigt, wie die App auf den Startbildschirm kommt,
-        und führt zum Registrieren. Wer sich registriert, ist sofort drin. Chef-Rechte gibst du danach hier unten, das Team in der Plantafel unter „Teams“.
+        und führt zum Registrieren. Wer sich registriert, ist sofort drin. Chef-Rechte gibst du danach hier unten, das Team im Kalender unter „Teams“.
       </p>
       <div className="mt-4 grid gap-5 md:grid-cols-[auto_1fr] md:items-start" data-pruef="app-link">
         <div className="mx-auto rounded-xl border bg-white p-3">

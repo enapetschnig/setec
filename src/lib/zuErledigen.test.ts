@@ -37,7 +37,10 @@ describe("Navigation", () => {
   const finde = (q: string) => NAVIGATION.filter((n) => navPasst(n, q)).map((n) => n.titel);
 
   it("Suche findet Seiten auch über Stichworte", () => {
-    expect(finde("kalender")).toContain("Plantafel");
+    expect(finde("kalender")).toContain("Kalender");
+    expect(finde("Plantafel")).toEqual(["Kalender"]);
+    expect(finde("Einteilung")).toContain("Kalender");
+    expect(finde("Wochenplan")).toEqual(["Kalender"]);
     expect(finde("Lohnzettel")).toContain("Dokumente");
     expect(finde("kunde")).toContain("Kontakte");
     expect(finde("Mitarbeiter")).toContain("Mitarbeiter & Zugänge");
