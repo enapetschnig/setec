@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import { Lock, Minus, PenLine, Plus, ScanBarcode, Search, X } from "lucide-react";
+import { Lock, Mic, Minus, PenLine, Plus, ScanBarcode, Search, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import FormularDialog from "@/components/FormularDialog";
 import { DiktatKnopf } from "@/components/DiktatKnopf";
@@ -15,12 +15,17 @@ import { zahl, zahlLesen } from "@/lib/format";
 import { codeBereinigen } from "@/lib/strichcode";
 import { EINHEITEN, type Artikel, type Lagerort } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { DIREKT, materialFehler, materialMenge, mengeSchritt, neueId, textAnhaengen, type Entwurf, type MaterialZeile } from "./regieLogik";
+import { RegieMaterialSprache } from "./RegieMaterialSprache";
+import {
+  DIREKT, materialFehler, materialMenge, mengeSchritt, neueId, textAnhaengen,
+  type Entwurf, type KiMaterialPosten, type MaterialZeile,
+} from "./regieLogik";
 
 type ArtikelKurz = Pick<Artikel, "id" | "bezeichnung" | "einheit" | "ek_preis">;
 
 /**
- * Material im Regiebericht: suchen, scannen oder frei eintippen.
+ * Material im Regiebericht: suchen, scannen, reinreden (KI sucht im Stamm)
+ * oder frei eintippen.
  * Artikel kommen aus einem Lagerort (Standard: der eigene Bus) und werden
  * als Ausfassung gebucht — oder „direkt“ (gekauft, geliefert, ohne Lager).
  * Freie Positionen sind immer direkt.
@@ -39,6 +44,7 @@ export function MaterialListe({
   const [suche, setSuche] = useState(false);
   const [scan, setScan] = useState(false);
   const [frei, setFrei] = useState(false);
+  const [sprache, setSprache] = useState(false);
 
   const setzen = (key: string, teil: Partial<MaterialZeile>) =>
     aendern((e) => ({ ...e, material: e.material.map((m) => (m.key === key ? { ...m, ...teil } : m)) }));
@@ -74,6 +80,23 @@ export function MaterialListe({
     const menge = treffer.menge;
     artikelDazu(a, menge);
     toast.success(`${zahl(menge)} ${a.einheit} · ${a.bezeichnung}`);
+  };
+
+  /** Aus „reinreden“: Artikel wie gesucht (Menge dazu), der Rest als freie Position */
+  const kiDazu = (liste: KiMaterialPosten[]) => {
+    liste.forEach((p) => {
+      if (p.artikel) artikelDazu(p.artikel, p.menge);
+      else {
+        aendern((e) => ({
+          ...e,
+          material: [...e.material, {
+            key: neueId(), id: null, artikelId: null, bezeichnung: p.bezeichnung, einheit: p.einheit,
+            menge: String(p.menge).replace(".", ","), quelle: DIREKT, ekPreis: null, aenderbar: true, basis: null, userId: ich,
+          }],
+        }));
+      }
+    });
+    if (liste.length) toast.success(liste.length === 1 ? `${liste[0].bezeichnung} dazu` : `${liste.length} Positionen dazu`);
   };
 
   const entfernen = (m: MaterialZeile) =>
@@ -114,9 +137,12 @@ export function MaterialListe({
         </ul>
       )}
 
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Button type="button" variant="outline" className="h-12 gap-1.5 px-2" onClick={() => setSuche(true)}>
-          <Search className="h-4 w-4" /> Suchen
+          <Search className="h-4 w-4" /> Katalog
+        </Button>
+        <Button type="button" variant="outline" className="h-12 gap-1.5 px-2" onClick={() => setSprache(true)}>
+          <Mic className="h-4 w-4" /> Reinreden
         </Button>
         <Button type="button" variant="outline" className="h-12 gap-1.5 px-2" onClick={() => setScan(true)}>
           <ScanBarcode className="h-4 w-4" /> Scannen
@@ -125,6 +151,8 @@ export function MaterialListe({
           <PenLine className="h-4 w-4" /> Frei
         </Button>
       </div>
+
+      <RegieMaterialSprache open={sprache} onOpenChange={setSprache} onUebernehmen={kiDazu} />
 
       <FormularDialog open={suche} onOpenChange={setSuche} titel="Material suchen" beschreibung={`Aus: ${quellen.find((q) => q.wert === standardQuelle)?.text ?? "–"}`}>
         {suche && (

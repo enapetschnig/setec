@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { Check, FileText, FolderOpen, History, Loader2, PenLine, Receipt, Save, Trash2 } from "lucide-react";
+import { Check, FileText, FolderOpen, History, Loader2, PenLine, Receipt, Save, Trash2, Wrench } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Seite } from "@/components/PageHeader";
 import { Karte, RegieStatusBadge } from "@/components/Bausteine";
+import { AdresseFeld } from "@/components/AdresseFeld";
 import { DiktatKnopf } from "@/components/DiktatKnopf";
+import { KundeWahl } from "@/components/KundeWahl";
 import { ProjektWahl } from "@/components/ProjektWahl";
 import { useLetzteProjekte } from "@/components/dialoge/ZeitDialog";
 import { Button } from "@/components/ui/button";
@@ -16,14 +19,15 @@ import {
   AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useLagerorte, useMitarbeiter, useNeuLaden, useProjekte } from "@/hooks/useDaten";
+import { useKunden, useLagerorte, useMitarbeiter, useNeuLaden, useProjekte } from "@/hooks/useDaten";
 import { useSitzung } from "@/hooks/useSitzung";
 import { zahlLesen } from "@/lib/format";
-import { regieberichtLaden, zeitpunkt, type RegieVoll } from "@/lib/regiePdf";
+import { regieberichtLaden, regieKunde, zeitpunkt, type RegieVoll } from "@/lib/regiePdf";
 import { name, type Profil } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { KundenUnterschrift, type KundenSicht } from "./KundenUnterschrift";
 import { MaterialListe } from "./MaterialListe";
+import { RegieFotos } from "./RegieFotos";
 import { baustelleText } from "./RegieAnsicht";
 import { ZeitPartie } from "./ZeitPartie";
 import {
@@ -31,8 +35,8 @@ import {
   useStundenVorschlaege,
 } from "./regieDaten";
 import {
-  DIREKT, hatInhalt, materialMenge, materialZusammenfassen, schnappschuss, textAnhaengen, zeileLeer, zeileStunden,
-  zeitSpanne, type Entwurf, type ZeitModus,
+  DIREKT, adresseText, hatInhalt, materialMenge, materialZusammenfassen, schnappschuss, textAnhaengen, unterschriftOrdner,
+  zeileLeer, zeileStunden, zeitSpanne, zuordnungFehler, type Adresse, type Entwurf, type ZeitModus,
 } from "./regieLogik";
 import { sicherungLesen, sicherungLoeschen, sicherungSchreiben, type Sicherung } from "./sicherung";
 import { useRegiePdf } from "./useRegiePdf";
@@ -43,7 +47,7 @@ const MODUS_KEY = "elektro.zeitmodus";
 const QUELLE_KEY = "elektro.regie.quelle";
 
 /** Übergabe beim Wechsel /regie/neu → /regie/<id> (der Editor wird dabei neu aufgebaut) */
-type Uebergabe = { entwurf?: Entwurf; unterschreiben?: boolean } | null;
+type Uebergabe = { entwurf?: Entwurf; unterschreiben?: boolean; fotos?: boolean } | null;
 type Person = Pick<Profil, "vorname" | "nachname" | "farbe">;
 
 function gemerkterModus(): ZeitModus {
@@ -65,6 +69,13 @@ function mitLeerenZeilen(db: Entwurf, alt: Entwurf): Entwurf {
  * Alles bleibt im Editor, bis „Speichern“ oder „Unterschreiben lassen“
  * gedrückt wird; dann bucht regieSpeichern() Bericht, Stunden und Material.
  */
+/**
+ * Vorbelegen über die Adresse (Kalender: „Regiebericht“ am Service-Termin):
+ *   /regie/neu?projekt=<id>                 mit Projekt
+ *   /regie/neu?kunde=<id>[&termin=<id>]     ohne Projekt, Einsatzort = Adresse des Kunden
+ *   /regie/neu?termin=<id>                  Projekt bzw. Kunde und Datum aus dem Termin
+ *   /regie/neu?ohne=1                       ohne Projekt, Kunde noch offen
+ */
 export function RegieEditor({ voll }: { voll: RegieVoll | null }) {
   const { profil, istChef } = useSitzung();
   const ich = profil?.id ?? "";
@@ -74,6 +85,7 @@ export function RegieEditor({ voll }: { voll: RegieVoll | null }) {
   const neuLaden = useNeuLaden();
   const pdf = useRegiePdf();
   const { data: projekte = [] } = useProjekte();
+  const { data: kunden = [] } = useKunden();
   const { data: mitarbeiter = [] } = useMitarbeiter();
   const { data: lagerorte = [], isSuccess: lagerorteDa } = useLagerorte();
   const { data: letzte = [] } = useLetzteProjekte(ich || undefined);
@@ -81,7 +93,12 @@ export function RegieEditor({ voll }: { voll: RegieVoll | null }) {
 
   const [modusStandard, setModusStandard] = useState<ZeitModus>(gemerkterModus);
   const [entwurf, setEntwurf] = useState<Entwurf>(() => {
-    if (!voll) return neuerEntwurf(params.get("projekt") ?? "", ich, gemerkterModus());
+    if (!voll) {
+      return neuerEntwurf(params.get("projekt") ?? "", ich, gemerkterModus(), {
+        kundeId: params.get("kunde") ?? undefined, terminId: params.get("termin"),
+        ohneProjekt: !params.get("projekt") && (!!params.get("kunde") || params.get("ohne") === "1"),
+      });
+    }
     if (uebergabe?.entwurf?.berichtId === voll.id) return uebergabe.entwurf;
     const db = entwurfAus(voll, ich, istChef);
     return db.zeilen.length ? db : { ...db, zeilen: [neueZeile(ich, gemerkterModus())] };
@@ -107,7 +124,7 @@ export function RegieEditor({ voll }: { voll: RegieVoll | null }) {
   const nachSpeichern = useRef(false);
   const speichertRef = useRef(false);
   const weg = useRef(false);
-  const projektGewaehlt = useRef(!!params.get("projekt"));
+  const projektGewaehlt = useRef(!!params.get("projekt") || !!params.get("kunde") || !!params.get("termin") || params.get("ohne") === "1");
   const letzteVoll = useRef(voll);
 
   const gespeichert = !!entwurf.berichtId;
@@ -142,10 +159,41 @@ export function RegieEditor({ voll }: { voll: RegieVoll | null }) {
 
   // Ohne Vorgabe: das zuletzt bebuchte, noch laufende Projekt
   useEffect(() => {
-    if (gespeichert || entwurf.projektId || projektGewaehlt.current) return;
+    if (gespeichert || entwurf.projektId || entwurf.ohneProjekt || projektGewaehlt.current) return;
     const p = letzte.map((id) => projekte.find((x) => x.id === id)).find((x) => x && x.status === "aktiv");
     if (p) setEntwurf((e) => (e.projektId ? e : { ...e, projektId: p.id }));
-  }, [letzte, projekte, gespeichert, entwurf.projektId]);
+  }, [letzte, projekte, gespeichert, entwurf.projektId, entwurf.ohneProjekt]);
+
+  // Vom Kalender: Projekt oder Kunde und Datum aus dem Termin (Felder je nach Stand des Kalenders)
+  const terminParam = !voll ? params.get("termin") : null;
+  const { data: termin } = useQuery({
+    queryKey: ["termine", "fuer-regie", terminParam],
+    enabled: !!terminParam,
+    queryFn: async () => {
+      const { data, error } = await supabase.from("termine").select("*").eq("id", terminParam!).maybeSingle();
+      if (error) throw error;
+      return data as ({ datum: string; projekt_id: string | null; kunde_id?: string | null } | null);
+    },
+  });
+  const terminUebernommen = useRef(false);
+  useEffect(() => {
+    if (!termin || terminUebernommen.current || gespeichert) return;
+    terminUebernommen.current = true;
+    setEntwurf((e) => {
+      const projektId = e.projektId || (!e.kundeId ? termin.projekt_id ?? "" : "");
+      const kundeId = e.kundeId || (!projektId ? termin.kunde_id ?? "" : "");
+      return { ...e, projektId, kundeId, ohneProjekt: !projektId, datum: termin.datum || e.datum };
+    });
+  }, [termin, gespeichert]);
+
+  // Ohne Projekt: Einsatzort = Adresse des Kunden, solange nichts eingetragen ist
+  const kunde = useMemo(() => kunden.find((k) => k.id === entwurf.kundeId) ?? null, [kunden, entwurf.kundeId]);
+  useEffect(() => {
+    if (!entwurf.ohneProjekt || !kunde || gespeichert || adresseText(entwurf.adresse)) return;
+    setEntwurf((e) => (e.kundeId === kunde.id && !adresseText(e.adresse)
+      ? { ...e, adresse: { strasse: kunde.strasse ?? "", plz: kunde.plz ?? "", ort: kunde.ort ?? "" } }
+      : e));
+  }, [kunde, entwurf.ohneProjekt, entwurf.adresse, gespeichert]);
 
   // Material kommt standardmäßig aus dem eigenen Bus
   useEffect(() => {
@@ -179,7 +227,8 @@ export function RegieEditor({ voll }: { voll: RegieVoll | null }) {
     return () => window.removeEventListener("beforeunload", warnen);
   }, [ungespeichert]);
 
-  const { data: vorschlaege = [] } = useStundenVorschlaege(entwurf.projektId, entwurf.datum, true);
+  // Schon gebuchte Stunden gibt es nur am Projekt — ohne Projekt nichts vorzuschlagen
+  const { data: vorschlaege = [] } = useStundenVorschlaege(entwurf.projektId, entwurf.datum, !entwurf.ohneProjekt);
 
   const personen = useMemo(() => {
     const m = new Map<string, Person>();
@@ -192,13 +241,19 @@ export function RegieEditor({ voll }: { voll: RegieVoll | null }) {
   const namen = useCallback((id: string | null) => (id ? name(personen.get(id)) : "–"), [personen]);
 
   const kopf = useMemo(() => {
+    if (entwurf.ohneProjekt) return null;
     const p = voll?.projekte ?? projekte.find((x) => x.id === entwurf.projektId) ?? null;
     if (!p) return null;
     return { id: p.id, nummer: p.nummer, name: p.name, kunde: p.kunden?.name ?? null, baustelle: baustelleText(p) || null };
-  }, [voll, projekte, entwurf.projektId]);
+  }, [voll, projekte, entwurf.projektId, entwurf.ohneProjekt]);
+  const kundeName = entwurf.ohneProjekt ? kunde?.name ?? voll?.kunden?.name ?? null : kopf?.kunde ?? null;
+  const einsatzort = entwurf.ohneProjekt ? adresseText(entwurf.adresse) || null : kopf?.baustelle ?? null;
 
-  const { data: letzterName = "" } = useLetzterUnterzeichner(entwurf.projektId || undefined);
-  const nameVorschlag = letzterName || voll?.projekte?.kunden?.ansprechpartner || "";
+  const { data: letzterName = "" } = useLetzterUnterzeichner(
+    entwurf.ohneProjekt ? undefined : entwurf.projektId || undefined,
+    entwurf.ohneProjekt ? entwurf.kundeId || undefined : undefined,
+  );
+  const nameVorschlag = letzterName || (voll ? regieKunde(voll)?.ansprechpartner : null) || kunde?.ansprechpartner || "";
 
   const darfLoeschen = !!voll && voll.status === "entwurf" && (istChef || voll.erstellt_von === ich);
 
@@ -207,6 +262,24 @@ export function RegieEditor({ voll }: { voll: RegieVoll | null }) {
     projektGewaehlt.current = true;
     aendern((e) => ({ ...e, projektId: id, zeilen: e.zeilen.filter((z) => z.herkunft !== "uebernehmen") }));
   };
+
+  /** Neuer Bericht: mit Projekt oder als Service beim Kunden (gespeichert bleibt es dabei) */
+  const artWaehlen = (ohneProjekt: boolean) => {
+    projektGewaehlt.current = true;
+    aendern((e) => ({ ...e, ohneProjekt, zeilen: ohneProjekt ? e.zeilen.filter((z) => z.herkunft !== "uebernehmen") : e.zeilen }));
+  };
+
+  const kundeWaehlen = (id: string | null) => {
+    const k = kunden.find((x) => x.id === id) ?? null;
+    aendern((e) => ({
+      ...e,
+      kundeId: id ?? "",
+      // Neuer Kunde = seine Adresse als Einsatzort (änderbar)
+      adresse: k ? { strasse: k.strasse ?? "", plz: k.plz ?? "", ort: k.ort ?? "" } : e.adresse,
+    }));
+  };
+
+  const adresseSetzen = (teil: Partial<Adresse>) => aendern((e) => ({ ...e, adresse: { ...e.adresse, ...teil } }));
 
   const datumSetzen = (d: string) => {
     const hatteUebernommene = entwurf.zeilen.some((z) => z.herkunft === "uebernehmen");
@@ -226,7 +299,7 @@ export function RegieEditor({ voll }: { voll: RegieVoll | null }) {
 
   // ── Speichern ──
   /** true = gespeichert und Bericht bleibt in diesem Editor; neuer Bericht: Seitenwechsel → false */
-  const speichern = async (danach?: "unterschreiben"): Promise<boolean> => {
+  const speichern = async (danach?: "unterschreiben" | "fotos"): Promise<boolean> => {
     if (speichertRef.current) return false;
     if (!ich) {
       toast.error("Nicht angemeldet.");
@@ -257,7 +330,7 @@ export function RegieEditor({ voll }: { voll: RegieVoll | null }) {
         // Neue Adresse = neuer Editor: offenen Rest und den nächsten Schritt mitgeben
         navigate(`/regie/${r.zustand.berichtId}`, {
           replace: true,
-          state: { entwurf: ok ? undefined : r.zustand, unterschreiben: ok && danach === "unterschreiben" } satisfies Uebergabe,
+          state: { entwurf: ok ? undefined : r.zustand, unterschreiben: ok && danach === "unterschreiben", fotos: ok && danach === "fotos" } satisfies Uebergabe,
         });
         return false;
       }
@@ -270,8 +343,9 @@ export function RegieEditor({ voll }: { voll: RegieVoll | null }) {
 
   // ── Unterschreiben ──
   const unterschreibenStarten = async () => {
-    if (!entwurf.projektId) {
-      toast.error("Bitte zuerst das Projekt wählen.");
+    const ohne = zuordnungFehler(entwurf);
+    if (ohne) {
+      toast.error(ohne);
       return;
     }
     if (!entwurf.arbeiten.trim()) {
@@ -294,7 +368,7 @@ export function RegieEditor({ voll }: { voll: RegieVoll | null }) {
     const id = entwurf.berichtId;
     if (!id) return false;
     const speicher = supabase.storage.from("projekt-dateien");
-    const ordner = `${entwurf.projektId}/unterschriften`;
+    const ordner = unterschriftOrdner(entwurf.ohneProjekt ? null : entwurf.projektId, id);
     let pfad = `${ordner}/${id}.png`;
     let { error } = await speicher.upload(pfad, png, { upsert: true, contentType: "image/png" });
     if (error) {
@@ -324,9 +398,9 @@ export function RegieEditor({ voll }: { voll: RegieVoll | null }) {
   const sicht: KundenSicht = useMemo(() => ({
     nummer: entwurf.nummer,
     datum: entwurf.datum,
-    kunde: kopf?.kunde ?? null,
+    kunde: kundeName,
     projekt: kopf ? `${kopf.nummer} ${kopf.name}` : "",
-    baustelle: kopf?.baustelle ?? null,
+    baustelle: einsatzort,
     arbeiten: entwurf.arbeiten,
     zeiten: entwurf.zeilen.filter((z) => !zeileLeer(z)).map((z) => ({
       key: z.key,
@@ -337,7 +411,7 @@ export function RegieEditor({ voll }: { voll: RegieVoll | null }) {
     material: materialZusammenfassen(entwurf.material.map((m) => ({
       artikelId: m.artikelId, bezeichnung: m.bezeichnung, einheit: m.einheit, menge: materialMenge(m),
     }))).map((m, i) => ({ key: `${i}`, menge: m.menge, einheit: m.einheit, bezeichnung: m.bezeichnung })),
-  }), [entwurf, kopf, person]);
+  }), [entwurf, kopf, person, kundeName, einsatzort]);
 
   // ── PDF-Vorschau (gespeicherter Stand, ungespeichertes vorher speichern) ──
   const vorschauHolen = async () => {
@@ -349,6 +423,10 @@ export function RegieEditor({ voll }: { voll: RegieVoll | null }) {
   const loeschen = async (mitBuchungen: boolean) => {
     if (!voll) return;
     setLoescht(true);
+    // Ohne Projekt gehen Stunden, Material und Fotos mit (Trigger) — die Bilddateien hier
+    const fotoPfade = !voll.projekt_id
+      ? ((await supabase.from("dateien").select("pfad").eq("regiebericht_id", voll.id)).data ?? []).map((d) => d.pfad)
+      : [];
     const r = await regieLoeschen(voll, mitBuchungen);
     setLoescht(false);
     if (r.fehler) {
@@ -358,6 +436,7 @@ export function RegieEditor({ voll }: { voll: RegieVoll | null }) {
     weg.current = true;
     setLoeschenFrage(false);
     sicherungLoeschen(voll.id);
+    if (fotoPfade.length) void supabase.storage.from("projekt-dateien").remove(fotoPfade);
     toast.success(`${voll.nummer ?? "Regiebericht"} gelöscht`, r.uebrig ? {
       description: `${r.uebrig} Buchung(en) von Kollegen bleiben am Projekt — löschen kann sie nur, wer gebucht hat, oder der Chef.`,
     } : undefined);
@@ -373,7 +452,7 @@ export function RegieEditor({ voll }: { voll: RegieVoll | null }) {
     aendern(() => ({
       ...sicherung.entwurf,
       nummer: voll?.nummer ?? null,
-      kopfBasis: voll ? { datum: voll.datum, arbeiten: voll.arbeiten } : null,
+      kopfBasis: voll ? entwurfAus(voll, ich, istChef).kopfBasis : null,
     }));
     setSicherung(null);
     toast.success("Eingaben wiederhergestellt — noch nicht gespeichert.");
@@ -385,15 +464,18 @@ export function RegieEditor({ voll }: { voll: RegieVoll | null }) {
   };
 
   const anzahlZeiten = voll?.zeiten.length ?? 0;
+  // Ohne Projekt gibt es nichts, woran Stunden und Material hängen bleiben könnten
+  const ohneProjektGespeichert = !!voll && !voll.projekt_id;
   const anzahlMaterial = voll?.material.length ?? 0;
-  const projektChips = !gespeichert
+  const projektChips = !gespeichert && !entwurf.ohneProjekt
     ? letzte.map((id) => projekte.find((p) => p.id === id)).filter((p): p is NonNullable<typeof p> => !!p && p.status === "aktiv")
     : [];
 
   return (
     <Seite
       titel={entwurf.nummer ? `Regiebericht ${entwurf.nummer}` : "Neuer Regiebericht"}
-      untertitel={kopf ? [kopf.name, kopf.kunde].filter(Boolean).join(" · ") : "Projekt wählen"}
+      untertitel={kopf ? [kopf.name, kopf.kunde].filter(Boolean).join(" · ")
+        : entwurf.ohneProjekt ? [kundeName ?? "Kunde wählen", "ohne Projekt"].join(" · ") : "Projekt wählen"}
       aktionen={gespeichert ? (
         pdf.pc ? (
           <Button variant="outline" className="h-11 gap-1.5" disabled={pdf.laeuft || speichert} onClick={() => pdf.los(vorschauHolen)}>
@@ -440,9 +522,43 @@ export function RegieEditor({ voll }: { voll: RegieVoll | null }) {
         {/* grid-cols-1 = minmax(0, 1fr): lange, gekürzte Namen dürfen die Spalte nicht verbreitern */}
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:items-start">
           <div className="space-y-4">
-            <Karte titel="Projekt und Tag">
+            <Karte titel={entwurf.ohneProjekt ? "Kunde, Einsatzort und Tag" : "Projekt und Tag"}>
               <div className="space-y-4">
-                {gespeichert ? (
+                {!gespeichert && (
+                  <div className="grid grid-cols-2 gap-1 rounded-lg border bg-muted/40 p-1" role="group" aria-label="Woran hängt der Bericht?">
+                    {[
+                      { ohne: false, text: "Mit Projekt", icon: FolderOpen },
+                      { ohne: true, text: "Service ohne Projekt", icon: Wrench },
+                    ].map((o) => (
+                      <button key={o.text} type="button" aria-pressed={entwurf.ohneProjekt === o.ohne} onClick={() => artWaehlen(o.ohne)}
+                        className={cn("flex min-h-11 items-center justify-center gap-1.5 rounded-md px-2 text-sm font-medium transition-colors",
+                          entwurf.ohneProjekt === o.ohne ? "bg-card text-primary shadow-sm ring-1 ring-primary/40" : "text-muted-foreground hover:text-foreground")}>
+                        <o.icon className="h-4 w-4 shrink-0" /> <span className="truncate">{o.text}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {entwurf.ohneProjekt ? (
+                  <>
+                    <div className="space-y-2">
+                      <Label>Kunde</Label>
+                      <KundeWahl wert={entwurf.kundeId || null} onChange={(k) => kundeWaehlen(k?.id ?? null)} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="rb-strasse">Einsatzort</Label>
+                      <AdresseFeld id="rb-strasse" className="h-12 text-base" wert={entwurf.adresse.strasse} placeholder="Straße – Vorschläge kommen"
+                        onChange={(strasse) => adresseSetzen({ strasse })}
+                        onWaehlen={(a) => adresseSetzen({ strasse: a.strasse, plz: a.plz, ort: a.ort })} />
+                      <div className="grid grid-cols-[6rem_1fr] gap-2">
+                        <Input aria-label="PLZ" className="h-12 text-base" inputMode="numeric" value={entwurf.adresse.plz}
+                          onChange={(e) => adresseSetzen({ plz: e.target.value })} placeholder="PLZ" />
+                        <Input aria-label="Ort" className="h-12 text-base" value={entwurf.adresse.ort}
+                          onChange={(e) => adresseSetzen({ ort: e.target.value })} placeholder="Ort" />
+                      </div>
+                      <p className="text-xs text-muted-foreground">Vorbelegt mit der Adresse des Kunden — änderbar, wenn woanders gearbeitet wurde.</p>
+                    </div>
+                  </>
+                ) : gespeichert ? (
                   <Link to={`/projekte/${entwurf.projektId}`}
                     className="flex items-center gap-3 rounded-md border p-3 transition-colors hover:border-primary/50">
                     <FolderOpen className="h-5 w-5 shrink-0 text-primary" />
@@ -512,6 +628,7 @@ export function RegieEditor({ voll }: { voll: RegieVoll | null }) {
                 vorschlaege={vorschlaege}
                 modusStandard={modusStandard}
                 onModus={modusMerken}
+                ohneProjekt={entwurf.ohneProjekt}
               />
             </Karte>
 
@@ -524,6 +641,16 @@ export function RegieEditor({ voll }: { voll: RegieVoll | null }) {
                 standardQuelle={standardQuelle || DIREKT}
                 onStandardQuelle={quelleWaehlen}
                 namen={namen}
+              />
+            </Karte>
+
+            <Karte titel="Fotos">
+              <RegieFotos
+                berichtId={entwurf.berichtId}
+                projektId={entwurf.ohneProjekt ? null : entwurf.projektId || null}
+                bearbeitbar
+                kameraStart={!!uebergabe?.fotos}
+                vorSpeichern={async () => { await speichern("fotos"); }}
               />
             </Karte>
           </div>
@@ -552,7 +679,7 @@ export function RegieEditor({ voll }: { voll: RegieVoll | null }) {
             <Button
               variant="outline"
               className="h-12 shrink-0 gap-1.5 px-3.5 min-[375px]:px-4"
-              disabled={speichert || loescht || !entwurf.projektId}
+              disabled={speichert || loescht || !!zuordnungFehler(entwurf)}
               onClick={() => void speichern()}
             >
               {speichert ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
@@ -580,14 +707,16 @@ export function RegieEditor({ voll }: { voll: RegieVoll | null }) {
           <AlertDialogHeader>
             <AlertDialogTitle>Entwurf {voll?.nummer ?? ""} löschen?</AlertDialogTitle>
             <AlertDialogDescription>
-              {anzahlZeiten + anzahlMaterial > 0
-                ? `Im Bericht stecken ${anzahlZeiten} Stundenzeile${anzahlZeiten === 1 ? "" : "n"} und ${anzahlMaterial} Materialbuchung${anzahlMaterial === 1 ? "" : "en"}. Mitlöschen — oder als normale Buchungen am Projekt behalten?`
-                : "Der Bericht ist noch leer."}
+              {anzahlZeiten + anzahlMaterial === 0
+                ? "Der Bericht ist noch leer."
+                : ohneProjektGespeichert
+                  ? `Im Bericht stecken ${anzahlZeiten} Stundenzeile${anzahlZeiten === 1 ? "" : "n"} und ${anzahlMaterial} Materialbuchung${anzahlMaterial === 1 ? "" : "en"}. Ohne Projekt gehen sie samt Fotos mit — Material aus dem Bus kommt dort wieder dazu.`
+                  : `Im Bericht stecken ${anzahlZeiten} Stundenzeile${anzahlZeiten === 1 ? "" : "n"} und ${anzahlMaterial} Materialbuchung${anzahlMaterial === 1 ? "" : "en"}. Mitlöschen — oder als normale Buchungen am Projekt behalten?`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="gap-2 sm:gap-0">
             <AlertDialogCancel className="h-11" disabled={loescht}>Abbrechen</AlertDialogCancel>
-            {anzahlZeiten + anzahlMaterial > 0 ? (
+            {anzahlZeiten + anzahlMaterial > 0 && !ohneProjektGespeichert ? (
               <>
                 <Button variant="outline" className="h-11" disabled={loescht} onClick={() => void loeschen(false)}>Buchungen behalten</Button>
                 <Button variant="destructive" className="h-11" disabled={loescht} onClick={() => void loeschen(true)}>

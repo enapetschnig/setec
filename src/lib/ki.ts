@@ -31,8 +31,12 @@ export type KiKomponente = {
 };
 export type KiMaterial = { titel: string; hinweise: string[]; komponenten: KiKomponente[] };
 
-/** „PV-Anlage 9 kWp“ → Komponenten mit passenden Artikeln aus dem Stamm (nur Chef) */
-export const materialVorschlag = (text: string) => ki<KiMaterial>({ aufgabe: "material_vorschlag", text });
+/**
+ * „PV-Anlage 9 kWp“ → Komponenten mit passenden Artikeln aus dem Stamm (Angebot, nur Chef).
+ * Modus „verbraucht“ (Regiebericht, alle Mitarbeiter): genau das Gesagte, nichts dazugeplant.
+ */
+export const materialVorschlag = (text: string, modus: "angebot" | "verbraucht" = "angebot") =>
+  ki<KiMaterial>({ aufgabe: "material_vorschlag", text, modus });
 
 export type KiBelegPosition = {
   artikelnummer: string | null;

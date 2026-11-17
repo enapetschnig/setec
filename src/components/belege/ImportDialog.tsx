@@ -14,7 +14,7 @@ import type { Firma } from "@/lib/types";
 import { TON_KLASSE } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { ohneBetrag, summen, type EditorPosition, type Quelle } from "./editor";
-import { ABGEGOLTEN_TEXT, importDatenLaden, importPositionen, materialGruppen, type ImportAuswahl } from "./importieren";
+import { ABGEGOLTEN_TEXT, importDatenLaden, importPositionen, materialGruppen, regieImportLaden, type ImportAuswahl } from "./importieren";
 
 export type ImportErgebnis = { positionen: EditorPosition[]; von: string | null; bis: string | null; angebotId: string | null };
 
@@ -25,11 +25,13 @@ export type ImportErgebnis = { positionen: EditorPosition[]; von: string | null;
  * vorgewählt (stecken meist im Angebotspreis) und gelten als abgegolten.
  */
 export function ImportDialog({
-  open, onOpenChange, projektId, belegId, belegt, angebotId, stundensatzStart, firma, vorhandeneTitel, onUebernehmen,
+  open, onOpenChange, projektId, kundeId = null, belegId, belegt, angebotId, stundensatzStart, firma, vorhandeneTitel, onUebernehmen,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   projektId: string | null;
+  /** Rechnung ohne Projekt: die offenen Regieberichte dieses Kunden (Service) */
+  kundeId?: string | null;
   belegId: string | null;
   belegt: Quelle;
   /** Angebot, das schon in diesem Entwurf steckt (auch ungespeichert) */
@@ -41,13 +43,15 @@ export function ImportDialog({
 }) {
   const belegtSchluessel = [...belegt.zeiten, ...belegt.material, ...belegt.regie, ...(belegt.eingang ?? []), ...(belegt.teil ?? [])].sort().join(",");
   const { data, isLoading, error } = useQuery({
-    queryKey: ["belege", "import", projektId, belegId, belegtSchluessel, angebotId],
-    enabled: open && !!projektId,
+    queryKey: ["belege", "import", projektId, kundeId, belegId, belegtSchluessel, angebotId],
+    enabled: open && (!!projektId || !!kundeId),
     staleTime: 0,
     refetchOnMount: "always",
     // sonst setzt ein Fensterwechsel die Häkchen zurück
     refetchOnWindowFocus: false,
-    queryFn: () => importDatenLaden(projektId!, belegId, belegt, angebotId),
+    queryFn: () => (projektId
+      ? importDatenLaden(projektId, belegId, belegt, angebotId)
+      : regieImportLaden({ kundeId }, belegId, belegt)),
   });
 
   const [auswahl, setAuswahl] = useState<Required<ImportAuswahl>>({ angebote: [], regie: [], zeiten: [], material: [], eingang: [], teile: [] });
@@ -113,7 +117,7 @@ export function ImportDialog({
     <FormularDialog
       open={open}
       onOpenChange={onOpenChange}
-      titel="Aus dem Projekt übernehmen"
+      titel={projektId || !kundeId ? "Aus dem Projekt übernehmen" : "Regieberichte übernehmen"}
       beschreibung="Alles, was noch nicht verrechnet ist — anhaken und übernehmen."
       fuss={(
         <>
@@ -128,12 +132,12 @@ export function ImportDialog({
         </>
       )}
     >
-      {!projektId && <Leer icon={AlertTriangle} text="Zuerst ein Projekt wählen." />}
-      {projektId && isLoading && (
+      {!projektId && !kundeId && <Leer icon={AlertTriangle} text="Zuerst ein Projekt wählen." />}
+      {(projektId || kundeId) && isLoading && (
         <p className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Offenes wird geladen …</p>
       )}
       {error && <p className="text-sm text-destructive">Laden fehlgeschlagen: {(error as Error).message}</p>}
-      {leer && <Leer icon={CheckCircle2} text="Am Projekt ist nichts mehr offen — alles verrechnet." />}
+      {leer && <Leer icon={CheckCircle2} text={projektId ? "Am Projekt ist nichts mehr offen — alles verrechnet." : "Beim Kunden ist kein unterschriebener Regiebericht offen."} />}
 
       {data && data.unsigniert.length > 0 && (
         <div className={cn("flex gap-2.5 rounded-lg p-3 text-sm", TON_KLASSE.gelb)}>

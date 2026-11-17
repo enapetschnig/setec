@@ -41,7 +41,7 @@ export default function Regieberichte() {
   }, [alle]);
 
   const liste = useMemo(() => alle.filter((r) => passtFilter(r, filter) && passtSuche([
-    r.nummer, r.projekte?.nummer, r.projekte?.name, r.projekte?.ort, r.projekte?.kunden?.name, r.arbeiten, r.unterschrift_name,
+    r.nummer, r.projekte?.nummer, r.projekte?.name, r.projekte?.ort, r.projekte?.kunden?.name, r.kunden?.name, r.ort, r.arbeiten, r.unterschrift_name,
   ], suche)), [alle, filter, suche]);
 
   const summe = liste.reduce((s, r) => s + stundenSumme(r), 0);

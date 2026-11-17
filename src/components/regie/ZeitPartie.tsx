@@ -24,7 +24,7 @@ type Person = Pick<Profil, "vorname" | "nachname" | "farbe">;
  * Projekt und Tag werden angeboten und übernommen statt doppelt gebucht.
  */
 export function ZeitPartie({
-  entwurf, aendern, ich, istChef, person, mitarbeiter, vorschlaege, modusStandard, onModus,
+  entwurf, aendern, ich, istChef, person, mitarbeiter, vorschlaege, modusStandard, onModus, ohneProjekt = false,
 }: {
   entwurf: Entwurf;
   aendern: (f: (e: Entwurf) => Entwurf) => void;
@@ -33,6 +33,8 @@ export function ZeitPartie({
   person: (userId: string) => Person | null;
   mitarbeiter: Profil[];
   vorschlaege: StundenVorschlag[];
+  /** Service ohne Projekt: Stunden gehören nur dem Bericht — herausnehmen geht nicht, nur löschen */
+  ohneProjekt?: boolean;
   modusStandard: ZeitModus;
   onModus: (m: ZeitModus) => void;
 }) {
@@ -191,9 +193,13 @@ export function ZeitPartie({
               {frage && (
                 <>
                   <span className="zahl font-semibold text-foreground">{stunden(zeileStunden(frage))}</span> sind schon gebucht.{" "}
-                  {frage.aenderbar
-                    ? "Ganz löschen — oder nur aus dem Bericht nehmen, dann bleiben sie normale Projektstunden."
-                    : `Löschen können nur ${person(frage.userId)?.vorname || "die Person"} selbst oder der Chef. Aus dem Bericht nehmen geht — die Stunden bleiben am Projekt.`}
+                  {ohneProjekt
+                    ? (frage.aenderbar
+                      ? "Ohne Projekt gehören sie nur zu diesem Bericht — sie werden gelöscht."
+                      : `Löschen können nur ${person(frage.userId)?.vorname || "die Person"} selbst oder der Chef.`)
+                    : frage.aenderbar
+                      ? "Ganz löschen — oder nur aus dem Bericht nehmen, dann bleiben sie normale Projektstunden."
+                      : `Löschen können nur ${person(frage.userId)?.vorname || "die Person"} selbst oder der Chef. Aus dem Bericht nehmen geht — die Stunden bleiben am Projekt.`}
                 </>
               )}
             </AlertDialogDescription>
@@ -206,9 +212,11 @@ export function ZeitPartie({
                 Ganz löschen
               </Button>
             )}
-            <Button variant="outline" className="h-11" onClick={() => entfernenBestaetigen(true)}>
-              Nur aus dem Bericht nehmen
-            </Button>
+            {!ohneProjekt && (
+              <Button variant="outline" className="h-11" onClick={() => entfernenBestaetigen(true)}>
+                Nur aus dem Bericht nehmen
+              </Button>
+            )}
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

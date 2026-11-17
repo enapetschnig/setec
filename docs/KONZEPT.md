@@ -597,6 +597,15 @@ Bewusst einfach, kein eigenes Kalkulationsblatt:
   unterschriebene Berichte zeigt er als Hinweis, übernimmt sie aber nicht.
   Schon das **Speichern des Entwurfs** setzt `rechnung_id` an den Quellen —
   so kann niemand dieselbe Stunde ein zweites Mal verrechnen.
+- **„Noch nicht verrechnet“** ganz oben unter Rechnungen
+  (`NochNichtVerrechnet.tsx`, Gruppen aus `verrechnenGruppen` in
+  `regieLogik.ts`): unterschriebene Regieberichte ohne `rechnung_id` je Projekt
+  bzw. je Kunde (Service) plus erledigte Einsätze mit offenen Stunden. „Rechnung
+  daraus“: mit Projekt der Projekt-Import (`?projekt=…&import=1`), ohne Projekt
+  `/belege/neu?typ=rechnung&kunde=…&regie=<id,id>` — mehrere Berichte desselben
+  Kunden per Haken zusammen (`regieImportLaden` in `importieren.ts`). Leer =
+  ausgeblendet. Im Rechnungs-Editor ohne Projekt: „Regieberichte des Kunden
+  übernehmen“.
 - Fertigstellen (`beleg_fertigstellen`) vergibt die Nummer und rechnet die
   Summen. Vorher warnt der Editor (blockiert nicht): kein Leistungszeitraum,
   eigene UID fehlt (ab 400 € brutto), Empfänger-UID ab 10.000 € brutto und
@@ -919,8 +928,29 @@ Migration `20261113114000_projekte_foerderung_planung_saetze.sql`, Bausteine in 
   („übernehmen“) — `regie_zeiten_zuordnen(regie, dazu[], weg[])` setzt nur
   `regiebericht_id`, auch bei Stunden eines Kollegen (die Partie schreibt den
   Bericht meist auf EINEM Handy). Migration `20261025122000`.
-- Unterschreiben: Bild nach `projekt-dateien/<projekt_id>/unterschriften/<regie_id>.png`,
-  dann `status = 'unterschrieben'` + `unterschrift_name`. Ohne Bild und Namen
+- **Ohne Projekt (Service, Reparatur — Migration `20261117110000`)**: der
+  Bericht hängt dann am Kunden (`kunde_id`, `on delete restrict`) mit eigenem
+  Einsatzort (`strasse`/`plz`/`ort`, vorbelegt aus der Kundenadresse) und
+  optional am Termin (`termin_id`). Check: Projekt ODER Kunde. Stunden und
+  Material haben dann `projekt_id` null und hängen nur über `regiebericht_id`
+  (`buchung_passt` verlangt Projekt oder Bericht); der Bus-Bestand stimmt,
+  weil `lagerbestand` nicht am Projekt hängt. Service-Stunden zählen in
+  Auswertung und Lohn als produktiv. Einen Entwurf ohne Projekt löschen räumt
+  seine Stunden, Buchungen und Fotos mit ab (Trigger). Aufruf:
+  `/regie/neu?kunde=<id>[&termin=<id>]`, `?termin=<id>` (Projekt oder Kunde
+  aus dem Termin), `?ohne=1`; im Editor Umschalter „Mit Projekt“ / „Service
+  ohne Projekt“, solange ungespeichert (Logik `regieLogik.ts`: `kopfWerte`,
+  `zuordnungFehler`, `unterschriftOrdner`, `fotoOrdner`).
+- **Fotos** (`RegieFotos.tsx`): `dateien.regiebericht_id`, Ablage unter
+  `<projekt_id>/…` bzw. `regie/<regie_id>/…`; im PDF zwei je Zeile (höchstens
+  12). Nach der Unterschrift sind die Fotos fest (Trigger `dateien_regie_schutz`).
+- **Material am Handy** (`MaterialListe.tsx`): Katalog, Reinreden, Scannen,
+  Frei. „Reinreden“ (`RegieMaterialSprache.tsx`) diktiert, schickt den Text an
+  `ki`/`material_vorschlag` im Modus `verbraucht` (für alle aktiven Nutzer,
+  nur das Gesagte, Artikel aus dem eigenen Stamm) und zeigt Vorschläge zum
+  Antippen; ohne Treffer als freie Position.
+- Unterschreiben: Bild nach `projekt-dateien/<projekt_id>/unterschriften/<regie_id>.png`
+  (ohne Projekt `regie/<regie_id>/unterschriften/<regie_id>.png`), dann `status = 'unterschrieben'` + `unterschrift_name`. Ohne Bild und Namen
   lehnt der Trigger `regieberichte_unterschrift` ab; `unterschrieben_am` setzt
   der Server (eine falsch gehende Handyuhr landet nicht im Beleg).
 - Danach ist der Bericht fest (Trigger `regie_schutz`); die Unterschriftsdatei
@@ -1013,9 +1043,11 @@ Projekt- und Regienummer vergibt ein Trigger beim Anlegen, Belegnummern
    jeder Treffer landet in der Liste (Menge ±, bei Metern Zahlenfeld) →
    „Buchen“. Unbekannter Code → Artikel suchen und Code zuordnen ODER neuen
    Artikel anlegen. Rückgabe genauso, Modus „Zurück“. Verbrauch rechnet die View.
-3. **Regiebericht**: Projekt → „Regiebericht“ → Arbeiten (diktieren) →
-   Stunden der Partie (vorbelegt mit heutigen Stunden am Projekt) → Material →
-   Kunde unterschreibt am Handy → PDF teilen.
+3. **Regiebericht**: Projekt → „Regiebericht“ (oder Kunde/Termin → Service
+   ohne Projekt) → Arbeiten (diktieren) → Stunden der Partie (vorbelegt mit
+   heutigen Stunden am Projekt) → Material (Katalog, reinreden, scannen, frei)
+   → Fotos → Kunde unterschreibt am Handy → PDF teilen. Danach steht er unter
+   Rechnungen → „Noch nicht verrechnet“.
 4. **Angebot vor Ort (Chef)**: „Angebot“ → Kunde (neu anlegen geht direkt) →
    Projekt wird automatisch angelegt (Status Angebot) → Räume als Titel →
    Leistungen antippen (+/−) oder **diktieren** („Küche: 6 Steckdosen, 2

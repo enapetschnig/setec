@@ -189,32 +189,10 @@ export async function importDatenLaden(projektId: string, belegId: string | null
   // Garantie und Nacharbeit zahlt der Kunde nicht
   const zeiten: ImportZeit[] = zeitZeilen
     .filter((z) => !belegt.zeiten.includes(z.id) && z.art !== "garantie")
-    .map((z) => ({
-      id: z.id,
-      datum: z.datum,
-      stunden: Number(z.stunden),
-      taetigkeit: z.taetigkeit,
-      user_id: z.user_id,
-      name: z.profiles ? `${z.profiles.vorname} ${z.profiles.nachname}`.trim() : "Mitarbeiter",
-      lohnart: z.profiles?.lohnart ?? null,
-      satz: Number(satzAm(saetze, z.user_id, z.datum)?.verrechnungssatz) || null,
-      art: z.art,
-      regiebericht_id: z.regiebericht_id,
-    }));
+    .map((z) => importZeit(z, saetze));
   const material: ImportMaterial[] = materialZeilen
     .filter((m) => !belegt.material.includes(m.id))
-    .map((m) => ({
-      id: m.id,
-      art: m.art,
-      menge: Number(m.menge),
-      ek_preis: m.ek_preis == null ? null : Number(m.ek_preis),
-      bezeichnung: m.artikel?.bezeichnung ?? m.bezeichnung ?? "Material",
-      einheit: m.artikel?.einheit ?? m.einheit ?? "Stk",
-      artikel_id: m.artikel_id,
-      artikel: m.artikel,
-      regiebericht_id: m.regiebericht_id,
-      datum: m.created_at.slice(0, 10),
-    }));
+    .map(importMaterial);
 
   const berichte = rb.data ?? [];
   const offen = berichte.filter((r) =>
@@ -261,6 +239,84 @@ export async function importDatenLaden(projektId: string, belegId: string | null
       .map((t) => ({ id: t.id, teil_nr: t.teil_nr, nummer: t.nummer, datum: t.datum, netto: Number(t.netto), ust: Number(t.ust), brutto: Number(t.brutto) })),
   };
 }
+
+/**
+ * Regieberichte OHNE Projekt (Service beim Kunden): je Bericht Stunden und
+ * Material über `regiebericht_id` — nicht über das Projekt. Entweder genau
+ * diese Berichte (`ids`, „Rechnung daraus“) oder alle offenen des Kunden
+ * (`kundeId`, „übernehmen“ im Rechnungs-Editor). Nur unterschriebene, noch
+ * nicht verrechnete (oder an genau diesem Entwurf); Entwürfe als Hinweis.
+ */
+export async function regieImportLaden(
+  wahl: { ids?: string[]; kundeId?: string | null },
+  belegId: string | null,
+  belegt: Quelle,
+): Promise<ImportDaten> {
+  const leer: ImportDaten = { angebote: [], regie: [], zeiten: [], material: [], unsigniert: [], angebotImEntwurf: null, eingang: [], teile: [] };
+  if (!wahl.ids?.length && !wahl.kundeId) return leer;
+  let q = supabase.from("regieberichte").select("id, nummer, datum, arbeiten, status, rechnung_id").is("projekt_id", null);
+  q = wahl.ids?.length ? q.in("id", wahl.ids) : q.eq("kunde_id", wahl.kundeId!);
+  const { data: rb, error } = await q.order("datum");
+  if (error) throw new Error(error.message);
+  const berichte = (rb ?? []).filter((r) => !belegt.regie.includes(r.id));
+  const offen = berichte.filter((r) => r.status === "unterschrieben" && (r.rechnung_id == null || r.rechnung_id === belegId));
+  const ids = offen.map((r) => r.id);
+  if (!ids.length) return { ...leer, unsigniert: berichte.filter((r) => r.status !== "unterschrieben").map((r) => ({ id: r.id, nummer: r.nummer, datum: r.datum })) };
+
+  const frei = belegId ? `rechnung_id.is.null,rechnung_id.eq.${belegId}` : "rechnung_id.is.null";
+  const [zt, mt, ms] = await Promise.all([
+    supabase.from("zeiten")
+      .select("id, datum, stunden, taetigkeit, user_id, regiebericht_id, art, profiles(vorname, nachname, lohnart)")
+      .in("regiebericht_id", ids).or(frei).order("datum").order("created_at"),
+    supabase.from("material_buchungen")
+      .select("id, art, menge, ek_preis, einheit, bezeichnung, artikel_id, regiebericht_id, created_at, artikel(bezeichnung, einheit, vk_preis, aufschlag, ek_preis, listenpreis)")
+      .in("regiebericht_id", ids).in("art", ["ausfassung", "rueckgabe", "direkt"]).or(frei).order("created_at"),
+    supabase.from("mitarbeiter_saetze").select("user_id, gueltig_ab, lohnkosten, verrechnungssatz").not("verrechnungssatz", "is", null),
+  ]);
+  for (const r of [zt, mt, ms]) if (r.error) throw new Error(r.error.message);
+  const saetze = (ms.data ?? []) as MitarbeiterSatz[];
+  const zeiten = ((zt.data ?? []) as unknown as ZeitZeile[])
+    .filter((z) => !belegt.zeiten.includes(z.id) && z.art !== "garantie")
+    .map((z) => importZeit(z, saetze));
+  const material = ((mt.data ?? []) as unknown as MaterialZeile[])
+    .filter((m) => !belegt.material.includes(m.id))
+    .map(importMaterial);
+  return {
+    ...leer,
+    regie: offen.map((r) => ({
+      id: r.id, nummer: r.nummer, datum: r.datum, arbeiten: r.arbeiten ?? "",
+      zeiten: zeiten.filter((z) => z.regiebericht_id === r.id),
+      material: material.filter((m) => m.regiebericht_id === r.id),
+    })),
+    unsigniert: berichte.filter((r) => r.status !== "unterschrieben").map((r) => ({ id: r.id, nummer: r.nummer, datum: r.datum })),
+  };
+}
+
+const importZeit = (z: ZeitZeile, saetze: MitarbeiterSatz[]): ImportZeit => ({
+  id: z.id,
+  datum: z.datum,
+  stunden: Number(z.stunden),
+  taetigkeit: z.taetigkeit,
+  user_id: z.user_id,
+  name: z.profiles ? `${z.profiles.vorname} ${z.profiles.nachname}`.trim() : "Mitarbeiter",
+  lohnart: z.profiles?.lohnart ?? null,
+  satz: Number(satzAm(saetze, z.user_id, z.datum)?.verrechnungssatz) || null,
+  art: z.art,
+  regiebericht_id: z.regiebericht_id,
+});
+
+const importMaterial = (m: MaterialZeile): ImportMaterial => ({
+  id: m.id,
+  art: m.art,
+  menge: Number(m.menge),
+  ek_preis: m.ek_preis == null ? null : Number(m.ek_preis),
+  bezeichnung: m.artikel?.bezeichnung ?? m.bezeichnung ?? "Material",
+  einheit: m.artikel?.einheit ?? m.einheit ?? "Stk",
+  artikel_id: m.artikel_id,
+  artikel: m.artikel,
+  regiebericht_id: m.regiebericht_id,
+  datum: m.created_at.slice(0, 10),
+});
 
 // ── Rechnen ─────────────────────────────────────────────────────────────
 

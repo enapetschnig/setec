@@ -1087,8 +1087,9 @@ export function BelegEditor({
         <MenuePunkt icon={Type} onClick={() => (pc ? schnellText() : setFreie(leerePosition("text", { menge: "0" })))}>Hinweistext</MenuePunkt>
         <DropdownMenuSeparator />
         {!istAngebot && (
-          <DropdownMenuItem className="h-11 gap-2" disabled={!kopf.projekt_id} onClick={() => setDialog("import")}>
-            <FolderInput className="h-4 w-4" /> {kopf.projekt_id ? "Aus dem Projekt übernehmen" : "Aus dem Projekt (erst Projekt wählen)"}
+          <DropdownMenuItem className="h-11 gap-2" disabled={!kopf.projekt_id && !kopf.kunde_id} onClick={() => setDialog("import")}>
+            <FolderInput className="h-4 w-4" />
+            {kopf.projekt_id ? "Aus dem Projekt übernehmen" : kopf.kunde_id ? "Regieberichte des Kunden übernehmen" : "Aus dem Projekt (erst Projekt wählen)"}
           </DropdownMenuItem>
         )}
         {istAngebot && <MenuePunkt icon={LayoutTemplate} onClick={() => setDialog("vorlage")}>Aus Vorlage</MenuePunkt>}
@@ -1382,11 +1383,12 @@ export function BelegEditor({
         autoStart
         onUebernehmen={spracheUebernehmen}
       />
-      {kopf.projekt_id && (
+      {(kopf.projekt_id || kopf.kunde_id) && (
         <ImportDialog
           open={dialog === "import"}
           onOpenChange={(o) => setDialog(o ? "import" : null)}
           projektId={kopf.projekt_id}
+          kundeId={kopf.kunde_id}
           belegId={neu ? null : id}
           belegt={belegt}
           angebotId={kopf.angebot_id}

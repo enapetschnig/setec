@@ -4,9 +4,9 @@ import { isoTag, stundenAusVonBis } from "@/lib/format";
 import { materialText, regieberichtLaden, type RegieMaterial, type RegieVoll } from "@/lib/regiePdf";
 import type { Profil, Regiebericht, Zeit } from "@/lib/types";
 import {
-  DIREKT, darfMaterialAendern, darfZeitAendern, materialFehler, materialGeaendert, materialMenge, neueId, zeileFehler,
-  zeileLeer, zeitBasisAusDb, zeitGeaendert, zeitWerte,
-  type Entwurf, type MaterialZeile, type ZeitModus, type ZeitZeile,
+  DIREKT, LEERE_ADRESSE, darfMaterialAendern, darfZeitAendern, kopfBasisAus, kopfGeaendert, kopfWerte, materialFehler,
+  materialGeaendert, materialMenge, neueId, zeileFehler, zeileLeer, zeitBasisAusDb, zeitGeaendert, zeitWerte, zuordnungFehler,
+  type Adresse, type Entwurf, type MaterialZeile, type ZeitModus, type ZeitZeile,
 } from "./regieLogik";
 
 /**
@@ -15,12 +15,18 @@ import {
  */
 
 export type RegieListenEintrag = Pick<Regiebericht,
-  "id" | "nummer" | "datum" | "status" | "arbeiten" | "rechnung_id" | "unterschrift_name" | "unterschrieben_am" | "erstellt_von" | "created_at" | "projekt_id"> & {
+  "id" | "nummer" | "datum" | "status" | "arbeiten" | "rechnung_id" | "unterschrift_name" | "unterschrieben_am" | "erstellt_von" | "created_at" | "projekt_id"
+  | "kunde_id" | "ort"> & {
   projekte: { id: string; nummer: string; name: string; ort: string | null; kunden: { name: string } | null } | null;
+  /** nur bei Berichten ohne Projekt */
+  kunden: { name: string } | null;
   zeiten: { stunden: number }[];
 };
 
-const LISTEN_FELDER = "id, nummer, datum, status, arbeiten, rechnung_id, unterschrift_name, unterschrieben_am, erstellt_von, created_at, projekt_id, projekte(id, nummer, name, ort, kunden(name)), zeiten(stunden)";
+const LISTEN_FELDER = "id, nummer, datum, status, arbeiten, rechnung_id, unterschrift_name, unterschrieben_am, erstellt_von, created_at, projekt_id, kunde_id, ort, projekte(id, nummer, name, ort, kunden(name)), kunden(name), zeiten(stunden)";
+
+/** Kunde des Berichts — über das Projekt oder direkt (Service ohne Projekt) */
+export const listenKunde = (r: Pick<RegieListenEintrag, "projekte" | "kunden">) => r.projekte?.kunden?.name ?? r.kunden?.name ?? null;
 
 /** Alle Regieberichte (oder die eines Projekts), neueste zuerst */
 export function useRegieberichte(projektId?: string) {
@@ -64,14 +70,15 @@ export function useStundenVorschlaege(projektId: string, datum: string, aktiv: b
   });
 }
 
-/** Wer hat am Projekt zuletzt unterschrieben? Beim Stammkunden meist derselbe. */
-export function useLetzterUnterzeichner(projektId: string | undefined) {
+/** Wer hat am Projekt (ohne Projekt: beim Kunden) zuletzt unterschrieben? Beim Stammkunden meist derselbe. */
+export function useLetzterUnterzeichner(projektId: string | undefined, kundeId?: string) {
   return useQuery({
-    queryKey: ["regieberichte", "unterzeichner", projektId],
-    enabled: !!projektId,
+    queryKey: ["regieberichte", "unterzeichner", projektId ?? null, kundeId ?? null],
+    enabled: !!projektId || !!kundeId,
     queryFn: async () => {
-      const { data } = await supabase.from("regieberichte").select("unterschrift_name")
-        .eq("projekt_id", projektId!).eq("status", "unterschrieben").not("unterschrift_name", "is", null)
+      const q = supabase.from("regieberichte").select("unterschrift_name");
+      const { data } = await (projektId ? q.eq("projekt_id", projektId) : q.eq("kunde_id", kundeId!))
+        .eq("status", "unterschrieben").not("unterschrift_name", "is", null)
         .order("unterschrieben_am", { ascending: false }).limit(1).maybeSingle();
       return data?.unterschrift_name ?? "";
     },
@@ -132,23 +139,38 @@ export function materialAusDb(m: RegieMaterial, ich: string, istChef: boolean): 
 
 /** Editor-Stand genau so, wie der Bericht in der Datenbank steht */
 export function entwurfAus(voll: RegieVoll, ich: string, istChef: boolean): Entwurf {
+  const kopf = {
+    ohneProjekt: !voll.projekt_id,
+    projektId: voll.projekt_id ?? "",
+    kundeId: voll.kunde_id ?? "",
+    adresse: { strasse: voll.strasse ?? "", plz: voll.plz ?? "", ort: voll.ort ?? "" },
+    datum: voll.datum,
+    arbeiten: voll.arbeiten,
+  };
   return {
     berichtId: voll.id,
     nummer: voll.nummer,
-    projektId: voll.projekt_id,
-    datum: voll.datum,
-    arbeiten: voll.arbeiten,
-    kopfBasis: { datum: voll.datum, arbeiten: voll.arbeiten },
+    ...kopf,
+    terminId: voll.termin_id,
+    kopfBasis: kopfBasisAus(kopf),
     zeilen: voll.zeiten.map((z) => zeileAusDb(z, ich, istChef)),
     material: voll.material.map((m) => materialAusDb(m, ich, istChef)),
     entfernt: { zeiten: [], material: [] },
   };
 }
 
-/** Neuer Bericht: heute, eine leere Zeile für mich */
-export function neuerEntwurf(projektId: string, ich: string, modus: ZeitModus): Entwurf {
+/** Neuer Bericht: heute, eine leere Zeile für mich. Mit `kunde` ohne Projekt (Service). */
+export function neuerEntwurf(
+  projektId: string, ich: string, modus: ZeitModus,
+  vorgabe: { kundeId?: string; adresse?: Adresse; terminId?: string | null; datum?: string; ohneProjekt?: boolean } = {},
+): Entwurf {
   return {
-    berichtId: null, nummer: null, projektId, datum: isoTag(), arbeiten: "", kopfBasis: null,
+    berichtId: null, nummer: null, projektId,
+    ohneProjekt: vorgabe.ohneProjekt ?? (!projektId && !!vorgabe.kundeId),
+    kundeId: vorgabe.kundeId ?? "",
+    adresse: vorgabe.adresse ?? LEERE_ADRESSE,
+    terminId: vorgabe.terminId ?? null,
+    datum: vorgabe.datum || isoTag(), arbeiten: "", kopfBasis: null,
     zeilen: [neueZeile(ich, modus)], material: [], entfernt: { zeiten: [], material: [] },
   };
 }
@@ -201,7 +223,8 @@ export async function regieSpeichern(
 ): Promise<SpeicherErgebnis> {
   const abbruch = (text: string): SpeicherErgebnis => ({ zustand: e0, fehler: [text], abbruch: true });
 
-  if (!e0.projektId) return abbruch("Bitte zuerst das Projekt wählen.");
+  const ohne = zuordnungFehler(e0);
+  if (ohne) return abbruch(ohne);
   if (!e0.datum) return abbruch("Bitte ein Datum wählen.");
   for (const z of e0.zeilen) {
     const f = zeileFehler(z);
@@ -228,20 +251,25 @@ export async function regieSpeichern(
   const fehler: string[] = [];
 
   // 1. Der Bericht selbst
+  // Mit Projekt hängen Stunden und Material am Projekt, ohne nur am Bericht
+  const projektId = e.ohneProjekt ? null : e.projektId;
   if (!e.berichtId) {
     const { data, error } = await supabase.from("regieberichte")
-      .insert({ projekt_id: e.projektId, datum: e.datum, arbeiten: e.arbeiten })
+      .insert({ ...kopfWerte(e), termin_id: e.terminId, datum: e.datum, arbeiten: e.arbeiten })
       .select("id, nummer").single();
     if (error) return abbruch(`Bericht nicht angelegt: ${error.message}`);
     e.berichtId = data.id;
     e.nummer = data.nummer;
-    e.kopfBasis = { datum: e.datum, arbeiten: e.arbeiten };
-  } else if (!e.kopfBasis || e.kopfBasis.datum !== e.datum || e.kopfBasis.arbeiten !== e.arbeiten) {
+    e.kopfBasis = kopfBasisAus(e);
+  } else if (kopfGeaendert(e)) {
+    // Projekt ↔ ohne Projekt wechselt ein gespeicherter Bericht nicht (Stunden und Material hängen daran)
+    const w = kopfWerte(e);
+    const ort = e.ohneProjekt ? { kunde_id: w.kunde_id, strasse: w.strasse, plz: w.plz, ort: w.ort } : {};
     const { error } = await supabase.from("regieberichte")
-      .update({ datum: e.datum, arbeiten: e.arbeiten })
+      .update({ ...ort, datum: e.datum, arbeiten: e.arbeiten })
       .eq("id", e.berichtId).eq("status", "entwurf").select("id").single();
     if (error) return abbruch(`Bericht nicht gespeichert: ${fehlerText(error)}`);
-    e.kopfBasis = { datum: e.datum, arbeiten: e.arbeiten };
+    e.kopfBasis = kopfBasisAus(e);
   }
   const berichtId = e.berichtId;
 
@@ -291,7 +319,7 @@ export async function regieSpeichern(
     const daten = neue.map((z) => ({
       id: neueId(),
       user_id: z.userId,
-      projekt_id: e.projektId,
+      projekt_id: projektId,
       datum: e.datum,
       ...zeitWerte(z),
       taetigkeit: `Regiebericht ${e.nummer ?? ""}`.trim(),
@@ -345,7 +373,7 @@ export async function regieSpeichern(
         einheit: m.artikelId ? null : m.einheit,
         menge: materialMenge(m),
         lagerort_id: direkt ? null : m.quelle,
-        projekt_id: e.projektId,
+        projekt_id: projektId,
         regiebericht_id: berichtId,
         ek_preis: m.ekPreis,
         vorgang: berichtId,

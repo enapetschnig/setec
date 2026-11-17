@@ -143,7 +143,12 @@ export function taggeld(stundenAmTag: number, satz: number): number {
   return runden2((Math.min(12, Math.ceil(stundenAmTag)) / 12) * satz);
 }
 
-export type LohnZeit = { datum: string; stunden: number | string; art?: string | null; projekt_id: string | null; km?: number | string | null; intern?: string | null };
+export type LohnZeit = {
+  datum: string; stunden: number | string; art?: string | null; projekt_id: string | null; km?: number | string | null; intern?: string | null;
+  /** Regiebericht ohne Projekt (Service beim Kunden) zählt wie ein Projekt: produktiv, Taggeld */
+  regiebericht_id?: string | null;
+};
+const produktiv = (z: Pick<LohnZeit, "projekt_id" | "regiebericht_id">) => !!z.projekt_id || !!z.regiebericht_id;
 
 export type LohnSumme = {
   soll: number; ist: number; differenz: number;
@@ -177,11 +182,11 @@ export function lohnSumme(
   const soll = sollZeitraum(von, bis, wochenstunden);
   const ist = runden2(gearbeitet + abwesendStunden);
   const jeTag = new Map<string, number>();
-  zeiten.filter((z) => z.projekt_id).forEach((z) => jeTag.set(z.datum, (jeTag.get(z.datum) ?? 0) + Number(z.stunden)));
+  zeiten.filter(produktiv).forEach((z) => jeTag.set(z.datum, (jeTag.get(z.datum) ?? 0) + Number(z.stunden)));
   const tg = [...jeTag.values()].map((h) => taggeld(h, Number(saetze.taggeld ?? 0))).filter((x) => x > 0);
   const km = runden2(zeiten.reduce((s, z) => s + Number(z.km ?? 0), 0));
   const jeIntern: Record<string, number> = {};
-  zeiten.filter((z) => !z.projekt_id).forEach((z) => { const k = z.intern || "Ohne Projekt"; jeIntern[k] = runden2((jeIntern[k] ?? 0) + Number(z.stunden)); });
+  zeiten.filter((z) => !produktiv(z)).forEach((z) => { const k = z.intern || "Ohne Projekt"; jeIntern[k] = runden2((jeIntern[k] ?? 0) + Number(z.stunden)); });
   const unproduktiv = runden2(Object.values(jeIntern).reduce((s, x) => s + x, 0));
   return {
     soll, ist, differenz: runden2(ist - soll),

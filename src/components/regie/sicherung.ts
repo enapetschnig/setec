@@ -1,4 +1,4 @@
-import type { Entwurf } from "./regieLogik";
+import { entwurfErgaenzen, type Entwurf } from "./regieLogik";
 
 /**
  * Sicherung ungespeicherter Eingaben im Gerät. Am Handy reicht eine
@@ -20,7 +20,7 @@ export function sicherungLesen(id: string | null): Sicherung | null {
     const gueltig = typeof s?.zeit === "number" && Date.now() - s.zeit < HALTBAR_MS
       && e && (e.berichtId ?? null) === id && Array.isArray(e.zeilen) && Array.isArray(e.material)
       && Array.isArray(e.entfernt?.zeiten) && Array.isArray(e.entfernt?.material);
-    return gueltig ? s : null;
+    return gueltig ? { ...s, entwurf: entwurfErgaenzen(e) } : null;
   } catch {
     return null;
   }

@@ -21,7 +21,12 @@ export type ZeitZeile = {
   taetigkeit?: string | null;
   /** Stunden ohne Projekt: Büro, Lager … (unproduktiv) */
   intern?: string | null;
+  /** Stunden aus einem Regiebericht ohne Projekt (Service beim Kunden) — produktiv */
+  service?: boolean;
 };
+
+/** Produktiv = auf ein Projekt oder in einem Regiebericht (Service ohne Projekt) */
+export const istProduktiv = (z: Pick<ZeitZeile, "projekt_id" | "service">) => !!z.projekt_id || !!z.service;
 
 export type Gruppierung = "person" | "projekt" | "tag" | "woche" | "art";
 
@@ -68,7 +73,9 @@ export function gruppieren(zeilen: ZeitZeile[], nach: Gruppierung, artText: (a: 
   const schluessel = (z: ZeitZeile): [string, string] => {
     switch (nach) {
       case "person": return [z.user_id, z.person];
-      case "projekt": return z.projekt_id ? [z.projekt_id, z.projekt ?? "?"] : [`-${z.intern ?? ""}`, z.intern ? `Intern · ${z.intern}` : "Ohne Projekt"];
+      case "projekt": return z.projekt_id ? [z.projekt_id, z.projekt ?? "?"]
+        : z.service ? ["-service", "Service ohne Projekt (Regie)"]
+        : [`-${z.intern ?? ""}`, z.intern ? `Intern · ${z.intern}` : "Ohne Projekt"];
       case "tag": return [z.datum, z.datum];
       case "woche": { const w = isoWoche(z.datum); return [w, `KW ${Number(w.slice(6))} / ${w.slice(0, 4)}`]; }
       default: return [z.art, artText(z.art)];
@@ -79,7 +86,7 @@ export function gruppieren(zeilen: ZeitZeile[], nach: Gruppierung, artText: (a: 
     const [k, t] = schluessel(z);
     const g = m.get(k) ?? { schluessel: k, titel: t, stunden: 0, km: 0, jeArt: {}, unproduktiv: 0, zeilen: [] };
     g.stunden = r2(g.stunden + z.stunden);
-    if (!z.projekt_id) g.unproduktiv = r2(g.unproduktiv + z.stunden);
+    if (!istProduktiv(z)) g.unproduktiv = r2(g.unproduktiv + z.stunden);
     g.km = r2(g.km + (z.km ?? 0));
     g.jeArt[z.art] = r2((g.jeArt[z.art] ?? 0) + z.stunden);
     g.zeilen.push(z);

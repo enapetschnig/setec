@@ -14,9 +14,14 @@ import { klsRechnungSetzen, useKundenLieferschein } from "@/components/kundenlie
 import { useKunden, useProjekt } from "@/hooks/useDaten";
 import { useSitzung } from "@/hooks/useSitzung";
 import { isoTag } from "@/lib/format";
+import { lohnarten as lohnartenFuer } from "@/lib/kalkulation";
+import { stundensatzFuer } from "@/lib/preise";
+import { importPositionen, regieImportLaden } from "@/components/belege/importieren";
+import { regieIdsAusUrl } from "@/components/regie/regieLogik";
 
 /**
  * /belege/neu?typ=angebot|rechnung[&projekt=<id>|&kunde=<id>][&sprache=1][&import=1][&ki=1]
+ *   [&regie=<id>,<id>] — Rechnung aus Regieberichten ohne Projekt (Rechnungen → „Noch nicht verrechnet“)
  *   [&vorlage=<id>[&preise=vorlage]] — Angebot aus einer Vorlage (sonst Preise von heute)
  * /belege/:id
  *
@@ -84,7 +89,25 @@ function NeuerBeleg({ params }: { params: URLSearchParams }) {
     },
   });
 
-  if (laden || (projektId && projektLaedt) || kundenLaedt || (lsId && (lsLaedt || artikelLaedt))) return <Laedt titel={typ === "angebot" ? "Neues Angebot" : "Neue Rechnung"} />;
+  // Rechnung aus Regieberichten ohne Projekt: genau diese Berichte, je einer ein Titel
+  const regieIds = typ === "rechnung" ? regieIdsAusUrl(params.get("regie")) : [];
+  const { data: regie, isLoading: regieLaedt, error: regieFehler } = useQuery({
+    queryKey: ["belege", "import", "regie", regieIds.join(",")],
+    enabled: regieIds.length > 0,
+    staleTime: 0,
+    queryFn: () => regieImportLaden({ ids: regieIds }, null, { zeiten: [], material: [], regie: [] }),
+  });
+
+  if (laden || (projektId && projektLaedt) || kundenLaedt || (lsId && (lsLaedt || artikelLaedt)) || (regieIds.length > 0 && regieLaedt)) {
+    return <Laedt titel={typ === "angebot" ? "Neues Angebot" : "Neue Rechnung"} />;
+  }
+  if (regieFehler) {
+    return (
+      <Seite titel="Neue Rechnung">
+        <Leer icon={AlertTriangle} text={`Regieberichte konnten nicht geladen werden: ${(regieFehler as Error).message}`} />
+      </Seite>
+    );
+  }
 
   const kopf = kopfNeu(typ, firma, isoTag());
   if (projekt) {
@@ -109,6 +132,23 @@ function NeuerBeleg({ params }: { params: URLSearchParams }) {
         ? { ...artikelPosition(a, firma), bezeichnung, menge }
         : leerePosition("material", { bezeichnung, einheit: p.einheit, menge });
     });
+  }
+
+  if (regie?.regie.length) {
+    const satz = stundensatzFuer(null, firma);
+    const aus = importPositionen(
+      regie,
+      { angebote: [], regie: regie.regie.map((x) => x.id), zeiten: [], material: [] },
+      { stundenJeMitarbeiter: true, materialPauschale: false, stundensatz: satz, lohnarten: lohnartenFuer(firma, satz) },
+      firma,
+      false,
+    );
+    startPositionen = [...(startPositionen ?? []), ...aus.positionen];
+    kopf.leistung_von = kopf.leistung_von || aus.von || "";
+    kopf.leistung_bis = kopf.leistung_bis || aus.bis || "";
+    kopf.betreff = regie.regie.length === 1
+      ? `Regiebericht ${regie.regie[0].nummer ?? ""}`.trim()
+      : `Regieberichte ${regie.regie.map((x) => x.nummer).filter(Boolean).join(", ")}`;
   }
 
   return (

@@ -4,7 +4,7 @@ import {
   pdfDateiname, pdfLaden, pdfTeilenOderLaden, platzPruefen, titelZeile,
 } from "@/lib/pdfBasis";
 import { name, type Artikel, type Firma, type Kunde, type Lagerort, type MaterialBuchung, type Profil, type Projekt, type Regiebericht, type Zeit } from "@/lib/types";
-import { materialZusammenfassen, pdfText, zeitSpanne } from "@/components/regie/regieLogik";
+import { adresseText, materialZusammenfassen, pdfText, zeitSpanne } from "@/components/regie/regieLogik";
 
 /**
  * Regiebericht: laden (eine Quelle für Editor, Ansicht und PDF) und als PDF
@@ -21,6 +21,8 @@ export type RegieMaterial = MaterialBuchung & {
 export type RegieKunde = Pick<Kunde, "id" | "name" | "ansprechpartner" | "strasse" | "plz" | "ort" | "telefon" | "email">;
 export type RegieVoll = Regiebericht & {
   projekte: (Pick<Projekt, "id" | "nummer" | "name" | "strasse" | "plz" | "ort" | "status"> & { kunden: RegieKunde | null }) | null;
+  /** Kunde eines Berichts ohne Projekt (Service) */
+  kunden: RegieKunde | null;
   ersteller: Pick<Profil, "vorname" | "nachname"> | null;
   zeiten: RegieZeit[];
   material: RegieMaterial[];
@@ -34,7 +36,7 @@ const nachName = (a: RegieZeit, b: RegieZeit) =>
 export async function regieberichtLaden(id: string): Promise<RegieVoll | null> {
   const [b, z, m] = await Promise.all([
     supabase.from("regieberichte")
-      .select("*, ersteller:profiles(vorname, nachname), projekte(id, nummer, name, strasse, plz, ort, status, kunden(id, name, ansprechpartner, strasse, plz, ort, telefon, email))")
+      .select("*, ersteller:profiles(vorname, nachname), projekte(id, nummer, name, strasse, plz, ort, status, kunden(id, name, ansprechpartner, strasse, plz, ort, telefon, email)), kunden(id, name, ansprechpartner, strasse, plz, ort, telefon, email)")
       .eq("id", id).maybeSingle(),
     supabase.from("zeiten").select("*, profiles(vorname, nachname, farbe)").eq("regiebericht_id", id),
     supabase.from("material_buchungen")
@@ -59,6 +61,26 @@ export async function regieberichtLaden(id: string): Promise<RegieVoll | null> {
   };
 }
 
+/** Kunde des Berichts: über das Projekt oder direkt (ohne Projekt) */
+export function regieKunde(r: Pick<RegieVoll, "projekte" | "kunden">): RegieKunde | null {
+  return r.projekte?.kunden ?? r.kunden ?? null;
+}
+
+/** Wo gearbeitet wurde: Einsatzort des Berichts (ohne Projekt), sonst die Baustelle des Projekts */
+export function regieOrt(r: Pick<RegieVoll, "projekte" | "strasse" | "plz" | "ort">): string {
+  return adresseText({ strasse: r.strasse ?? "", plz: r.plz ?? "", ort: r.ort ?? "" }) || adresseText({
+    strasse: r.projekte?.strasse ?? "", plz: r.projekte?.plz ?? "", ort: r.projekte?.ort ?? "",
+  });
+}
+
+/** Fotos am Bericht (Tabelle dateien, regiebericht_id) */
+export async function regieFotosLaden(id: string) {
+  const { data, error } = await supabase.from("dateien").select("id, pfad, name, mime, beschreibung, user_id, created_at")
+    .eq("regiebericht_id", id).eq("art", "foto").order("created_at");
+  if (error) throw error;
+  return data ?? [];
+}
+
 /** Bezeichnung und Einheit einer Materialbuchung (Artikel oder freie Position) */
 export function materialText(m: RegieMaterial): { bezeichnung: string; einheit: string } {
   return { bezeichnung: m.artikel?.bezeichnung ?? m.bezeichnung ?? "–", einheit: m.artikel?.einheit ?? m.einheit ?? "Stk" };
@@ -71,6 +93,29 @@ export function zeitpunkt(iso: string | null | undefined): string {
   return `${d.toLocaleDateString("de-AT", { day: "2-digit", month: "2-digit", year: "numeric" })} um ${d.toLocaleTimeString("de-AT", { hour: "2-digit", minute: "2-digit" })} Uhr`;
 }
 
+/** Handyfotos fürs PDF auf 1200 px und JPEG — sonst wird ein Bericht mit zwölf Fotos 20 MB groß */
+async function fuersPdf(b: { uri: string; w: number; h: number }, max = 1200): Promise<{ uri: string; w: number; h: number }> {
+  try {
+    const f = Math.min(1, max / Math.max(b.w, b.h));
+    const bild = await new Promise<HTMLImageElement>((ok, fehler) => {
+      const i = new Image();
+      i.onload = () => ok(i);
+      i.onerror = fehler;
+      i.src = b.uri;
+    });
+    const c = document.createElement("canvas");
+    c.width = Math.max(1, Math.round(b.w * f));
+    c.height = Math.max(1, Math.round(b.h * f));
+    const ctx = c.getContext("2d")!;
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, c.width, c.height);
+    ctx.drawImage(bild, 0, 0, c.width, c.height);
+    return { uri: c.toDataURL("image/jpeg", 0.8), w: c.width, h: c.height };
+  } catch {
+    return b;
+  }
+}
+
 const letztesY = (pdf: unknown) => (pdf as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
 
 export async function regiePdfErstellen(r: RegieVoll, firma: Firma): Promise<Blob> {
@@ -80,13 +125,27 @@ export async function regiePdfErstellen(r: RegieVoll, firma: Firma): Promise<Blo
   const breite = bw - 2 * RAND;
   const entwurf = r.status !== "unterschrieben";
   const p = r.projekte;
-  const k = p?.kunden ?? null;
+  const k = regieKunde(r);
 
-  // Unterschrift parallel zum Briefkopf holen
+  // Unterschrift und Fotos parallel zum Briefkopf holen
   const bildLaden = (async () => {
     if (!r.unterschrift_pfad) return null;
     const { data } = await supabase.storage.from("projekt-dateien").createSignedUrl(r.unterschrift_pfad, 300);
     return data?.signedUrl ? bildAlsDataUri(data.signedUrl) : null;
+  })();
+  const fotosLaden = (async () => {
+    try {
+      const fotos = (await regieFotosLaden(r.id)).filter((f) => !f.mime || f.mime.startsWith("image/")).slice(0, 12);
+      if (!fotos.length) return [];
+      const { data } = await supabase.storage.from("projekt-dateien").createSignedUrls(fotos.map((f) => f.pfad), 300);
+      const bilder = await Promise.all((data ?? []).map(async (d) => {
+        const b = d.signedUrl ? await bildAlsDataUri(d.signedUrl) : null;
+        return b ? fuersPdf(b) : null;
+      }));
+      return bilder.filter((b): b is NonNullable<typeof b> => !!b);
+    } catch {
+      return [];
+    }
   })();
 
   let y = await briefkopf(pdf, firma);
@@ -100,16 +159,16 @@ export async function regiePdfErstellen(r: RegieVoll, firma: Firma): Promise<Blo
   const yRechts = datenBlock(pdf, [
     ["Regiebericht", r.nummer ?? "–"],
     ["Datum", fmtDatum(r.datum)],
-    ["Projekt", p?.nummer ?? "–"],
+    ...(p ? [["Projekt", p.nummer ?? "–"] as [string, string]] : []),
   ], yKopf);
   y = Math.max(yLinks, yRechts) + 8;
   y = titelZeile(pdf, `Regiebericht ${r.nummer ?? ""}`.trim(), firma, y);
 
-  // Projekt und Baustelle
-  const baustelle = [p?.strasse, [p?.plz, p?.ort].filter(Boolean).join(" ")].filter(Boolean).join(", ");
+  // Projekt und Baustelle — ohne Projekt der Einsatzort
+  const baustelle = regieOrt(r);
   const angaben: [string, string][] = [
-    ["Projekt", `${p?.nummer ?? ""} ${p?.name ?? ""}`.trim() || "–"],
-    ...(baustelle ? [["Baustelle", baustelle] as [string, string]] : []),
+    ...(p ? [["Projekt", `${p.nummer ?? ""} ${p.name ?? ""}`.trim() || "–"] as [string, string]] : []),
+    ...(baustelle ? [[p ? "Baustelle" : "Einsatzort", baustelle] as [string, string]] : []),
     ...(k?.ansprechpartner ? [["Ansprechpartner", k.ansprechpartner] as [string, string]] : []),
   ];
   pdf.setFontSize(9.5);
@@ -219,6 +278,27 @@ export async function regiePdfErstellen(r: RegieVoll, firma: Firma): Promise<Blo
     y = letztesY(pdf) + 7;
   }
 
+  // Fotos — zwei je Zeile, Seitenverhältnis bleibt
+  const fotos = await fotosLaden;
+  if (fotos.length > 0) {
+    abschnitt("Fotos", 60);
+    const spalte = (breite - 6) / 2;
+    const maxH = 62;
+    for (let i = 0; i < fotos.length; i += 2) {
+      const paar = fotos.slice(i, i + 2);
+      const hoehen = paar.map((b) => Math.min(maxH, (b.h / b.w) * spalte));
+      const zeileH = Math.max(...hoehen);
+      y = platzPruefen(pdf, y, zeileH + 4);
+      paar.forEach((b, j) => {
+        const h = hoehen[j];
+        const w = Math.min(spalte, (b.w / b.h) * h);
+        try { pdf.addImage(b.uri, "JPEG", RAND + j * (spalte + 6), y, w, h, undefined, "FAST"); } catch { /* Bild nicht lesbar */ }
+      });
+      y += zeileH + 4;
+    }
+    y += 3;
+  }
+
   // Bestätigung des Kunden — als Block zusammen, nie über den Seitenumbruch
   y = platzPruefen(pdf, y, 46);
   y += 2;
@@ -281,7 +361,7 @@ export async function regiePdfErstellen(r: RegieVoll, firma: Firma): Promise<Blo
 }
 
 export function regiePdfDateiname(r: RegieVoll): string {
-  return pdfDateiname("Regiebericht", r.nummer, r.projekte?.kunden?.name ?? r.projekte?.name, r.status === "unterschrieben" ? null : "Entwurf");
+  return pdfDateiname("Regiebericht", r.nummer, regieKunde(r)?.name ?? r.projekte?.name, r.status === "unterschrieben" ? null : "Entwurf");
 }
 
 /** Am Handy über das Teilen-Menü, am PC herunterladen */

@@ -12,6 +12,7 @@ begin
   alter table public.zeiten disable trigger user;
   alter table public.material_buchungen disable trigger user;
   alter table public.regieberichte disable trigger user;
+  alter table public.dateien disable trigger user;
   alter table public.belege disable trigger user;
   alter table public.beleg_positionen disable trigger user;
   alter table public.eingang_anteile disable trigger user;
@@ -33,6 +34,9 @@ begin
   delete from public.zeiten where projekt_id = any(v_projekte) or user_id = any(v_user) or erstellt_von = any(v_user);
   delete from public.material_buchungen where projekt_id = any(v_projekte) or user_id = any(v_user);
   delete from public.bestellungen where lieferant like 'RLS-Test%' or erstellt_von = any(v_user);
+  -- Fotos und Material von Regieberichten ohne Projekt zuerst — sonst ließe on delete set null sie ohne Projekt und Bericht
+  delete from public.dateien where regiebericht_id in (select id from public.regieberichte where projekt_id = any(v_projekte) or erstellt_von = any(v_user));
+  delete from public.material_buchungen where regiebericht_id in (select id from public.regieberichte where projekt_id is null and erstellt_von = any(v_user));
   delete from public.regieberichte where projekt_id = any(v_projekte) or erstellt_von = any(v_user);
   delete from public.termine where projekt_id = any(v_projekte) or user_id = any(v_user);
   delete from public.dateien where projekt_id = any(v_projekte) or user_id = any(v_user);
@@ -51,6 +55,7 @@ begin
   alter table public.zeiten enable trigger user;
   alter table public.material_buchungen enable trigger user;
   alter table public.regieberichte enable trigger user;
+  alter table public.dateien enable trigger user;
   alter table public.belege enable trigger user;
   alter table public.beleg_positionen enable trigger user;
   alter table public.eingang_anteile enable trigger user;

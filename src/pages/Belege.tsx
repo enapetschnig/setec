@@ -7,6 +7,7 @@ import { Seite } from "@/components/PageHeader";
 import { AktionsKachel, Kennzahl, Leer } from "@/components/Bausteine";
 import { useIstPc } from "@/components/AppLayout";
 import { BelegListe } from "@/components/belege/BelegListe";
+import { NochNichtVerrechnet } from "@/components/belege/NochNichtVerrechnet";
 import { VorlagenDialog } from "@/components/belege/VorlagenDialog";
 import { listenStatus, useBelege, verrechneteAngeboteAus, type BelegListenEintrag } from "@/components/belege/daten";
 import { euro, isoTag } from "@/lib/format";
@@ -136,6 +137,8 @@ export default function Belege({ typ }: { typ: Typ }) {
   return (
     <Seite titel={angebot ? "Angebote" : "Rechnungen"} untertitel={`${belege.length} ${angebot ? (belege.length === 1 ? "Angebot" : "Angebote") : (belege.length === 1 ? "Rechnung" : "Rechnungen")}`}
       aktionen={neuKnoepfe} breit={pc}>
+      {/* Ganz oben: Unterschriebenes, das noch auf die Rechnung wartet */}
+      {!angebot && <NochNichtVerrechnet />}
       {!pc && (
         angebot ? (
           <div className="grid grid-cols-2 gap-2.5">

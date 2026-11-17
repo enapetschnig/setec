@@ -8,9 +8,10 @@ import { Avatar, Karte, RegieStatusBadge } from "@/components/Bausteine";
 import { Button } from "@/components/ui/button";
 import { useSitzung } from "@/hooks/useSitzung";
 import { isoZuDatum, stunden, zahl } from "@/lib/format";
-import { materialText, regieberichtLaden, zeitpunkt, type RegieVoll } from "@/lib/regiePdf";
+import { materialText, regieKunde, regieOrt, regieberichtLaden, zeitpunkt, type RegieVoll } from "@/lib/regiePdf";
 import { name } from "@/lib/types";
 import { materialZusammenfassen, zeitSpanne } from "./regieLogik";
+import { RegieFotos, useRegieFotos } from "./RegieFotos";
 import { sicherungLoeschen } from "./sicherung";
 import { useRegiePdf } from "./useRegiePdf";
 
@@ -52,7 +53,9 @@ export function RegieAnsicht({ voll }: { voll: RegieVoll }) {
     () => materialZusammenfassen(voll.material.map((m) => ({ artikelId: m.artikel_id, ...materialText(m), menge: Number(m.menge) }))),
     [voll.material],
   );
-  const baustelle = baustelleText(p);
+  const baustelle = regieOrt(voll);
+  const kunde = regieKunde(voll);
+  const { data: fotos } = useRegieFotos(voll.id);
 
   // Eine liegengebliebene Sicherung des Entwurfs braucht es nicht mehr
   useEffect(() => sicherungLoeschen(voll.id), [voll.id]);
@@ -76,7 +79,7 @@ export function RegieAnsicht({ voll }: { voll: RegieVoll }) {
   return (
     <Seite
       titel={`Regiebericht ${voll.nummer ?? ""}`.trim()}
-      untertitel={[p?.name, p?.kunden?.name].filter(Boolean).join(" · ") || undefined}
+      untertitel={[p?.name ?? (kunde ? "ohne Projekt" : null), kunde?.name].filter(Boolean).join(" · ") || undefined}
       aktionen={pdfKnoepfe}
     >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -105,17 +108,17 @@ export function RegieAnsicht({ voll }: { voll: RegieVoll }) {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:items-start">
         <div className="space-y-4">
-          <Karte titel="Projekt">
+          <Karte titel={p ? "Projekt" : "Kunde und Einsatzort"}>
             <dl className="grid grid-cols-[6.5rem_1fr] gap-x-3 gap-y-1.5 text-sm">
               <dt className="text-muted-foreground">Projekt</dt>
               <dd className="min-w-0">
                 {p ? (
                   <Link to={`/projekte/${p.id}`} className="font-medium text-primary hover:underline">{p.nummer} {p.name}</Link>
-                ) : "–"}
+                ) : "ohne Projekt (Service)"}
               </dd>
               <dt className="text-muted-foreground">Kunde</dt>
-              <dd className="min-w-0">{p?.kunden?.name ?? "–"}</dd>
-              {baustelle && (<><dt className="text-muted-foreground">Baustelle</dt><dd className="min-w-0">{baustelle}</dd></>)}
+              <dd className="min-w-0">{kunde?.name ?? "–"}</dd>
+              {baustelle && (<><dt className="text-muted-foreground">{p ? "Baustelle" : "Einsatzort"}</dt><dd className="min-w-0">{baustelle}</dd></>)}
               <dt className="text-muted-foreground">Aufgenommen</dt>
               <dd className="min-w-0">{name(voll.ersteller)}</dd>
             </dl>
@@ -162,6 +165,12 @@ export function RegieAnsicht({ voll }: { voll: RegieVoll }) {
                   </li>
                 ))}
               </ul>
+            </Karte>
+          )}
+
+          {(fotos?.liste.length ?? 0) > 0 && (
+            <Karte titel="Fotos">
+              <RegieFotos berichtId={voll.id} projektId={voll.projekt_id} bearbeitbar={false} />
             </Karte>
           )}
 

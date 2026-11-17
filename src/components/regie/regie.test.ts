@@ -3,7 +3,9 @@ import {
   darfMaterialAendern, darfZeitAendern, filterAusUrl, hatInhalt, inhaltsRahmen, kurzText, materialFehler,
   materialGeaendert, materialZusammenfassen, mengeSchritt, neueId, passtFilter, passtSuche, pdfText, schnappschuss,
   summeStunden, textAnhaengen, zeileFehler, zeileLeer, zeileStunden, zeitGeaendert, zeitSpanne, zeitWerte,
-  type Entwurf, type MaterialZeile, type ZeitZeile,
+  adresseText, entwurfErgaenzen, fotoOrdner, kopfBasisAus, kopfGeaendert, kopfWerte, rechnungAusLink, regieIdsAusUrl,
+  unterschriftOrdner, verrechnenGruppen, zuordnungFehler,
+  type Entwurf, type OffenerBericht, type MaterialZeile, type ZeitZeile,
 } from "./regieLogik";
 
 const zeile = (z: Partial<ZeitZeile>): ZeitZeile => ({
@@ -71,8 +73,10 @@ describe("Stunden der Partie", () => {
 
 describe("Ungespeicherte Änderungen", () => {
   const entwurf = (e: Partial<Entwurf>): Entwurf => ({
-    berichtId: "r1", nummer: "RB-2026-009", projektId: "p1", datum: "2026-10-25", arbeiten: "FI getauscht",
-    kopfBasis: { datum: "2026-10-25", arbeiten: "FI getauscht" }, zeilen: [], material: [],
+    berichtId: "r1", nummer: "RB-2026-009", projektId: "p1", ohneProjekt: false, kundeId: "", adresse: { strasse: "", plz: "", ort: "" },
+    terminId: null, datum: "2026-10-25", arbeiten: "FI getauscht",
+    kopfBasis: { datum: "2026-10-25", arbeiten: "FI getauscht", projektId: "p1", kundeId: null, adresse: { strasse: "", plz: "", ort: "" } },
+    zeilen: [], material: [],
     entfernt: { zeiten: [], material: [] }, ...e,
   });
 
@@ -204,5 +208,88 @@ describe("Unterschrift", () => {
 
   it("erzeugt gültige UUIDs", () => {
     expect(neueId()).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  });
+});
+
+describe("Regiebericht ohne Projekt", () => {
+  const basis: Entwurf = {
+    berichtId: "r1", nummer: "RB-2026-010", projektId: "", ohneProjekt: true, kundeId: "k1",
+    adresse: { strasse: " Hauptstraße 5 ", plz: "8605", ort: "Kapfenberg" }, terminId: null,
+    datum: "2026-11-17", arbeiten: "Heizstab getauscht", kopfBasis: null, zeilen: [], material: [],
+    entfernt: { zeiten: [], material: [] },
+  };
+
+  it("schreibt Kunde und Einsatzort statt Projekt", () => {
+    expect(kopfWerte(basis)).toEqual({ projekt_id: null, kunde_id: "k1", strasse: "Hauptstraße 5", plz: "8605", ort: "Kapfenberg" });
+    // Mit Projekt bleibt der Kunde leer — er kommt über das Projekt
+    expect(kopfWerte({ ...basis, ohneProjekt: false, projektId: "p1" })).toEqual({ projekt_id: "p1", kunde_id: null, strasse: null, plz: null, ort: null });
+  });
+
+  it("verlangt Projekt oder Kunden", () => {
+    expect(zuordnungFehler(basis)).toBeNull();
+    expect(zuordnungFehler({ ...basis, kundeId: "" })).toBe("Bitte zuerst den Kunden wählen.");
+    expect(zuordnungFehler({ ...basis, ohneProjekt: false, projektId: "" })).toBe("Bitte zuerst das Projekt wählen.");
+  });
+
+  it("erkennt geänderten Kopf: Einsatzort und Kunde zählen, Leerzeichen nicht", () => {
+    const gespeichert = { ...basis, kopfBasis: kopfBasisAus(basis) };
+    expect(kopfGeaendert(gespeichert)).toBe(false);
+    expect(kopfGeaendert({ ...gespeichert, adresse: { ...basis.adresse, strasse: "Hauptstraße 5" } })).toBe(false);
+    expect(kopfGeaendert({ ...gespeichert, adresse: { ...basis.adresse, ort: "Bruck" } })).toBe(true);
+    expect(kopfGeaendert({ ...gespeichert, kundeId: "k2" })).toBe(true);
+    expect(kopfGeaendert({ ...gespeichert, kopfBasis: null })).toBe(true);
+    expect(schnappschuss({ ...basis, kundeId: "k2" })).not.toBe(schnappschuss(basis));
+  });
+
+  it("ergänzt alte Sicherungen ohne die neuen Felder", () => {
+    const alt = { ...basis, kopfBasis: { datum: "2026-11-17", arbeiten: "x" } } as unknown as Entwurf;
+    const { ohneProjekt: _o, kundeId: _k, adresse: _a, terminId: _t, ...rest } = alt;
+    const e = entwurfErgaenzen({ ...rest, projektId: "p1" } as Entwurf);
+    expect(e.ohneProjekt).toBe(false);
+    expect(e.kundeId).toBe("");
+    expect(e.adresse).toEqual({ strasse: "", plz: "", ort: "" });
+    expect(e.kopfBasis).toEqual({ datum: "2026-11-17", arbeiten: "x", projektId: "p1", kundeId: null, adresse: { strasse: "", plz: "", ort: "" } });
+  });
+
+  it("legt Unterschrift und Fotos ohne Projekt unter regie/<id>/ ab", () => {
+    expect(unterschriftOrdner("p1", "r1")).toBe("p1/unterschriften");
+    expect(unterschriftOrdner(null, "r1")).toBe("regie/r1/unterschriften");
+    // Die Policy unterschriften_bleiben greift auf %/unterschriften/%
+    expect(`${unterschriftOrdner(null, "r1")}/r1.png`).toMatch(/\/unterschriften\//);
+    expect(fotoOrdner(null, "r1")).toBe("regie/r1");
+    expect(fotoOrdner("p1", "r1")).toBe("p1");
+    expect(adresseText(basis.adresse)).toBe("Hauptstraße 5, 8605 Kapfenberg");
+  });
+});
+
+describe("Noch nicht verrechnet", () => {
+  const b = (x: Partial<OffenerBericht>): OffenerBericht => ({
+    id: "r", nummer: "RB-1", datum: "2026-11-10", arbeiten: "", projektId: null, projektNummer: null, projektName: null,
+    kundeId: "k1", kundeName: "Sattler", stunden: 2, material: 1, ...x,
+  });
+
+  it("gruppiert je Projekt und ohne Projekt je Kunde, älteste zuerst", () => {
+    const g = verrechnenGruppen([
+      b({ id: "a", datum: "2026-11-12", stunden: 1.5 }),
+      b({ id: "b", datum: "2026-11-11", stunden: 2.25, material: 3 }),
+      b({ id: "c", datum: "2026-11-09", projektId: "p1", projektName: "PV Huber", projektNummer: "2026-0003", kundeName: "Huber" }),
+      b({ id: "d", kundeId: "k2", kundeName: "Bärnthaler", datum: "2026-11-15" }),
+      b({ id: "x", kundeId: null }),
+    ]);
+    expect(g.map((x) => x.schluessel)).toEqual(["projekt:p1", "kunde:k1", "kunde:k2"]);
+    expect(g[0]).toMatchObject({ titel: "PV Huber", unter: "2026-0003 · Huber" });
+    expect(g[1].berichte.map((x) => x.id)).toEqual(["b", "a"]);
+    expect(g[1]).toMatchObject({ stunden: 3.75, material: 4, unter: "Service ohne Projekt" });
+  });
+
+  it("baut den Weg zur Rechnung", () => {
+    expect(rechnungAusLink({ art: "projekt", id: "p1" })).toBe("/belege/neu?typ=rechnung&projekt=p1&import=1");
+    expect(rechnungAusLink({ art: "kunde", id: "k1" }, ["a", "b"])).toBe("/belege/neu?typ=rechnung&kunde=k1&regie=a,b");
+  });
+
+  it("liest nur gültige IDs aus der Adresse", () => {
+    const id = "0b0c6c1e-6a52-4c3b-9f7e-2d1a7f3b9c01";
+    expect(regieIdsAusUrl(`${id}, x;drop,${id}`)).toEqual([id]);
+    expect(regieIdsAusUrl(null)).toEqual([]);
   });
 });

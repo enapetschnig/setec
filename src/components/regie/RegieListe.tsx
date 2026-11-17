@@ -3,7 +3,7 @@ import { ListenZeile, RegieStatusBadge } from "@/components/Bausteine";
 import { useIstPc } from "@/components/AppLayout";
 import { datum, datumKurz, stunden } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { stundenSumme, type RegieListenEintrag } from "./regieDaten";
+import { listenKunde, stundenSumme, type RegieListenEintrag } from "./regieDaten";
 import { kurzText } from "./regieLogik";
 
 /**
@@ -29,13 +29,13 @@ export function RegieListe({ eintraege, mitProjekt = true }: { eintraege: RegieL
                 </div>
                 <div className="mt-1 flex items-baseline gap-2">
                   <p className="min-w-0 flex-1 truncate font-medium">
-                    {mitProjekt ? r.projekte?.name ?? "–" : arbeiten || "Ohne Beschreibung"}
+                    {mitProjekt ? r.projekte?.name ?? (r.kunden ? "Service ohne Projekt" : "–") : arbeiten || "Ohne Beschreibung"}
                   </p>
                   <span className="zahl shrink-0 text-sm font-semibold">{stunden(stundenSumme(r))}</span>
                 </div>
                 <p className="truncate text-xs text-muted-foreground">
                   {mitProjekt
-                    ? [r.projekte?.kunden?.name, arbeiten].filter(Boolean).join(" · ") || "—"
+                    ? [listenKunde(r), arbeiten].filter(Boolean).join(" · ") || "—"
                     : r.unterschrift_name ? `Unterschrieben von ${r.unterschrift_name}` : "Noch nicht unterschrieben"}
                 </p>
               </ListenZeile>
@@ -77,16 +77,16 @@ export function RegieListe({ eintraege, mitProjekt = true }: { eintraege: RegieL
               <td className="truncate px-3 py-3">{datum(r.datum)}</td>
               {mitProjekt && (
                 <td className="px-3 py-3">
-                  <span className="block truncate font-medium">{r.projekte?.name ?? "–"}</span>
+                  <span className="block truncate font-medium">{r.projekte?.name ?? (r.kunden ? "Service ohne Projekt" : "–")}</span>
                   <span className="block truncate text-xs text-muted-foreground">
                     <span className="font-mono">{r.projekte?.nummer}</span>
-                    {r.projekte?.kunden?.name && <span className="xl:hidden"> · {r.projekte.kunden.name}</span>}
+                    {listenKunde(r) && <span className="xl:hidden">{r.projekte ? " · " : ""}{listenKunde(r)}</span>}
                   </span>
                 </td>
               )}
               {mitProjekt && (
                 <td className={cn("px-3 py-3", schmalWeg)}>
-                  <span className="block truncate">{r.projekte?.kunden?.name ?? "–"}</span>
+                  <span className="block truncate">{listenKunde(r) ?? "–"}</span>
                 </td>
               )}
               <td className={cn("px-3 py-3 text-muted-foreground", schmalWeg)}>

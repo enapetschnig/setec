@@ -11,7 +11,7 @@ import { useSitzung } from "@/hooks/useSitzung";
 import { alleZeilen, csvHerunterladen } from "@/lib/abfrage";
 import { datum, isoTag, stunden, tageDazu, zahl } from "@/lib/format";
 import { pdfDateiname, pdfTeilenOderLaden } from "@/lib/pdfBasis";
-import { filtern, gruppieren, tagesnachweis, type Gruppierung, type ZeitZeile } from "@/lib/stundenAuswertung";
+import { filtern, gruppieren, istProduktiv, tagesnachweis, type Gruppierung, type ZeitZeile } from "@/lib/stundenAuswertung";
 import { VonBis } from "@/components/auswertung/VonBis";
 import { stundenPdf } from "@/lib/stundenPdf";
 import { abwesenheitStunden, abwesenheitsTage, lohnSumme } from "@/lib/zeitkonto";
@@ -78,7 +78,7 @@ export function Stundenauswertung() {
     enabled: gueltig,
     placeholderData: keepPreviousData,
     queryFn: () => alleZeilen((a, b) => supabase.from("zeiten")
-      .select("id, user_id, projekt_id, intern, datum, stunden, von, bis, pause_minuten, taetigkeit, rechnung_id, art, km, projekte(nummer, name), profiles(vorname, nachname, farbe), regieberichte(nummer, rechnung_id)")
+      .select("id, user_id, projekt_id, intern, datum, stunden, von, bis, pause_minuten, taetigkeit, rechnung_id, art, km, regiebericht_id, projekte(nummer, name), profiles(vorname, nachname, farbe), regieberichte(nummer, rechnung_id)")
       .gte("datum", von).lte("datum", bis).order("id").range(a, b)),
   });
   const roh = useMemo(() => zeitenQ.data ?? [], [zeitenQ.data]);
@@ -87,6 +87,7 @@ export function Stundenauswertung() {
     projekt: z.projekte ? `${z.projekte.nummer} ${z.projekte.name}` : null, datum: z.datum, stunden: Number(z.stunden),
     art: z.art ?? "arbeit", km: z.km == null ? null : Number(z.km), verrechnet: !!(z.rechnung_id || z.regieberichte?.rechnung_id),
     von: z.von, bis: z.bis, pause_minuten: z.pause_minuten, taetigkeit: z.taetigkeit, intern: z.intern,
+    service: !z.projekt_id && !!z.regiebericht_id,
   })), [roh]);
   const gefiltert = useMemo(() => filtern(zeilen, { personen, projekte: projekt ? [projekt] : [], arten, verrechnet }), [zeilen, personen, projekt, arten, verrechnet]);
   const gruppen = useMemo(() => (nach === "zeiten" ? [] : gruppieren(gefiltert, nach, (a) => STUNDEN_ART[a as StundenArt]?.text ?? a)), [gefiltert, nach]);
@@ -95,7 +96,7 @@ export function Stundenauswertung() {
   const jeArtGesamt = Object.fromEntries(gruppieren(gefiltert, "art").map((g) => [g.schluessel, g.stunden]));
   const kmGesamt = gefiltert.reduce((s, z) => s + (z.km ?? 0), 0);
   // Produktiv = auf Projekte, unproduktiv = intern (Büro, Lager …) — eigene Spalte
-  const unprodGesamt = Math.round(gefiltert.filter((z) => !z.projekt_id).reduce((s, z) => s + z.stunden, 0) * 100) / 100;
+  const unprodGesamt = Math.round(gefiltert.filter((z) => !istProduktiv(z)).reduce((s, z) => s + z.stunden, 0) * 100) / 100;
   const prodProzent = gesamt > 0 ? Math.round(((gesamt - unprodGesamt) / gesamt) * 100) : null;
   const mitUnprod = unprodGesamt > 0 && nach !== "projekt";
   const sichtbareArten = ARTEN.filter((a) => jeArtGesamt[a]);

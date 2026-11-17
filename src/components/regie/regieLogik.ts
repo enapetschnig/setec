@@ -150,10 +150,16 @@ export type Entwurf = {
   berichtId: string | null;
   nummer: string | null;
   projektId: string;
+  /** Service ohne Projekt: der Bericht hängt am Kunden (kundeId) mit eigenem Einsatzort */
+  ohneProjekt: boolean;
+  kundeId: string;
+  adresse: Adresse;
+  /** Termin aus dem Kalender, aus dem der Bericht entstand */
+  terminId: string | null;
   datum: string;
   arbeiten: string;
-  /** Datum und Arbeiten, wie sie in der Datenbank stehen */
-  kopfBasis: { datum: string; arbeiten: string } | null;
+  /** Kopf, wie er in der Datenbank steht */
+  kopfBasis: KopfBasis | null;
   zeilen: ZeitZeile[];
   material: MaterialZeile[];
   /** Beim Speichern: Stunden löschen oder nur aus dem Bericht nehmen (behalten), Material löschen */
@@ -168,13 +174,82 @@ export type Entwurf = {
 export function schnappschuss(e: Entwurf): string {
   const sortiert = (liste: unknown[]) => liste.map((x) => JSON.stringify(x)).sort();
   return JSON.stringify({
-    p: e.projektId,
+    p: e.ohneProjekt ? "" : e.projektId,
+    k: e.ohneProjekt ? [e.kundeId, adresseSauber(e.adresse)] : null,
     d: e.datum,
     a: e.arbeiten,
     z: sortiert(e.zeilen.filter((z) => !zeileLeer(z)).map((z) => [z.id, z.herkunft, z.userId, zeitWerte(z)])),
     m: sortiert(e.material.map((m) => [m.id, m.artikelId, m.bezeichnung.trim(), m.einheit, materialMenge(m), m.quelle])),
     x: sortiert([...e.entfernt.zeiten.map((x) => ["z", x.id, x.behalten]), ...e.entfernt.material.map((id) => ["m", id])]),
   });
+}
+
+export type Adresse = { strasse: string; plz: string; ort: string };
+export type KopfBasis = { datum: string; arbeiten: string; projektId: string | null; kundeId: string | null; adresse: Adresse };
+
+export const LEERE_ADRESSE: Adresse = { strasse: "", plz: "", ort: "" };
+
+const adresseSauber = (a: Adresse | null | undefined): Adresse => ({
+  strasse: (a?.strasse ?? "").trim(), plz: (a?.plz ?? "").trim(), ort: (a?.ort ?? "").trim(),
+});
+
+/** „Hauptstraße 5, 8605 Kapfenberg“ */
+export function adresseText(a: Partial<Adresse> | null | undefined): string {
+  if (!a) return "";
+  return [a.strasse?.trim(), [a.plz?.trim(), a.ort?.trim()].filter(Boolean).join(" ")].filter(Boolean).join(", ");
+}
+
+/**
+ * Was am Bericht in der Datenbank steht: mit Projekt nur projekt_id, ohne
+ * Projekt Kunde und Einsatzort (Schnappschuss — zieht der Kunde um, bleibt
+ * der Bericht, wo gearbeitet wurde).
+ */
+export function kopfWerte(e: Pick<Entwurf, "ohneProjekt" | "projektId" | "kundeId" | "adresse">) {
+  const a = adresseSauber(e.adresse);
+  return e.ohneProjekt
+    ? { projekt_id: null, kunde_id: e.kundeId || null, strasse: a.strasse || null, plz: a.plz || null, ort: a.ort || null }
+    : { projekt_id: e.projektId || null, kunde_id: null, strasse: null, plz: null, ort: null };
+}
+
+/** Kopf für den Vergleich mit der Datenbank */
+export function kopfBasisAus(e: Pick<Entwurf, "ohneProjekt" | "projektId" | "kundeId" | "adresse" | "datum" | "arbeiten">): KopfBasis {
+  const w = kopfWerte(e);
+  return {
+    datum: e.datum, arbeiten: e.arbeiten, projektId: w.projekt_id, kundeId: w.kunde_id,
+    adresse: { strasse: w.strasse ?? "", plz: w.plz ?? "", ort: w.ort ?? "" },
+  };
+}
+
+/** Muss der Bericht selbst gespeichert werden (Datum, Arbeiten, Kunde, Einsatzort)? */
+export function kopfGeaendert(e: Entwurf): boolean {
+  if (!e.kopfBasis) return true;
+  return JSON.stringify(kopfBasisAus(e)) !== JSON.stringify({
+    ...e.kopfBasis, adresse: adresseSauber(e.kopfBasis.adresse),
+  });
+}
+
+/** Woran der Bericht hängt — fehlt etwas, der Text für den Monteur */
+export function zuordnungFehler(e: Pick<Entwurf, "ohneProjekt" | "projektId" | "kundeId">): string | null {
+  if (e.ohneProjekt) return e.kundeId ? null : "Bitte zuerst den Kunden wählen.";
+  return e.projektId ? null : "Bitte zuerst das Projekt wählen.";
+}
+
+/** Ältere Sicherungen im Gerät kennen die Felder für „ohne Projekt“ noch nicht */
+export function entwurfErgaenzen(e: Entwurf): Entwurf {
+  const kb = e.kopfBasis as (Partial<KopfBasis> & { datum: string; arbeiten: string }) | null;
+  return {
+    ...e,
+    ohneProjekt: !!e.ohneProjekt,
+    kundeId: e.kundeId ?? "",
+    adresse: adresseSauber(e.adresse),
+    terminId: e.terminId ?? null,
+    kopfBasis: kb ? {
+      datum: kb.datum, arbeiten: kb.arbeiten,
+      projektId: kb.projektId === undefined ? (e.ohneProjekt ? null : e.projektId || null) : kb.projektId,
+      kundeId: kb.kundeId ?? null,
+      adresse: adresseSauber(kb.adresse),
+    } : null,
+  };
 }
 
 /** Steht in einem neuen Bericht schon etwas drin? (Projekt und Datum allein zählen nicht) */
@@ -334,4 +409,120 @@ export function neueId(): string {
   b[8] = (b[8] & 0x3f) | 0x80;
   const h = Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+}
+
+// ── Material reinreden (KI) ─────────────────────────────────────────────
+
+/** „ohne Artikel“ in der Auswahl einer KI-Zeile */
+export const KI_OHNE = "__ohne__";
+
+export type KiAuswahl = { aktiv: boolean; menge: string; artikelId: string };
+type KiArtikel = { id: string; bezeichnung: string; einheit: string; ek_preis: number | null };
+type KiKomponenteKurz = { was: string; einheit: string; artikel: KiArtikel | null; alternativen: KiArtikel[] };
+export type KiMaterialPosten = { artikel: KiArtikel | null; bezeichnung: string; einheit: string; menge: number };
+
+/**
+ * Was aus dem Vorschlag übernommen wird: angehakt, Menge > 0, mit dem
+ * gewählten Artikel — sonst als freie Position mit dem Gesagten.
+ */
+export function kiAuswahlZuMaterial(komponenten: KiKomponenteKurz[], auswahl: KiAuswahl[]): KiMaterialPosten[] {
+  return komponenten.flatMap((k, i) => {
+    const z = auswahl[i];
+    const menge = z ? Math.round(zahlLesen(z.menge) * 1000) / 1000 : 0;
+    if (!z?.aktiv || !(menge > 0) || menge > 99999) return [];
+    const artikel = z.artikelId === KI_OHNE ? null : [k.artikel, ...k.alternativen].find((a) => a?.id === z.artikelId) ?? null;
+    return [{
+      artikel,
+      bezeichnung: artikel?.bezeichnung ?? k.was.trim(),
+      einheit: artikel?.einheit ?? (k.einheit?.trim() || "Stk"),
+      menge,
+    }];
+  });
+}
+
+// ── Noch nicht verrechnet (Rechnungen) ──────────────────────────────────
+
+/** Unterschriebener Bericht ohne Rechnung — so, wie ihn die Rechnungen-Seite zeigt */
+export type OffenerBericht = {
+  id: string;
+  nummer: string | null;
+  datum: string;
+  arbeiten: string;
+  projektId: string | null;
+  projektNummer: string | null;
+  projektName: string | null;
+  kundeId: string | null;
+  kundeName: string | null;
+  stunden: number;
+  /** Anzahl Materialzeilen */
+  material: number;
+};
+
+export type VerrechnenGruppe = {
+  schluessel: string;
+  art: "projekt" | "kunde";
+  /** Projekt- bzw. Kunden-ID */
+  id: string;
+  titel: string;
+  unter: string;
+  berichte: OffenerBericht[];
+  stunden: number;
+  material: number;
+};
+
+/**
+ * Je Projekt eine Gruppe (die Rechnung kommt über den Projekt-Import mit
+ * allem Offenen), ohne Projekt je Kunde (mehrere Service-Berichte wahlweise
+ * zusammen auf eine Rechnung). Älteste zuerst — die warten am längsten.
+ */
+export function verrechnenGruppen(liste: OffenerBericht[]): VerrechnenGruppe[] {
+  const m = new Map<string, VerrechnenGruppe>();
+  for (const b of liste) {
+    const art = b.projektId ? "projekt" : "kunde";
+    const id = b.projektId ?? b.kundeId;
+    if (!id) continue;
+    const schluessel = `${art}:${id}`;
+    let g = m.get(schluessel);
+    if (!g) {
+      g = {
+        schluessel, art, id,
+        titel: art === "projekt" ? b.projektName ?? "Projekt" : b.kundeName ?? "Kunde",
+        unter: art === "projekt" ? [b.projektNummer, b.kundeName].filter(Boolean).join(" · ") : "Service ohne Projekt",
+        berichte: [], stunden: 0, material: 0,
+      };
+      m.set(schluessel, g);
+    }
+    g.berichte.push(b);
+    g.stunden = Math.round((g.stunden + b.stunden) * 100) / 100;
+    g.material += b.material;
+  }
+  const aeltester = (g: VerrechnenGruppe) => g.berichte.reduce((d, b) => (b.datum < d ? b.datum : d), "9999");
+  return [...m.values()]
+    .map((g) => ({ ...g, berichte: [...g.berichte].sort((a, b) => a.datum.localeCompare(b.datum) || (a.nummer ?? "").localeCompare(b.nummer ?? "")) }))
+    .sort((a, b) => aeltester(a).localeCompare(aeltester(b)) || a.titel.localeCompare(b.titel, "de"));
+}
+
+/**
+ * „Rechnung daraus“: mit Projekt der Projekt-Import (alles Offene zum
+ * Anhaken), ohne Projekt eine Rechnung an den Kunden mit genau diesen Berichten.
+ */
+export function rechnungAusLink(g: Pick<VerrechnenGruppe, "art" | "id">, berichtIds: string[] = []): string {
+  if (g.art === "projekt") return `/belege/neu?typ=rechnung&projekt=${g.id}&import=1`;
+  return `/belege/neu?typ=rechnung&kunde=${g.id}&regie=${berichtIds.join(",")}`;
+}
+
+/** `?regie=a,b` → IDs (nur UUIDs, doppelte weg) */
+export function regieIdsAusUrl(wert: string | null): string[] {
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return [...new Set((wert ?? "").split(",").map((x) => x.trim()).filter((x) => uuid.test(x)))];
+}
+
+/** Ordner der Kundenunterschrift: im Projektordner, ohne Projekt unter regie/<id>/ (Policy unterschriften_bleiben) */
+export function unterschriftOrdner(projektId: string | null | undefined, berichtId: string): string {
+  return projektId ? `${projektId}/unterschriften` : `regie/${berichtId}/unterschriften`;
+}
+
+/** Ordner für Fotos am Bericht: mit Projekt im Projektordner (erscheinen dort auch), sonst regie/<id>/ */
+export function fotoOrdner(projektId: string | null | undefined, berichtId: string): string {
+  return projektId || `regie/${berichtId}`;
 }

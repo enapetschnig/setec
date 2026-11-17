@@ -44,6 +44,7 @@ import { mahnFristAbgelaufen, mahnVorschlag } from "@/components/op/opLogik";
 import { belegStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { ordneZuErledigen } from "@/lib/zuErledigen";
+import { useOffeneRegieberichte } from "@/components/belege/NochNichtVerrechnet";
 import { KUNDE } from "@/kunde.config";
 
 /** „Mittwoch, 11.11.2026“ */
@@ -161,7 +162,9 @@ export default function Index() {
     return [...gebucht, ...rest].slice(0, 6);
   })();
 
-  const regieOffen = Object.values(zahlen).reduce((s, z) => s + Number(z.regie_offen ?? 0), 0);
+  // Direkt gezählt statt über projekt_zahlen — auch Regieberichte ohne Projekt (Service)
+  const { data: offeneRegie = [] } = useOffeneRegieberichte(istChef);
+  const regieOffen = offeneRegie.length;
   const zuVerrechnen = projekte.filter((p) => {
     const z = zahlen[p.id];
     return p.status !== "abgeschlossen" && z && (Number(z.stunden_offen) > 0 || Number(z.material_offen_ek) > 0 || Number(z.regie_offen) > 0);
@@ -267,7 +270,7 @@ export default function Index() {
       to: "/bestellungen",
       warn: spaet > 0,
     },
-    regieOffen > 0 && { icon: ClipboardSignature, text: `${regieOffen} ${regieOffen === 1 ? "Regiebericht" : "Regieberichte"} unterschrieben, nicht verrechnet`, to: "/regie?filter=offen" },
+    regieOffen > 0 && { icon: ClipboardSignature, text: `${regieOffen} ${regieOffen === 1 ? "Regiebericht" : "Regieberichte"} unterschrieben, nicht verrechnet`, to: "/rechnungen" },
     skontoBald > 0 && { icon: Banknote, text: `${skontoBald} ${skontoBald === 1 ? "Rechnung" : "Rechnungen"}: Skonto läuft in 3 Tagen ab`, to: "/eingang?filter=freigegeben", warn: true },
     eingangPruefen > 0 && { icon: Inbox, text: `${eingangPruefen} ${eingangPruefen === 1 ? "Eingangsrechnung" : "Eingangsrechnungen"} prüfen und freigeben`, to: "/eingang" },
     zuUeberweisen.length > 0 && { icon: Banknote, text: `${zuUeberweisen.length} ${zuUeberweisen.length === 1 ? "Rechnung" : "Rechnungen"} überweisen · ${euro(ueberweisenSumme)}`, to: "/eingang?filter=freigegeben" },

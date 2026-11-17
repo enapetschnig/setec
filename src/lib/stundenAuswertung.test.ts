@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filtern, gruppieren, isoWoche, schnitt, tagesnachweis, type ZeitZeile } from "./stundenAuswertung";
+import { filtern, gruppieren, isoWoche, istProduktiv, schnitt, tagesnachweis, type ZeitZeile } from "./stundenAuswertung";
 
 const z = (t: Partial<ZeitZeile> & { id: string }): ZeitZeile => ({
   user_id: "max", person: "Max", projekt_id: "p1", projekt: "2026-0001 Huber", datum: "2026-11-09", stunden: 4, art: "arbeit", km: null, verrechnet: false, ...t,
@@ -36,6 +36,15 @@ describe("Stundenauswertung", () => {
   it("je Woche nach der Zeit", () => {
     expect(gruppieren(zeilen, "woche").map((x) => [x.titel, x.stunden])).toEqual([["KW 46 / 2026", 15.5], ["KW 47 / 2026", 1]]);
     expect(gruppieren(zeilen, "projekt").map((x) => x.titel)).toEqual(["2026-0002 Gruber", "2026-0001 Huber", "Ohne Projekt"]);
+  });
+
+  it("Service ohne Projekt (Regiebericht) ist produktiv und eine eigene Gruppe", () => {
+    const service = z({ id: "5", projekt_id: null, projekt: null, stunden: 2, service: true });
+    const g = gruppieren([...zeilen, service], "projekt");
+    expect(g.find((x) => x.schluessel === "-service")).toMatchObject({ titel: "Service ohne Projekt (Regie)", stunden: 2, unproduktiv: 0 });
+    expect(gruppieren([{ ...service, user_id: "tom", person: "Tom" }, zeilen[3]], "person")[0]).toMatchObject({ stunden: 3, unproduktiv: 1 });
+    expect(istProduktiv(service)).toBe(true);
+    expect(istProduktiv(zeilen[3])).toBe(false);
   });
 });
 

@@ -475,6 +475,72 @@ if (rb) {
   ok(!!e4, "auch der Chef kann ihn nicht löschen" + abgelehnt(e4));
 }
 
+console.log("\n— Regiebericht ohne Projekt (Service) —");
+{
+  const { error: eNix } = await monteur.from("regieberichte").insert({ arbeiten: "RLS-Test ohne alles" });
+  ok(!!eNix, "ohne Projekt und ohne Kunde kein Bericht" + abgelehnt(eNix));
+  const { data: sk } = await chef.from("kunden").insert({ name: "RLS-Test Servicekunde", art: "kunde", strasse: "Teststraße 1", plz: "8650", ort: "Kindberg" }).select("id").single();
+  const { data: rs, error: eRs } = await monteur.from("regieberichte")
+    .insert({ kunde_id: sk.id, strasse: "Teststraße 1", plz: "8650", ort: "Kindberg", arbeiten: "RLS-Test Heizstab" }).select("id, nummer").single();
+  ok(!eRs && /^RB-\d{4}-\d{3}$/.test(rs?.nummer ?? ""), `Monteur schreibt einen Bericht nur mit Kunde: ${rs?.nummer ?? eRs?.message}`);
+  const { data: lager } = await chef.from("lagerorte").select("id").limit(1).single();
+  const { data: artikel } = await chef.from("artikel").select("id").limit(1).single();
+  const { error: eMatOhne } = await monteur.from("material_buchungen").insert({ art: "direkt", bezeichnung: "RLS-Test Kabel", einheit: "m", menge: 1 });
+  ok(!!eMatOhne, "Material ohne Projekt und ohne Bericht abgelehnt" + abgelehnt(eMatOhne));
+  const { error: eAus } = await monteur.from("material_buchungen")
+    .insert({ art: "ausfassung", artikel_id: artikel.id, lagerort_id: lager.id, menge: 2, regiebericht_id: rs.id, notiz: "RLS-Test" });
+  ok(!eAus, "Material aus dem Bus in den Bericht ohne Projekt" + (eAus ? abgelehnt(eAus) : ""));
+  const { error: eDir } = await monteur.from("material_buchungen")
+    .insert({ art: "direkt", bezeichnung: "RLS-Test Heizstab 3 kW", einheit: "Stk", menge: 1, regiebericht_id: rs.id });
+  ok(!eDir, "freie Position direkt in den Bericht" + (eDir ? abgelehnt(eDir) : ""));
+  const { error: eZeit } = await monteur.from("zeiten").insert({ stunden: 2, regiebericht_id: rs.id, taetigkeit: "RLS-Test Service" });
+  ok(!eZeit, "Stunden ohne Projekt im Bericht" + (eZeit ? abgelehnt(eZeit) : ""));
+  const { error: eFotoOhne } = await monteur.from("dateien").insert({ pfad: `rlstest/${Date.now()}-x.jpg`, name: "x.jpg", art: "foto" });
+  ok(!!eFotoOhne, "Foto ohne Projekt und ohne Bericht abgelehnt" + abgelehnt(eFotoOhne));
+  const { error: eFoto } = await monteur.from("dateien").insert({ regiebericht_id: rs.id, pfad: `regie/${rs.id}/rlstest-${Date.now()}.jpg`, name: "x.jpg", art: "foto" });
+  ok(!eFoto, "Foto am Bericht ohne Projekt" + (eFoto ? abgelehnt(eFoto) : ""));
+  const { data: zuordnen } = await monteur.rpc("regie_zeiten_zuordnen", { p_regie: rs.id, p_dazu: [], p_weg: (await monteur.from("zeiten").select("id").eq("regiebericht_id", rs.id)).data.map((z) => z.id) });
+  ok(Array.isArray(zuordnen) && zuordnen.length === 0, "ohne Projekt nimmt „herausnehmen“ keine Stunden aus dem Bericht");
+  const { error: eKundeWeg } = await chef.from("kunden").delete().eq("id", sk.id);
+  ok(!!eKundeWeg, "Kunde mit Regiebericht lässt sich nicht löschen" + abgelehnt(eKundeWeg));
+
+  // Entwurf löschen: Stunden, Material und Fotos gehen mit, der Bus bekommt sein Material zurück
+  const bestandVorher = Number((await chef.from("lagerbestand").select("bestand").eq("artikel_id", artikel.id).eq("lagerort_id", lager.id).maybeSingle()).data?.bestand ?? 0);
+  const { error: eWeg } = await monteur.from("regieberichte").delete().eq("id", rs.id);
+  ok(!eWeg, "Monteur löscht seinen Entwurf ohne Projekt" + (eWeg ? abgelehnt(eWeg) : ""));
+  const [{ count: nZ }, { count: nM }, { count: nD }] = await Promise.all([
+    chef.from("zeiten").select("id", { count: "exact", head: true }).eq("taetigkeit", "RLS-Test Service"),
+    chef.from("material_buchungen").select("id", { count: "exact", head: true }).eq("bezeichnung", "RLS-Test Heizstab 3 kW"),
+    chef.from("dateien").select("id", { count: "exact", head: true }).like("pfad", `regie/${rs.id}/%`),
+  ]);
+  ok(nZ === 0 && nM === 0 && nD === 0, `… samt Stunden, Material und Fotos (übrig: ${nZ}/${nM}/${nD})`);
+  const bestandNachher = Number((await chef.from("lagerbestand").select("bestand").eq("artikel_id", artikel.id).eq("lagerort_id", lager.id).maybeSingle()).data?.bestand ?? 0);
+  ok(Math.abs(bestandNachher - bestandVorher - 2) < 0.001, `das Material ist wieder im Bus (${bestandVorher} → ${bestandNachher})`);
+
+  // Unterschrieben: fest, auch die Fotos; Pfad regie/<id>/unterschriften/ (Policy unterschriften_bleiben)
+  const { data: ru } = await monteur.from("regieberichte").insert({ kunde_id: sk.id, arbeiten: "RLS-Test Notlicht geprüft" }).select("id").single();
+  await monteur.from("zeiten").insert({ stunden: 1, regiebericht_id: ru.id, taetigkeit: "RLS-Test Service 2" });
+  const fotoPfad = `regie/${ru.id}/rlstest-${Date.now()}.jpg`;
+  await monteur.from("dateien").insert({ regiebericht_id: ru.id, pfad: fotoPfad, name: "x.jpg", art: "foto" });
+  const { error: eSig } = await monteur.from("regieberichte")
+    .update({ status: "unterschrieben", unterschrift_name: "RLS-Test Kunde", unterschrift_pfad: `regie/${ru.id}/unterschriften/${ru.id}.png` }).eq("id", ru.id);
+  ok(!eSig, "Kunde unterschreibt den Bericht ohne Projekt" + (eSig ? abgelehnt(eSig) : ""));
+  const { error: eAdr } = await monteur.from("regieberichte").update({ ort: "Woanders" }).eq("id", ru.id);
+  ok(!!eAdr, "Einsatzort danach fest" + abgelehnt(eAdr));
+  const { error: eFotoDazu } = await monteur.from("dateien").insert({ regiebericht_id: ru.id, pfad: `regie/${ru.id}/rlstest-dazu.jpg`, name: "y.jpg", art: "foto" });
+  ok(!!eFotoDazu, "es kommen keine Fotos mehr dazu" + abgelehnt(eFotoDazu));
+  const { error: eFotoWeg } = await chef.from("dateien").delete().eq("pfad", fotoPfad);
+  ok(!!eFotoWeg, "und auch der Chef löscht keines" + abgelehnt(eFotoWeg));
+  const { data: offen } = await chef.from("regieberichte").select("id, kunden(name)").eq("status", "unterschrieben").is("rechnung_id", null).is("projekt_id", null);
+  ok(!!offen?.some((r) => r.id === ru.id && r.kunden?.name === "RLS-Test Servicekunde"), "steht unter „Noch nicht verrechnet“ (mit Kunde)");
+  const { data: reS } = await chef.from("belege").insert({ typ: "rechnung", kunde_id: sk.id, empf_name: "RLS-Test Servicekunde" }).select("id").single();
+  const { error: eBind } = await chef.from("regieberichte").update({ rechnung_id: reS.id }).eq("id", ru.id);
+  ok(!eBind, "Chef verrechnet ihn mit einer Rechnung ohne Projekt" + (eBind ? abgelehnt(eBind) : ""));
+  await chef.from("belege").delete().eq("id", reS.id);
+  const { data: frei } = await chef.from("regieberichte").select("rechnung_id").eq("id", ru.id).single();
+  ok(frei?.rechnung_id === null, "Entwurf gelöscht → Bericht wieder offen");
+}
+
 console.log("\n— Material —");
 {
   const { data: lager } = await chef.from("lagerorte").select("id").limit(1).single();

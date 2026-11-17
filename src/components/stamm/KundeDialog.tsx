@@ -94,7 +94,7 @@ export function KundeDialog({
   const [grund, setGrund] = useState<Grunddaten>(grundAus(null));
   const [zusatz, setZusatz] = useState<Zusatzdaten>(zusatzAus(null));
   const [speichert, setSpeichert] = useState(false);
-  const [loeschInfo, setLoeschInfo] = useState<{ projekte: number; belege: number } | null>(null);
+  const [loeschInfo, setLoeschInfo] = useState<{ projekte: number; belege: number; regie: number } | null>(null);
   const [basis, setBasis] = useState("");
 
   useBeimOeffnen(open ? kunde?.id ?? "neu" : null, () => {
@@ -150,13 +150,15 @@ export function KundeDialog({
   const loeschenPruefen = async () => {
     if (!kunde) return;
     setSpeichert(true);
-    const [p, b] = await Promise.all([
+    const [p, b, rb] = await Promise.all([
       supabase.from("projekte").select("id", { count: "exact", head: true }).eq("kunde_id", kunde.id),
       supabase.from("belege").select("id", { count: "exact", head: true }).eq("kunde_id", kunde.id),
+      // Regieberichte ohne Projekt hängen direkt am Kunden (Datenbank: on delete restrict)
+      supabase.from("regieberichte").select("id", { count: "exact", head: true }).eq("kunde_id", kunde.id),
     ]);
     setSpeichert(false);
-    if (p.error || b.error) return toast.error("Nicht geprüft", { description: fehlerText(p.error ?? b.error) });
-    setLoeschInfo({ projekte: p.count ?? 0, belege: b.count ?? 0 });
+    if (p.error || b.error || rb.error) return toast.error("Nicht geprüft", { description: fehlerText(p.error ?? b.error ?? rb.error) });
+    setLoeschInfo({ projekte: p.count ?? 0, belege: b.count ?? 0, regie: rb.count ?? 0 });
   };
 
   const loeschen = async () => {
@@ -172,10 +174,11 @@ export function KundeDialog({
     onOpenChange(false);
   };
 
-  const haengtDran = !!loeschInfo && loeschInfo.projekte + loeschInfo.belege > 0;
+  const haengtDran = !!loeschInfo && loeschInfo.projekte + loeschInfo.belege + loeschInfo.regie > 0;
   const dranText = loeschInfo ? [
     loeschInfo.projekte && `${zahl(loeschInfo.projekte)} Projekt${loeschInfo.projekte === 1 ? "" : "e"}`,
     loeschInfo.belege && `${zahl(loeschInfo.belege)} Angebot${loeschInfo.belege === 1 ? "" : "e"}/Rechnung${loeschInfo.belege === 1 ? "" : "en"}`,
+    loeschInfo.regie && `${zahl(loeschInfo.regie)} Regiebericht${loeschInfo.regie === 1 ? "" : "e"}`,
   ].filter(Boolean).join(" und ") : "";
 
   return (

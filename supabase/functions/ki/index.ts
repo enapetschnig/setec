@@ -12,6 +12,11 @@
 //       (3) Claude wählt je Komponente den passenden Artikel (oder keinen).
 //     Nur der Chef (Angebote).
 //
+//   { aufgabe: "material_vorschlag", modus: "verbraucht", text: "3 Steckdosen, 20 m NYM 3x1,5" }
+//     → dasselbe für den Regiebericht: genau das Gesagte (Material, das verbaut
+//       wurde), nichts dazugeplant, Mengen wie gesagt. Alle freigeschalteten
+//       Mitarbeiter — der Monteur redet es auf der Baustelle rein.
+//
 // Secret: ANTHROPIC_API_KEY (supabase secrets set …)
 import Anthropic from "npm:@anthropic-ai/sdk@1.7.0";
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.119.0";
@@ -172,12 +177,19 @@ async function belegLesen(client: Anthropic, sb: SupabaseClient, bucket: string,
 type Komponente = { gruppe: string; was: string; suche: string[]; menge: number; einheit: string; begruendung: string };
 type Kandidat = { id: string; bezeichnung: string; hersteller: string | null; artikelnummer: string | null; einheit: string; listenpreis: number | null; ek_preis: number | null };
 
-async function materialVorschlag(client: Anthropic, sb: SupabaseClient, text: string) {
+async function materialVorschlag(client: Anthropic, sb: SupabaseClient, text: string, verbraucht: boolean) {
   const plan = await strukturiert<{ titel: string; komponenten: Komponente[]; hinweise: string[] }>(client,
-    `Du bist erfahrener Elektrotechnik-Meister in Österreich und stellst die Materialliste für ein Angebot zusammen ` +
-    `(ÖVE/ÖNORM, übliche Großhandelsware). Nur Material, keine Arbeitsstunden. Realistische Mengen für ein typisches ` +
-    `Objekt; wenn eine Angabe fehlt, nimm das Übliche an und schreib es in die Hinweise. Höchstens 20 Komponenten, Kleinteile zusammenfassen.`,
-    [{ type: "text", text: `Vorhaben: ${text}` }], KOMPONENTEN, "low");
+    verbraucht
+      ? `Ein Elektromonteur in Österreich sagt per Spracheingabe, welches Material er bei einem Einsatz verbaut hat. ` +
+        `Zerlege das Gesagte in einzelne Positionen: genau das Genannte, in der genannten Menge und Einheit ` +
+        `(„20 Meter“ = 20 m, „ein“ = 1, ohne Menge = 1). Erfinde nichts dazu, plane nichts, fasse nichts zusammen. ` +
+        `Die Spracherkennung macht Fehler („NYM 3 mal 1,5“ = NYM-J 3x1,5) — korrigiere offensichtliche. ` +
+        `Gruppe immer „Material“, Begründung leer, Hinweise nur, wenn etwas unverständlich war. Höchstens 30 Positionen.`
+      : `Du bist erfahrener Elektrotechnik-Meister in Österreich und stellst die Materialliste für ein Angebot zusammen ` +
+        `(ÖVE/ÖNORM, übliche Großhandelsware). Nur Material, keine Arbeitsstunden. Realistische Mengen für ein typisches ` +
+        `Objekt; wenn eine Angabe fehlt, nimm das Übliche an und schreib es in die Hinweise. Höchstens 20 Komponenten, Kleinteile zusammenfassen.`,
+    [{ type: "text", text: verbraucht ? `Gesagt: ${text}` : `Vorhaben: ${text}` }], KOMPONENTEN, "low");
+  plan.komponenten = plan.komponenten.slice(0, 30);
 
   // je Komponente Kandidaten aus dem Artikelstamm (vom genauesten Suchtext abwärts)
   // (ohne Tippfehler-Suche, höchstens vier Komponenten gleichzeitig — schont die Datenbank)
@@ -243,11 +255,14 @@ Deno.serve(async (req) => {
       return antwort({ daten: await belegLesen(client, sb, String(body.bucket ?? ""), String(body.pfad ?? "")) });
     }
     if (body.aufgabe === "material_vorschlag") {
-      const { data: chef } = await sb.rpc("ist_chef");
-      if (!chef) return antwort({ fehler: "Materialvorschläge gibt es für Angebote — nur für den Chef." }, 403);
+      const verbraucht = body.modus === "verbraucht";
+      if (!verbraucht) {
+        const { data: chef } = await sb.rpc("ist_chef");
+        if (!chef) return antwort({ fehler: "Materialvorschläge gibt es für Angebote — nur für den Chef." }, 403);
+      }
       const text = String(body.text ?? "").trim().slice(0, 1000);
-      if (text.length < 3) return antwort({ fehler: "Bitte kurz beschreiben, was gebaut wird." }, 400);
-      return antwort({ daten: await materialVorschlag(client, sb, text) });
+      if (text.length < 3) return antwort({ fehler: verbraucht ? "Bitte sagen, welches Material verbaut wurde." : "Bitte kurz beschreiben, was gebaut wird." }, 400);
+      return antwort({ daten: await materialVorschlag(client, sb, text, verbraucht) });
     }
     return antwort({ fehler: "Unbekannte Aufgabe." }, 400);
   } catch (e) {

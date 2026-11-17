@@ -1212,7 +1212,8 @@ export type Database = {
           name: string
           pfad: string
           planung: boolean
-          projekt_id: string
+          projekt_id: string | null
+          regiebericht_id: string | null
           user_id: string | null
         }
         Insert: {
@@ -1225,7 +1226,8 @@ export type Database = {
           name: string
           pfad: string
           planung?: boolean
-          projekt_id: string
+          projekt_id?: string | null
+          regiebericht_id?: string | null
           user_id?: string | null
         }
         Update: {
@@ -1238,10 +1240,18 @@ export type Database = {
           name?: string
           pfad?: string
           planung?: boolean
-          projekt_id?: string
+          projekt_id?: string | null
+          regiebericht_id?: string | null
           user_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "dateien_regiebericht_id_fkey"
+            columns: ["regiebericht_id"]
+            isOneToOne: false
+            referencedRelation: "regieberichte"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "dateien_projekt_id_fkey"
             columns: ["projekt_id"]
@@ -3142,8 +3152,13 @@ export type Database = {
           datum: string
           erstellt_von: string | null
           id: string
+          kunde_id: string | null
+          ort: string | null
+          plz: string | null
+          strasse: string | null
+          termin_id: string | null
           nummer: string | null
-          projekt_id: string
+          projekt_id: string | null
           rechnung_id: string | null
           status: string
           unterschrieben_am: string | null
@@ -3157,8 +3172,13 @@ export type Database = {
           datum?: string
           erstellt_von?: string | null
           id?: string
+          kunde_id?: string | null
+          ort?: string | null
+          plz?: string | null
+          strasse?: string | null
+          termin_id?: string | null
           nummer?: string | null
-          projekt_id: string
+          projekt_id: string | null
           rechnung_id?: string | null
           status?: string
           unterschrieben_am?: string | null
@@ -3172,8 +3192,13 @@ export type Database = {
           datum?: string
           erstellt_von?: string | null
           id?: string
+          kunde_id?: string | null
+          ort?: string | null
+          plz?: string | null
+          strasse?: string | null
+          termin_id?: string | null
           nummer?: string | null
-          projekt_id?: string
+          projekt_id?: string | null
           rechnung_id?: string | null
           status?: string
           unterschrieben_am?: string | null
@@ -3182,6 +3207,20 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "regieberichte_kunde_id_fkey"
+            columns: ["kunde_id"]
+            isOneToOne: false
+            referencedRelation: "kunden"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "regieberichte_termin_id_fkey"
+            columns: ["termin_id"]
+            isOneToOne: false
+            referencedRelation: "termine"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "regieberichte_erstellt_von_fkey"
             columns: ["erstellt_von"]

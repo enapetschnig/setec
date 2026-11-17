@@ -107,7 +107,7 @@ function Ueberblick({ zeitraum, setZeitraum }: { zeitraum: Zeitraum; setZeitraum
     queryKey: ["zeiten", "auswertung", vonIso, bisIso],
     placeholderData: keepPreviousData,
     queryFn: () => alleZeilen((a, b) => supabase.from("zeiten")
-      .select("id, user_id, projekt_id, intern, datum, stunden, von, bis, pause_minuten, taetigkeit, rechnung_id, art, km, projekte(nummer, name), profiles(vorname, nachname, farbe), regieberichte(nummer, rechnung_id)")
+      .select("id, user_id, projekt_id, intern, datum, stunden, von, bis, pause_minuten, taetigkeit, rechnung_id, art, km, regiebericht_id, projekte(nummer, name), profiles(vorname, nachname, farbe), regieberichte(nummer, rechnung_id)")
       .gte("datum", vonIso).lt("datum", bisIso).order("id").range(a, b)),
   });
   const materialQ = useQuery({
@@ -142,7 +142,7 @@ function Ueberblick({ zeitraum, setZeitraum }: { zeitraum: Zeitraum; setZeitraum
   // Verrechnet ist eine Stunde, wenn sie selbst oder ihr Regiebericht auf einer Rechnung steht
   const verrechnet = (z: (typeof zeiten)[number]) => !!z.rechnung_id || !!z.regieberichte?.rechnung_id;
   const stundenGesamt = summe(zeiten.map((z) => z.stunden));
-  const stundenOffen = summe(zeiten.filter((z) => z.projekt_id && !verrechnet(z) && z.art !== "garantie").map((z) => z.stunden));
+  const stundenOffen = summe(zeiten.filter((z) => (z.projekt_id || z.regiebericht_id) && !verrechnet(z) && z.art !== "garantie").map((z) => z.stunden));
 
   let materialEk = 0;
   let materialVk = 0;
@@ -166,8 +166,8 @@ function Ueberblick({ zeitraum, setZeitraum }: { zeitraum: Zeitraum; setZeitraum
   const jeProjekt = useMemo(() => {
     const m = new Map<string, { id: string | null; text: string; nummer: string | null; h: number }>();
     zeiten.forEach((z) => {
-      const key = z.projekt_id ?? "ohne";
-      const e = m.get(key) ?? { id: z.projekt_id, text: z.projekte?.name ?? "Ohne Projekt", nummer: z.projekte?.nummer ?? null, h: 0 };
+      const key = z.projekt_id ?? (z.regiebericht_id ? "service" : "ohne");
+      const e = m.get(key) ?? { id: z.projekt_id, text: z.projekte?.name ?? (z.regiebericht_id ? "Service ohne Projekt (Regie)" : "Ohne Projekt"), nummer: z.projekte?.nummer ?? null, h: 0 };
       e.h += Number(z.stunden);
       m.set(key, e);
     });

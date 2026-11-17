@@ -109,4 +109,13 @@ describe("Taggeld und Lohnsumme", () => {
     expect(s.taggeldTage).toBe(0);
     expect(produktivProzent({ produktiv: 0, unproduktiv: 0 })).toBeNull();
   });
+  it("Lohnsumme: Regiebericht ohne Projekt (Service) ist produktiv und zählt fürs Taggeld", () => {
+    const s = lohnSumme(40, "2026-11-02", "2026-11-08", [
+      { datum: "2026-11-02", stunden: 9, projekt_id: null, regiebericht_id: "r1" },
+      { datum: "2026-11-03", stunden: 1, projekt_id: null, intern: "Büro" },
+    ], [], { taggeld: 30 });
+    expect(s).toMatchObject({ produktiv: 9, unproduktiv: 1 });
+    expect(s.jeIntern).toEqual({ "Büro": 1 });
+    expect(s.taggeldTage).toBe(1);
+  });
 });
