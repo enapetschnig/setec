@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useSearchParams } from "react-router-dom";
-import { Check, ChevronRight, Download, Inbox, Loader2, MailOpen, Paperclip, Plus, Search, X } from "lucide-react";
+import { Check, Download, Inbox, Loader2, MailOpen, Paperclip, Plus, Search, X } from "lucide-react";
 import { bilanzText, postfachAbrufen, usePostfaecher } from "@/lib/postfach";
 import { Seite } from "@/components/PageHeader";
 import { Leer, StatusPille } from "@/components/Bausteine";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useIstPc } from "@/components/AppLayout";
+import { BelegZeile, JahrWahl, MonatsListe, useJahrWahl } from "@/components/JahrWahl";
+import { useOdooZeilen } from "@/hooks/useOdooZeilen";
+import { imJahr, jahreAus } from "@/lib/jahre";
 import { EingangDialog } from "@/components/eingang/EingangDialog";
 import { ueberwiesen, useEingangsrechnungen, type EingangMitAnteilen } from "@/components/eingang/eingangDaten";
 import { ablauf, bezahltText, kategorieText, lastschriftBetrag, zahlung, zahlweg, ZAHLWEGE, zuordnung, zuZahlen, type Zahlweg } from "@/components/eingang/eingangLogik";
@@ -44,13 +47,20 @@ const LEER_TEXT: Record<Filter, string> = {
   zuzuordnen: "Alles zugeordnet.",
 };
 
+/** Noch zu tun — zeigt alle Jahre; Bezahltes, Abgelehntes, „Alle“ nur das gewählte Jahr */
+const OFFENES: Filter[] = ["pruefen", "freigegeben", "lastschrift"];
+
 const passt = (r: EingangMitAnteilen, f: Filter) =>
   f === "alle" ? true
     : f === "zuzuordnen" ? zuordnung(r, r.eingang_anteile) !== "zugeordnet"
       : f === "bezahlt" ? ablauf(r) === "ueberwiesen"
         : ablauf(r) === f;
 
-/** /eingang — Eingangsrechnungen (nur Chef), Filter über ?filter= */
+/**
+ * /eingang — Eingangsrechnungen (nur Chef), Filter über ?filter=.
+ * Jahresansicht wie Rechnungen (JahrWahl): Bezahltes nur im gewählten Jahr
+ * (Odoo-Übernahme 2023–2025 im Archiv), Suche und Offenes über alle Jahre.
+ */
 export default function Eingang() {
   const pc = useIstPc();
   const heute = isoTag();
@@ -68,6 +78,11 @@ export default function Eingang() {
   const [suche, setSuche] = useState("");
   const [offen, setOffen] = useState<EingangMitAnteilen | "neu" | null>(null);
   const { data: alle = [], isLoading, error, refetch } = useEingangsrechnungen();
+  const { data: odoo } = useOdooZeilen("eingangsrechnungen");
+  const [jahr, setJahr] = useJahrWahl("eingang");
+  const jahre = useMemo(() => jahreAus(alle.map((r) => r.datum), new Date().getFullYear()), [alle]);
+  const ueberAlle = suche.trim() ? "Suche in allen Jahren" : OFFENES.includes(filter) ? "Offenes aus allen Jahren" : null;
+  const imZeitraum = useMemo(() => alle.filter((r) => imJahr(r.datum, jahr)), [alle, jahr]);
   const { data: kategorien = [] } = useKategorien();
   const katName = (r: EingangMitAnteilen) => kategorien.find((k) => k.id === r.kategorie_id)?.name ?? kategorieText(r.kategorie);
   const { data: kontakte = [] } = useKunden();
@@ -107,7 +122,7 @@ export default function Eingang() {
     else neu.delete("weg");
     setParams(neu, { replace: true });
   };
-  const bezahlte = useMemo(() => alle.filter((r) => passt(r, "bezahlt")), [alle]);
+  const bezahlte = useMemo(() => (suche.trim() ? alle : imZeitraum).filter((r) => passt(r, "bezahlt")), [alle, imZeitraum, suche]);
 
   const filterSetzen = (w: Filter) => {
     const neu = new URLSearchParams(params);
@@ -119,15 +134,15 @@ export default function Eingang() {
 
   const anzahl = useMemo(() => {
     const z = {} as Record<Filter, number>;
-    FILTER.forEach((x) => { z[x.wert] = alle.filter((r) => passt(r, x.wert)).length; });
+    FILTER.forEach((x) => { z[x.wert] = (OFFENES.includes(x.wert) ? alle : imZeitraum).filter((r) => passt(r, x.wert)).length; });
     return z;
-  }, [alle]);
+  }, [alle, imZeitraum]);
 
-  const liste = useMemo(() => alle.filter((r) => passt(r, filter) && (!weg || zahlweg(r) === weg) && passtSuche([
+  const liste = useMemo(() => (ueberAlle ? alle : imZeitraum).filter((r) => passt(r, filter) && (!weg || zahlweg(r) === weg) && passtSuche([
     r.lieferant, r.nummer, r.notiz, katName(r), ...r.eingang_anteile.flatMap((a) => [a.text, a.projekte?.nummer, a.projekte?.name]),
   ], suche)).sort((a, b) => (filter === "freigegeben" ? (zuZahlen(a, heute).bis ?? a.faellig_am ?? "9").localeCompare(zuZahlen(b, heute).bis ?? b.faellig_am ?? "9")
     : filter === "lastschrift" ? (lastschriftBetrag(a).am ?? a.datum).localeCompare(lastschriftBetrag(b).am ?? b.datum) : 0)),
-  [alle, filter, weg, suche, heute]);
+  [alle, imZeitraum, ueberAlle, filter, weg, suche, heute]);
 
   // Vorschläge: bisherige Lieferanten und die Lieferanten-Kontakte
   const lieferanten = useMemo(() => [...new Set([
@@ -179,7 +194,7 @@ export default function Eingang() {
   return (
     <Seite
       titel="Eingangsrechnungen"
-      untertitel={isLoading ? undefined : `${alle.length} ${alle.length === 1 ? "Rechnung" : "Rechnungen"}`}
+      untertitel={isLoading ? undefined : `${imZeitraum.length} ${imZeitraum.length === 1 ? "Rechnung" : "Rechnungen"} ${jahr ?? "· alle Jahre"}`}
       breit
       aktionen={
         <div className="flex gap-2">
@@ -197,6 +212,7 @@ export default function Eingang() {
       }
     >
       <div className="space-y-3">
+        <JahrWahl jahre={jahre} jahr={jahr} onWahl={setJahr} ueberAlle={ueberAlle} />
         <div className="flex flex-wrap gap-2">
           {FILTER.map((x) => (
             <button
@@ -245,15 +261,26 @@ export default function Eingang() {
           <Button variant="outline" className="h-11" onClick={() => refetch()}>Nochmal versuchen</Button>
         </Leer>
       ) : liste.length === 0 ? (
-        <Leer icon={Inbox} text={suche.trim() ? "Nichts gefunden." : LEER_TEXT[filter]}>
+        <Leer icon={Inbox} text={suche.trim() ? "Nichts gefunden."
+          : !ueberAlle && jahr && alle.some((r) => passt(r, filter)) ? `${jahr} keine — ältere unter „Archiv“.` : LEER_TEXT[filter]}>
           {!suche.trim() && (filter === "alle" || filter === "pruefen") && (
             <Button className="h-11 gap-1.5" onClick={() => setOffen("neu")}><Plus className="h-4 w-4" /> Rechnung erfassen</Button>
           )}
         </Leer>
       ) : (
         <div className="space-y-2">
-          <ul className="divide-y rounded-lg border bg-card">
-            {liste.map((r) => {
+          <MonatsListe
+            eintraege={liste}
+            tabelle={pc}
+            // Zu überweisen / Lastschrift: nach Fälligkeit sortiert — dort keine Monate
+            gruppieren={!ueberweisen && !lastschrift}
+            schluessel={(r) => r.id}
+            datum={(r) => r.datum}
+            betrag={(r) => (ablauf(r) === "abgelehnt" ? null : Number(r.brutto))}
+            kopf={{ name: "Lieferant · Kategorie, Projekt" }}
+            // Häkchen vorne: 1rem + 1,25rem + 1rem
+            kopfKlasse={ueberweisen || lastschrift ? "pl-[3.25rem]" : undefined}
+            zeile={(r) => {
               const z = zuordnung(r, r.eingang_anteile);
               const zahl = zahlung(r, heute);
               const schritt = ablauf(r);
@@ -262,43 +289,40 @@ export default function Eingang() {
               const projekte = r.eingang_anteile.map((a) => a.projekte ? `${a.projekte.nummer} ${a.projekte.name}` : "").filter(Boolean);
               const wohin = [...projekte, ...(r.betrieb ? ["Betrieb"] : [])].join(" · ");
               return (
-                <li key={r.id} className="flex items-center">
-                  {(ueberweisen || lastschrift) && (
-                    <Checkbox className="ml-4 h-5 w-5 shrink-0" checked={!abgewaehlt.has(r.id)} aria-label={`${r.lieferant} ${lastschrift ? "abgebucht" : "überweisen"}`}
+                <BelegZeile
+                  onClick={() => setOffen(r)}
+                  vorne={(ueberweisen || lastschrift) && (
+                    <Checkbox className="h-5 w-5 shrink-0" checked={!abgewaehlt.has(r.id)} aria-label={`${r.lieferant} ${lastschrift ? "abgebucht" : "überweisen"}`}
                       onCheckedChange={(c) => setAbgewaehlt((alt) => { const n = new Set(alt); if (c) n.delete(r.id); else n.add(r.id); return n; })} />
                   )}
-                  <button type="button" onClick={() => setOffen(r)}
-                    className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50 lg:px-5">
-                    <div className="min-w-0 flex-1 space-y-0.5">
-                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                        <span className="truncate font-medium">{r.lieferant}</span>
-                        <StatusPille eintrag={schritt === "ueberwiesen" ? { ton: "gruen", text: bezahltText(r) } : FREIGABE_STATUS[schritt]} />
-                        {r.lastschrift && schritt !== "lastschrift" && schritt !== "ueberwiesen" && schritt !== "abgelehnt" && <StatusPille eintrag={FREIGABE_STATUS.lastschrift} />}
-                        {z !== "zugeordnet" && <StatusPille eintrag={EINGANG_STATUS[z]} />}
-                        {zahl === "ueberfaellig" && schritt !== "abgelehnt" && <StatusPille eintrag={EINGANG_STATUS.ueberfaellig} />}
-                        {ueberweisen && !ibanPruefen(r.iban) && <StatusPille eintrag={{ ton: "gelb", text: "IBAN fehlt" }} />}
-                        {r.postfach_mail_id && <StatusPille eintrag={{ ton: "blau", text: "aus E-Mail" }} />}
-                      </div>
-                      <p className="flex items-center gap-1 truncate text-xs text-muted-foreground">
-                        {r.datei_pfad && <Paperclip className="h-3 w-3 shrink-0" aria-label="mit Beleg" />}
-                        {(lastschrift && ls.am ? [r.nummer, `Abbuchung ca. ${datum(ls.am)}`] : [r.nummer, datum(r.datum), katName(r)]).filter(Boolean).join(" · ")}
-                      </p>
-                      {wohin && <p className="truncate text-xs">{wohin}</p>}
-                    </div>
-                    <div className="shrink-0 text-right">
-                      <p className="zahl font-semibold">{euro(ueberweisen ? zz.betrag : lastschrift ? ls.betrag : Number(r.brutto))}</p>
-                      <p className="zahl text-xs text-muted-foreground">
-                        {ueberweisen && zz.skonto ? `${euro(zz.skonto)} Skonto bis ${datum(zz.bis!)}`
-                          : lastschrift && ls.skonto ? `− ${euro(ls.skonto)} Skonto`
-                            : `${euro(Number(r.netto))} netto`}
-                      </p>
-                    </div>
-                    <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  </button>
-                </li>
+                  nummer={r.nummer ?? <span className="text-muted-foreground">ohne Nummer</span>}
+                  name={r.lieferant}
+                  datum={r.datum}
+                  odoo={!!odoo?.has(r.id)}
+                  unter={(
+                    <span className="flex min-w-0 items-center gap-1">
+                      {r.datei_pfad && <Paperclip className="h-3 w-3 shrink-0" aria-label="mit Beleg" />}
+                      <span className="truncate">{(lastschrift && ls.am ? [`Abbuchung ca. ${datum(ls.am)}`, wohin] : [katName(r), wohin]).filter(Boolean).join(" · ")}</span>
+                    </span>
+                  )}
+                  pillen={(
+                    <>
+                      <StatusPille eintrag={schritt === "ueberwiesen" ? { ton: "gruen", text: bezahltText(r) } : FREIGABE_STATUS[schritt]} />
+                      {r.lastschrift && schritt !== "lastschrift" && schritt !== "ueberwiesen" && schritt !== "abgelehnt" && <StatusPille eintrag={FREIGABE_STATUS.lastschrift} />}
+                      {z !== "zugeordnet" && <StatusPille eintrag={EINGANG_STATUS[z]} />}
+                      {zahl === "ueberfaellig" && schritt !== "abgelehnt" && <StatusPille eintrag={EINGANG_STATUS.ueberfaellig} />}
+                      {ueberweisen && !ibanPruefen(r.iban) && <StatusPille eintrag={{ ton: "gelb", text: "IBAN fehlt" }} />}
+                      {r.postfach_mail_id && <StatusPille eintrag={{ ton: "blau", text: "aus E-Mail" }} />}
+                    </>
+                  )}
+                  betrag={euro(ueberweisen ? zz.betrag : lastschrift ? ls.betrag : Number(r.brutto))}
+                  betragUnter={ueberweisen && zz.skonto ? `${euro(zz.skonto)} Skonto bis ${datum(zz.bis!)}`
+                    : lastschrift && ls.skonto ? `− ${euro(ls.skonto)} Skonto`
+                      : `${euro(Number(r.netto))} netto`}
+                />
               );
-            })}
-          </ul>
+            }}
+          />
           {ueberweisen ? (
             <section className="sticky bottom-3 space-y-2 rounded-lg border bg-card p-3 lg:static">
               <p className="text-sm">

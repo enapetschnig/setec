@@ -1,10 +1,12 @@
-import type { ComponentType, ReactNode } from "react";
+import { useMemo, type ComponentType, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { ChevronRight, FileText, Mail, MessageCircle, Navigation, PackageCheck, Pencil, Phone, Receipt } from "lucide-react";
 import { Karte, Kennzahl, ProjektStatusBadge, StatusBadge, StatusPille } from "@/components/Bausteine";
 import { Button } from "@/components/ui/button";
 import type { ProjektMitKunde } from "@/hooks/useDaten";
-import { datum, euro, isoTag, zahl } from "@/lib/format";
+import { euro, isoTag, zahl } from "@/lib/format";
+import { imJahr, jahreAus } from "@/lib/jahre";
+import { BelegZeile, JahrWahl, MonatsListe, useJahrWahl } from "@/components/JahrWahl";
 import { belegStatus, type Kunde } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useKundeBelege } from "./stammDaten";
@@ -50,11 +52,15 @@ export function KundeDetail({
   const { data: belege = [], isLoading: belegeLaden } = useKundeBelege(kunde.id, istChef && !lieferant);
   const { data: kreditor } = useKreditor([kunde.name, ...(kunde.namen ?? [])], istChef && art !== "kunde");
   const heute = isoTag();
+  // Jahresansicht wie Rechnungen: Liste und „Bezahlt“ im gewählten Jahr, „Offen“ über alle Jahre
+  const [jahr, setJahr] = useJahrWahl("kontakt-kunde");
+  const jahre = useMemo(() => jahreAus(belege.map((b) => b.datum), new Date().getFullYear()), [belege]);
+  const sichtbar = useMemo(() => belege.filter((b) => imJahr(b.datum, jahr)), [belege, jahr]);
   const rechnungen = belege.filter((b) => b.typ === "rechnung");
   const offen = rechnungen.filter((b) => b.status === "offen");
   const ueberfaellig = offen.filter((b) => belegStatus(b, heute) === "ueberfaellig");
   const summe = (l: typeof belege) => l.reduce((s, b) => s + Number(b.brutto ?? 0), 0);
-  const bezahlt = rechnungen.filter((b) => b.status === "bezahlt");
+  const bezahlt = sichtbar.filter((b) => b.typ === "rechnung" && b.status === "bezahlt");
   const adr = adresse(kunde);
   // WhatsApp nur bei einer Handynummer (Vorlagen gibt es im Projekt)
   const waRoh = waNummer(kunde.telefon);
@@ -145,7 +151,8 @@ export function KundeDetail({
       {istChef && !lieferant && <KundeLieferscheine kundeId={kunde.id} />}
 
       {istChef && !lieferant && (
-        <Karte titel="Angebote & Rechnungen" ohnePolster>
+        <Karte titel="Angebote & Rechnungen" ohnePolster
+          aktion={belege.length > 0 ? <JahrWahl jahre={jahre} jahr={jahr} onWahl={setJahr} className="flex-nowrap justify-end" /> : undefined}>
           {belegeLaden ? (
             <p className="px-4 pb-4 text-sm text-muted-foreground lg:px-5">Lädt…</p>
           ) : belege.length === 0 ? (
@@ -155,27 +162,31 @@ export function KundeDetail({
               <div className="grid grid-cols-2 gap-2 px-4 pb-3 lg:px-5">
                 <Kennzahl titel="Offen" wert={euro(summe(offen))}
                   unter={offen.length ? `${zahl(offen.length)} Rechnung${offen.length === 1 ? "" : "en"}${ueberfaellig.length ? `, ${zahl(ueberfaellig.length)} überfällig` : ""}` : "nichts offen"} />
-                <Kennzahl titel="Bezahlt" wert={euro(summe(bezahlt))} unter={`${zahl(bezahlt.length)} Rechnung${bezahlt.length === 1 ? "" : "en"}`} />
+                <Kennzahl titel={jahr ? `Bezahlt ${jahr}` : "Bezahlt"} wert={euro(summe(bezahlt))} unter={`${zahl(bezahlt.length)} Rechnung${bezahlt.length === 1 ? "" : "en"}`} />
               </div>
-              <ul className="divide-y border-t">
-                {belege.map((b) => (
-                  <li key={b.id}>
-                    <Link to={`/belege/${b.id}`} className="flex min-h-14 items-center gap-3 px-4 py-2.5 transition-colors hover:bg-muted/50 lg:px-5">
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium">
-                          {b.typ === "angebot" ? "Angebot" : "Rechnung"} {b.nummer ?? ""}
-                          {b.betreff && <span className="font-normal text-muted-foreground"> · {b.betreff}</span>}
-                        </p>
-                        <p className="text-xs text-muted-foreground">{datum(b.datum)}</p>
-                      </div>
-                      <div className="flex shrink-0 flex-col items-end gap-1">
-                        <span className="zahl text-sm font-semibold">{euro(b.brutto)}</span>
-                        <StatusBadge status={belegStatus(b, heute)} />
-                      </div>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
+              {sichtbar.length === 0 ? (
+                <p className="border-t px-4 py-4 text-sm text-muted-foreground lg:px-5">{jahr} keine Angebote oder Rechnungen — ältere unter „Archiv“.</p>
+              ) : (
+                <MonatsListe
+                  eintraege={sichtbar}
+                  rahmen={false}
+                  schluessel={(b) => b.id}
+                  datum={(b) => b.datum}
+                  betrag={(b) => (b.typ === "rechnung" && (b.status === "offen" || b.status === "bezahlt") ? Number(b.brutto) : null)}
+                  zeile={(b) => (
+                    <BelegZeile
+                      to={`/belege/${b.id}`}
+                      icon={b.typ === "angebot" ? FileText : Receipt}
+                      name={<>{b.typ === "angebot" ? "Angebot" : "Rechnung"} {b.nummer ?? <span className="font-normal text-muted-foreground">Entwurf</span>}</>}
+                      unter={b.betreff}
+                      datum={b.datum}
+                      odoo={!!b.altbestand}
+                      betrag={euro(b.brutto)}
+                      pillen={<StatusBadge status={belegStatus(b, heute)} />}
+                    />
+                  )}
+                />
+              )}
             </>
           )}
         </Karte>

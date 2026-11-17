@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { BellRing, ChevronRight, HandCoins, Loader2, Search, Wallet, X } from "lucide-react";
+import { BellRing, HandCoins, Loader2, Receipt, Search, Wallet, X } from "lucide-react";
 import { Seite } from "@/components/PageHeader";
 import { Kennzahl, Leer, StatusPille } from "@/components/Bausteine";
 import {
@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useIstPc } from "@/components/AppLayout";
+import { BelegZeile, MonatsListe } from "@/components/JahrWahl";
 import { mahnungPdf } from "@/components/op/mahnen";
 import { mahnungAnlegen, useOffenePosten, type OpBeleg } from "@/components/op/opDaten";
 import { mahnFristAbgelaufen, mahnVorschlag, offenBetrag, STUFE_TEXT, verzugTage, type Stufe } from "@/components/op/opLogik";
@@ -45,6 +46,8 @@ const LEER_TEXT: Record<Filter, string> = {
  * /offene-posten — alle offenen Rechnungen (nur Chef): wie viel draußen ist,
  * was überfällig ist, was als Nächstes gemahnt gehört. Zahlung erfassen und
  * mahnen gehen direkt aus der Liste; Antippen öffnet die Rechnung.
+ * Bewusst ohne Jahresfilter: Offenes zeigt immer alle Jahre (Zeilen wie
+ * Rechnungen — MonatsListe/BelegZeile, Odoo-Altbestand mit Etikett).
  */
 export default function OffenePosten() {
   const pc = useIstPc();
@@ -146,43 +149,51 @@ export default function OffenePosten() {
       ) : liste.length === 0 ? (
         <Leer icon={HandCoins} text={suche.trim() ? "Nichts gefunden." : LEER_TEXT[filter]} />
       ) : (
-        <ul className="divide-y rounded-lg border bg-card">
-          {liste.map((z) => (
-            <li key={z.b.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center lg:px-5">
-              <Link to={`/belege/${z.b.id}`} className="flex min-w-0 flex-1 items-center gap-3">
-                <div className="min-w-0 flex-1 space-y-0.5">
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                    <span className="truncate font-medium">{z.b.empf_name || "–"}</span>
-                    {z.tage > 0 && <StatusPille eintrag={{ ...BELEG_STATUS.ueberfaellig, text: `${z.tage} ${z.tage === 1 ? "Tag" : "Tage"} überfällig` }} />}
-                    {z.letzte && <StatusPille eintrag={{ ton: "gelb", text: STUFE_TEXT[z.letzte.stufe as Stufe] }} />}
-                  </div>
-                  <p className="truncate text-xs text-muted-foreground">
-                    {[z.b.nummer, `fällig ${datum(z.b.faellig_am)}`, z.b.projekte ? `${z.b.projekte.nummer} ${z.b.projekte.name}` : null].filter(Boolean).join(" · ")}
-                  </p>
-                  {z.letzte && z.letzte.frist_bis >= heute && (
-                    <p className="text-xs text-muted-foreground">Frist bis {datum(z.letzte.frist_bis)}</p>
-                  )}
-                </div>
-                <div className="shrink-0 text-right">
-                  <p className="zahl font-semibold">{euro(z.offen)}</p>
-                  {z.offen < Number(z.b.brutto) && <p className="zahl text-xs text-muted-foreground">von {euro(Number(z.b.brutto))}</p>}
-                </div>
-                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-              </Link>
-              <div className="grid grid-cols-2 gap-2 sm:flex sm:shrink-0">
-                <Button variant="outline" className="h-11 gap-1.5" onClick={() => setZahlung(z.b)} disabled={!!laeuft}>
-                  <Wallet className="h-4 w-4" /> Zahlung
-                </Button>
-                {z.zuMahnen && z.vorschlag ? (
-                  <Button className="h-11 gap-1.5" onClick={() => setMahnFrage(z)} disabled={!!laeuft}>
-                    {laeuft === z.b.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <BellRing className="h-4 w-4" />}
-                    {z.vorschlag.stufe === 1 ? "Erinnern" : z.vorschlag.stufe === 2 ? "Mahnen" : "Letzte Mahnung"}
+        <MonatsListe
+          eintraege={liste}
+          tabelle={pc}
+          // älteste Fälligkeit zuerst — keine Monate
+          gruppieren={false}
+          schluessel={(z) => z.b.id}
+          datum={(z) => z.b.datum}
+          betrag={(z) => z.offen}
+          kopf={{ nummer: "Rechnung", name: "Kunde · Projekt", betrag: "Offen" }}
+          // Knöpfe hinten: Zeilenrand 1rem + 2 × 7,5rem + 0,5rem Abstand + 1rem Rand
+          kopfKlasse="lg:pr-[17.5rem]"
+          zeile={(z) => (
+            <BelegZeile
+              to={`/belege/${z.b.id}`}
+              icon={Receipt}
+              nummer={z.b.nummer ?? "–"}
+              name={z.b.empf_name || "–"}
+              datum={z.b.datum}
+              odoo={!!z.b.altbestand}
+              unter={[`fällig ${datum(z.b.faellig_am)}`, z.letzte && z.letzte.frist_bis >= heute ? `Frist bis ${datum(z.letzte.frist_bis)}` : null,
+                z.b.projekte ? `${z.b.projekte.nummer} ${z.b.projekte.name}` : null].filter(Boolean).join(" · ")}
+              pillen={(z.tage > 0 || z.letzte) ? (
+                <>
+                  {z.tage > 0 && <StatusPille eintrag={{ ...BELEG_STATUS.ueberfaellig, text: `${z.tage} ${z.tage === 1 ? "Tag" : "Tage"} überfällig` }} />}
+                  {z.letzte && <StatusPille eintrag={{ ton: "gelb", text: STUFE_TEXT[z.letzte.stufe as Stufe] }} />}
+                </>
+              ) : <StatusPille eintrag={BELEG_STATUS.offen} />}
+              betrag={euro(z.offen)}
+              betragUnter={z.offen < Number(z.b.brutto) ? `von ${euro(Number(z.b.brutto))}` : null}
+              hinten={(
+                <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
+                  <Button variant="outline" className="h-11 gap-1.5 sm:w-[7.5rem]" onClick={() => setZahlung(z.b)} disabled={!!laeuft}>
+                    <Wallet className="h-4 w-4" /> Zahlung
                   </Button>
-                ) : <span className="hidden sm:block sm:w-[7.5rem]" />}
-              </div>
-            </li>
-          ))}
-        </ul>
+                  {z.zuMahnen && z.vorschlag ? (
+                    <Button className="h-11 gap-1.5 px-2 sm:w-[7.5rem]" onClick={() => setMahnFrage(z)} disabled={!!laeuft}>
+                      {laeuft === z.b.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <BellRing className="h-4 w-4" />}
+                      {z.vorschlag.stufe === 1 ? "Erinnern" : z.vorschlag.stufe === 2 ? "Mahnen" : "Letzte Mahnung"}
+                    </Button>
+                  ) : <span className="hidden sm:block sm:w-[7.5rem]" />}
+                </div>
+              )}
+            />
+          )}
+        />
       )}
 
       {zahlung && (

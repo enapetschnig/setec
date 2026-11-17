@@ -16,7 +16,7 @@ export type { Mahnung, Zahlung };
 export type OpBeleg = Pick<
   Beleg,
   | "id" | "nummer" | "status" | "datum" | "faellig_am" | "brutto" | "netto" | "projekt_id" | "kunde_id"
-  | "empf_name" | "empf_zusatz" | "empf_strasse" | "empf_plz" | "empf_ort" | "empf_uid" | "empf_email"
+  | "empf_name" | "empf_zusatz" | "empf_strasse" | "empf_plz" | "empf_ort" | "empf_uid" | "empf_email" | "altbestand"
 > & {
   projekte: { id: string; nummer: string; name: string } | null;
   zahlungen: Zahlung[];
@@ -24,7 +24,7 @@ export type OpBeleg = Pick<
 };
 
 const FELDER =
-  "id, nummer, status, datum, faellig_am, brutto, netto, projekt_id, kunde_id, empf_name, empf_zusatz, empf_strasse, empf_plz, empf_ort, empf_uid, empf_email, projekte(id, nummer, name), zahlungen(*), mahnungen(*)";
+  "id, nummer, status, datum, faellig_am, brutto, netto, projekt_id, kunde_id, empf_name, empf_zusatz, empf_strasse, empf_plz, empf_ort, empf_uid, empf_email, altbestand, projekte(id, nummer, name), zahlungen(*), mahnungen(*)";
 
 const fehler = (text: string, e: { code?: string; message: string } | null | undefined) =>
   new Error(e?.message ? `${text}: ${fehlerText(e)}` : text);

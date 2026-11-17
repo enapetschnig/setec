@@ -1,7 +1,11 @@
 import { Link } from "react-router-dom";
-import { ChevronRight, ClipboardList, FileText, Truck } from "lucide-react";
+import { useMemo } from "react";
+import { ClipboardList, FileText, Truck } from "lucide-react";
 import { Karte, Kennzahl, StatusPille } from "@/components/Bausteine";
-import { datum, euro, zahl } from "@/lib/format";
+import { BelegZeile, JahrWahl, MonatsListe, useJahrWahl } from "@/components/JahrWahl";
+import { useOdooZeilen } from "@/hooks/useOdooZeilen";
+import { euro, zahl } from "@/lib/format";
+import { imJahr, jahreAus } from "@/lib/jahre";
 import type { Kunde } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useLieferantBelege } from "./kontaktDaten";
@@ -19,11 +23,18 @@ const ART = {
  */
 export function LieferantBelege({ kontakt, istChef }: { kontakt: Kunde; istChef: boolean }) {
   const { data: belege = [], isLoading } = useLieferantBelege(kontakt.id, true);
-  const s = belegSummen(belege);
+  const { data: odoo } = useOdooZeilen("eingangsrechnungen", istChef);
+  // Jahresansicht wie Eingangsrechnungen: Rechnungen/Bestellungen im gewählten Jahr, „Nicht bezahlt“ über alle Jahre
+  const [jahr, setJahr] = useJahrWahl("kontakt-lieferant");
+  const jahre = useMemo(() => jahreAus(belege.map((b) => b.datum), new Date().getFullYear()), [belege]);
+  const sichtbar = useMemo(() => belege.filter((b) => imJahr(b.datum, jahr)), [belege, jahr]);
+  const s = belegSummen(sichtbar);
+  const offen = belegSummen(belege);
   const namen = [kontakt.name, ...(kontakt.namen ?? [])];
 
   return (
-    <Karte titel={`Belege${belege.length ? ` · ${zahl(belege.length)}` : ""}`} ohnePolster>
+    <Karte titel={`Belege${sichtbar.length ? ` · ${zahl(sichtbar.length)}` : ""}`} ohnePolster
+      aktion={belege.length > 0 ? <JahrWahl jahre={jahre} jahr={jahr} onWahl={setJahr} className="flex-nowrap justify-end" /> : undefined}>
       {isLoading ? (
         <p className="px-4 pb-4 text-sm text-muted-foreground lg:px-5">Lädt…</p>
       ) : belege.length === 0 ? (
@@ -34,35 +45,36 @@ export function LieferantBelege({ kontakt, istChef }: { kontakt: Kunde; istChef:
         <>
           {istChef && (
             <div className={cn("grid grid-cols-2 gap-2 px-4 pb-3 lg:px-5", s.bestellungen > 0 && "sm:grid-cols-3")}>
-              <Kennzahl titel="Rechnungen" wert={euro(s.rechnungenSumme)} unter={`${zahl(s.rechnungen)} Rechnung${s.rechnungen === 1 ? "" : "en"}, brutto`} />
-              <Kennzahl titel="Nicht bezahlt" wert={euro(s.offenSumme)} unter={s.offen ? `${zahl(s.offen)} Rechnung${s.offen === 1 ? "" : "en"}` : "alles bezahlt"} />
+              <Kennzahl titel={jahr ? `Rechnungen ${jahr}` : "Rechnungen"} wert={euro(s.rechnungenSumme)} unter={`${zahl(s.rechnungen)} Rechnung${s.rechnungen === 1 ? "" : "en"}, brutto`} />
+              <Kennzahl titel="Nicht bezahlt" wert={euro(offen.offenSumme)} unter={offen.offen ? `${zahl(offen.offen)} Rechnung${offen.offen === 1 ? "" : "en"} · alle Jahre` : "alles bezahlt"} />
               {s.bestellungen > 0 && <Kennzahl titel="Bestellt" wert={euro(s.bestellungenSumme)} unter={`${zahl(s.bestellungen)} Bestellung${s.bestellungen === 1 ? "" : "en"} netto`} />}
             </div>
           )}
-          <ul className="divide-y border-t">
-            {belege.map((b) => {
+          {sichtbar.length === 0 ? (
+            <p className="border-t px-4 py-4 text-sm text-muted-foreground lg:px-5">{jahr} keine Belege — ältere unter „Archiv“.</p>
+          ) : <MonatsListe
+            eintraege={sichtbar}
+            rahmen={false}
+            schluessel={(b) => `${b.quelle}-${b.id}`}
+            datum={(b) => b.datum}
+            // Monatssumme: nur Rechnungen (brutto) — Bestellungen sind netto
+            betrag={(b) => (b.quelle === "rechnung" && b.betrag != null ? Number(b.betrag) : null)}
+            zeile={(b) => {
               const art = ART[b.quelle as keyof typeof ART] ?? ART.rechnung;
-              const I = art.icon;
               return (
-                <li key={`${b.quelle}-${b.id}`}>
-                  <Link to={art.pfad(b)} className="flex min-h-14 items-center gap-3 px-4 py-2.5 transition-colors hover:bg-muted/50 lg:px-5">
-                    <I className="h-4 w-4 shrink-0 text-muted-foreground" />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">
-                        {art.text} {b.nummer ?? <span className="font-normal text-muted-foreground">ohne Nummer</span>}
-                      </p>
-                      <p className="truncate text-xs text-muted-foreground">{[datum(b.datum), b.projekt].filter(Boolean).join(" · ")}</p>
-                    </div>
-                    <div className="flex shrink-0 flex-col items-end gap-1">
-                      {b.betrag != null && <span className="zahl text-sm font-semibold">{euro(b.betrag)}</span>}
-                      <StatusPille eintrag={belegPille(b)} />
-                    </div>
-                    <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  </Link>
-                </li>
+                <BelegZeile
+                  to={art.pfad(b)}
+                  icon={art.icon}
+                  name={<>{art.text} {b.nummer ?? <span className="font-normal text-muted-foreground">ohne Nummer</span>}</>}
+                  unter={b.projekt}
+                  datum={b.datum}
+                  odoo={b.quelle === "rechnung" && !!odoo?.has(b.id)}
+                  betrag={b.betrag != null ? euro(b.betrag) : ""}
+                  pillen={<StatusPille eintrag={belegPille(b)} />}
+                />
               );
-            })}
-          </ul>
+            }}
+          />}
         </>
       )}
     </Karte>

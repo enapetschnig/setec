@@ -76,7 +76,7 @@ export function useLeistungenKatalog() {
   });
 }
 
-export type KundenBeleg = Pick<Beleg, "id" | "typ" | "nummer" | "status" | "datum" | "brutto" | "faellig_am" | "betreff" | "projekt_id">;
+export type KundenBeleg = Pick<Beleg, "id" | "typ" | "nummer" | "status" | "datum" | "brutto" | "faellig_am" | "betreff" | "projekt_id" | "altbestand">;
 
 /** Angebote und Rechnungen eines Kunden (nur Chef — RLS) */
 export function useKundeBelege(kundeId: string | null | undefined, aktiv: boolean) {
@@ -85,8 +85,8 @@ export function useKundeBelege(kundeId: string | null | undefined, aktiv: boolea
     enabled: !!kundeId && aktiv,
     queryFn: async () => {
       const { data, error } = await supabase.from("belege")
-        .select("id, typ, nummer, status, datum, brutto, faellig_am, betreff, projekt_id")
-        .eq("kunde_id", kundeId!).order("datum", { ascending: false }).order("created_at", { ascending: false });
+        .select("id, typ, nummer, status, datum, brutto, faellig_am, betreff, projekt_id, altbestand")
+        .eq("kunde_id", kundeId!).order("datum", { ascending: false }).order("created_at", { ascending: false }).order("id");
       if (error) throw error;
       return (data ?? []) as KundenBeleg[];
     },

@@ -581,6 +581,23 @@ Bewusst einfach, kein eigenes Kalkulationsblatt:
   in ≤ 7 Tagen oder abgelaufen), Angenommen, Entwurf, In Rechnung, Abgelehnt.
   Rechnungen: Offen, Überfällig, Entwurf, Bezahlt, Storniert. Die Startseite
   verlinkt „nachfassen“ und Entwürfe direkt in den Filter.
+- **Jahresansicht** (seit 17.11.2026, nach der Odoo-Übernahme 2020–2026; ein
+  Bauteil `components/JahrWahl.tsx`, Logik `lib/jahre.ts`): Rechnungen,
+  Angebote, Eingangsrechnungen und die Belege im Kontakt zeigen nur das
+  gewählte Jahr — Standard das laufende, ältere unter „Archiv ▾“ (oder „Alle
+  Jahre“), gemerkt je Seite im Browser (`setec.jahr.<seite>`). **Suche und
+  Noch-zu-Tun gehen über alle Jahre** (Offen, Überfällig, Entwürfe, Ohne
+  Antwort, Nachfassen, Angenommen; im Eingang Zu prüfen/überweisen,
+  Lastschrift; „Nicht bezahlt“/„Offen“ im Kontakt) mit Hinweis „Suche in allen
+  Jahren“/„Offenes aus allen Jahren“; Bezahltes, Storniertes, „Alle“ und die
+  Kennzahl „Bezahlt <Jahr>“ (nach Rechnungsdatum) gelten fürs gewählte Jahr.
+  Offene Posten haben bewusst keinen Jahresfilter. Liste überall gleich
+  (`MonatsListe`/`BelegZeile`): eine Karte, je Monat ein Band mit Anzahl und
+  Monatssumme (ohne Entwurf/Storno/Abgelehnt), Zeile Name | Betrag, Nummer ·
+  Datum, Pille rechts; am PC Spalten. Aus Odoo Übernommenes trägt ein kleines
+  graues Etikett „Odoo“ (`belege.altbestand`, bei Eingangsrechnungen über
+  `odoo_import`, `hooks/useOdooZeilen.ts`). Auswertung: Umsatz enthält die
+  Odoo-Rechnungen, „davon … aus Odoo“ steht darunter.
 - Ein Editor für beide (`BelegEditor`): Titel als Räume/Abschnitte, Positionen
   aus Leistungskatalog, Artikelstamm, frei oder diktiert (`lib/sprachParser.ts`).
 - **Eingabezeile am PC** (`Eingabezeile.tsx`) unter der Tabelle: tippen,

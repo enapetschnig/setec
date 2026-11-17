@@ -49,7 +49,7 @@ function useBelegeKurz() {
   return useQuery({
     queryKey: ["belege", "auswertung"],
     queryFn: () => alleZeilen((a, b) => supabase.from("belege")
-      .select("id, typ, status, netto, datum, projekt_id").order("id").range(a, b)),
+      .select("id, typ, status, netto, datum, projekt_id, altbestand").order("id").range(a, b)),
   });
 }
 
@@ -127,6 +127,8 @@ function Ueberblick({ zeitraum, setZeitraum }: { zeitraum: Zeitraum; setZeitraum
   const rechnungenZeitraum = rechnungen.filter((r) => imZeitraum(r.datum));
   const umsatz = summe(rechnungenZeitraum.map((r) => r.netto));
   const umsatzOffen = summe(rechnungenZeitraum.filter((r) => r.status === "offen").map((r) => r.netto));
+  // aus Odoo übernommene Rechnungen zählen zum Umsatz (echte Rechnungen) — nur kenntlich machen
+  const umsatzOdoo = summe(rechnungenZeitraum.filter((r) => r.altbestand).map((r) => r.netto));
   const angebote = belege.filter((b) => b.typ === "angebot" && ["offen", "angenommen", "abgelehnt"].includes(b.status) && imZeitraum(b.datum));
 
   const umsatzJeMonat = useMemo(() => {
@@ -305,7 +307,7 @@ function Ueberblick({ zeitraum, setZeitraum }: { zeitraum: Zeitraum; setZeitraum
       <div className={cn("space-y-4 transition-opacity", altesBild && "opacity-60")}>
         <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
           <Kennzahl titel="Umsatz netto" wert={euro(umsatz)}
-            unter={`${rechnungenZeitraum.length} ${rechnungenZeitraum.length === 1 ? "Rechnung" : "Rechnungen"}${umsatzOffen > 0 ? ` · ${euro(umsatzOffen)} offen` : ""}`} />
+            unter={`${rechnungenZeitraum.length} ${rechnungenZeitraum.length === 1 ? "Rechnung" : "Rechnungen"}${umsatzOffen > 0 ? ` · ${euro(umsatzOffen)} offen` : ""}${umsatzOdoo > 0 ? ` · davon ${euro(umsatzOdoo)} aus Odoo` : ""}`} />
           <Kennzahl titel="Stunden" wert={stunden(stundenGesamt)}
             unter={stundenOffen > 0 ? `${stunden(stundenOffen)} nicht verrechnet` : stundenGesamt > 0 ? "alles verrechnet" : undefined} />
           <Kennzahl titel="Material (Einkauf)" wert={euro(materialEk)} unter={`${euro(materialVk)} Verkaufswert`} />

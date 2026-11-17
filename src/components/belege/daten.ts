@@ -8,11 +8,11 @@ import type { KatalogLeistung } from "./editor";
 export type BelegListenEintrag = Pick<
   Beleg,
   | "id" | "typ" | "nummer" | "status" | "datum" | "faellig_am" | "gueltig_bis" | "betreff" | "empf_name"
-  | "netto" | "brutto" | "projekt_id" | "angebot_id" | "kunde_id" | "bezahlt_am" | "created_at"
+  | "netto" | "brutto" | "projekt_id" | "angebot_id" | "kunde_id" | "bezahlt_am" | "created_at" | "altbestand"
 > & { projekte: Pick<Projekt, "id" | "nummer" | "name"> | null };
 
 const LISTEN_FELDER =
-  "id, typ, nummer, status, datum, faellig_am, gueltig_bis, betreff, empf_name, netto, brutto, projekt_id, angebot_id, kunde_id, bezahlt_am, created_at, projekte(id, nummer, name)";
+  "id, typ, nummer, status, datum, faellig_am, gueltig_bis, betreff, empf_name, netto, brutto, projekt_id, angebot_id, kunde_id, bezahlt_am, created_at, altbestand, projekte(id, nummer, name)";
 
 /** Alle Angebote und Rechnungen (oder die eines Projekts), neueste zuerst */
 export function useBelege(projektId?: string, aktiv = true) {
