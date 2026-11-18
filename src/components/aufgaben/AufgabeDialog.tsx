@@ -24,12 +24,14 @@ import { cn } from "@/lib/utils";
  * bin zuständig (Monteur) bzw. niemand (Chef wählt), Projekt aus dem Aufruf.
  */
 export function AufgabeDialog({
-  open, onOpenChange, aufgabe, projektId: vorProjekt, onGespeichert,
+  open, onOpenChange, aufgabe, projektId: vorProjekt, kundeId: vorKunde, onGespeichert,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   aufgabe?: Aufgabe | null;
   projektId?: string;
+  /** Neue Aufgabe gleich mit diesem Kunden (Kontaktansicht) */
+  kundeId?: string;
   onGespeichert?: (id: string) => void;
 }) {
   const neuLaden = useNeuLaden();
@@ -54,9 +56,9 @@ export function AufgabeDialog({
     setFaellig(aufgabe?.faellig_am ?? "");
     setPrio(aufgabe?.prioritaet ?? "normal");
     setProjektId(aufgabe?.projekt_id ?? vorProjekt ?? "");
-    setKundeId(aufgabe?.kunde_id ?? null);
+    setKundeId(aufgabe ? aufgabe.kunde_id : vorKunde ?? null);
     setWiederholung(aufgabe?.wiederholung ?? "");
-  }, [open, aufgabe, vorProjekt, istChef, profil]);
+  }, [open, aufgabe, vorProjekt, vorKunde, istChef, profil]);
 
   const heute = isoTag();
   const schnell: [string, string][] = [["Heute", heute], ["Morgen", tageDazu(heute, 1)], ["In 1 Woche", tageDazu(heute, 7)]];

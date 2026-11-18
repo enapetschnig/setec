@@ -16,12 +16,14 @@ import { cn } from "@/lib/utils";
  * Tipp = offen), Mitte Titel und Fälligkeit, rechts die Zuständigen.
  */
 export function AufgabenListe({
-  aufgaben, onWahl, mitPersonen = true, mitProjekt = true,
+  aufgaben, onWahl, mitPersonen = true, mitProjekt = true, mitKunde = true,
 }: {
   aufgaben: AufgabeMitInfo[];
   onWahl: (a: AufgabeMitInfo) => void;
   mitPersonen?: boolean;
   mitProjekt?: boolean;
+  /** Kundenname hinter Aufgaben ohne Projekt (beim Kontakt selbst unnötig) */
+  mitKunde?: boolean;
 }) {
   const neuLaden = useNeuLaden();
   const { data: mitarbeiter = [] } = useMitarbeiter();
@@ -66,7 +68,7 @@ export function AufgabenListe({
                   <span className={cn(st === "ueberfaellig" && "font-medium text-status-rot-fg")}>{fertig ? "erledigt" : faelligText(a.faellig_am, heute)}</span>
                   {a.wiederholung && <Repeat className="h-3 w-3" aria-label="wiederkehrend" />}
                   {mitProjekt && a.projekte && <span className="truncate">· {a.projekte.nummer} {a.projekte.name}</span>}
-                  {mitProjekt && !a.projekte && a.kunden && <span className="truncate">· {a.kunden.name}</span>}
+                  {mitKunde && !a.projekte && a.kunden && <span className="truncate">· {a.kunden.name}</span>}
                 </span>
               </span>
               {mitPersonen && leute.length > 0 && (

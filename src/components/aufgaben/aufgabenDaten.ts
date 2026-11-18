@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { alleZeilen } from "@/lib/abfrage";
 import { bildVerkleinern, sichererDateiname } from "@/lib/upload";
-import { istMeine, meineFilter, zaehlen } from "@/lib/aufgaben";
+import { istMeine, kundeFilter, meineFilter, zaehlen } from "@/lib/aufgaben";
 import { isoTag } from "@/lib/format";
 import type { Aufgabe, AufgabeVerlauf, Profil } from "@/lib/types";
 
@@ -18,7 +18,7 @@ const FELDER = "*, projekte(nummer, name), kunden(name)";
  * ihm zugewiesenen und selbst angelegten (RLS). Erledigte nur der letzten
  * 90 Tage, sonst wird die Liste mit der Zeit endlos.
  */
-export function useAufgaben(filter: { projektId?: string } = {}) {
+export function useAufgaben(filter: { projektId?: string; kundeId?: string; kundenProjekte?: string[] } = {}) {
   return useQuery({
     queryKey: ["aufgaben", "liste", filter],
     queryFn: async () => {
@@ -28,6 +28,8 @@ export function useAufgaben(filter: { projektId?: string } = {}) {
           .or(`status.neq.erledigt,erledigt_am.gte.${seit}`)
           .order("faellig_am", { ascending: true, nullsFirst: false }).order("id");
         if (filter.projektId) q = q.eq("projekt_id", filter.projektId);
+        // Beim Kontakt: am Kunden hängende und die seiner Projekte
+        if (filter.kundeId) q = q.or(kundeFilter(filter.kundeId, filter.kundenProjekte ?? []));
         return q.range(von, bis);
       });
       return data as AufgabeMitInfo[];

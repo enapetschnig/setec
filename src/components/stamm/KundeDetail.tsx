@@ -17,6 +17,7 @@ import { LieferantBelege } from "@/components/kontakte/LieferantBelege";
 import { KontaktPersonen } from "@/components/kontakte/KontaktPersonen";
 import { istFestnetz, waNummer } from "@/lib/whatsapp";
 import { KundeLieferscheine } from "@/components/kundenlieferschein/KundeLieferscheine";
+import { KundeAufgaben } from "@/components/aufgaben/KundeAufgaben";
 
 const adresse = (k: Pick<Kunde, "strasse" | "plz" | "ort">) =>
   [k.strasse, [k.plz, k.ort].filter(Boolean).join(" ")].filter(Boolean).join(", ");
@@ -120,6 +121,8 @@ export function KundeDetail({
           <p className="whitespace-pre-wrap text-sm">{kunde.notiz}</p>
         </Karte>
       )}
+
+      <KundeAufgaben kundeId={kunde.id} projektIds={projekte.map((p) => p.id)} />
 
       {art !== "kunde" && <LieferantBelege kontakt={kunde} istChef={istChef} />}
 
