@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { anzeigeStatus, faelligText, filtern, istUeberfaellig, sortieren, verlaufText, zaehlen, type AufgabeKurz } from "./aufgaben";
+import { anzeigeStatus, faelligText, filtern, istMeine, istUeberfaellig, meineFilter, sortieren, verlaufText, zaehlen, type AufgabeKurz } from "./aufgaben";
 
 const HEUTE = "2026-11-13";
 const a = (id: string, x: Partial<AufgabeKurz> = {}): AufgabeKurz => ({
@@ -8,6 +8,13 @@ const a = (id: string, x: Partial<AufgabeKurz> = {}): AufgabeKurz => ({
 });
 
 describe("Aufgaben", () => {
+  it("meine: zugeteilt — oder ohne Zuständigen und von mir angelegt (Startseite, 18.11.2026)", () => {
+    expect(istMeine(a("x", { zustaendig: ["ich"] }), "ich")).toBe(true);
+    expect(istMeine(a("x", { zustaendig: [], erstellt_von: "ich" }), "ich")).toBe(true);
+    expect(istMeine(a("x", { zustaendig: ["max"], erstellt_von: "ich" }), "ich")).toBe(false);
+    expect(istMeine(a("x", { zustaendig: [], erstellt_von: "max" }), "ich")).toBe(false);
+    expect(meineFilter("u1")).toBe("zustaendig.cs.{u1},and(zustaendig.eq.{},erstellt_von.eq.u1)");
+  });
   it("überfällig: offen und Termin vor heute — erledigt nie", () => {
     expect(istUeberfaellig(a("x", { faellig_am: "2026-11-12" }), HEUTE)).toBe(true);
     expect(istUeberfaellig(a("x", { faellig_am: HEUTE }), HEUTE)).toBe(false);

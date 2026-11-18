@@ -34,6 +34,16 @@ export const WIEDERHOLUNG: Record<string, string> = {
   jaehrlich: "Jedes Jahr",
 };
 
+/**
+ * „Meine“ Aufgabe: mir zugeteilt — oder niemandem zugeteilt und von mir
+ * angelegt (sonst sähe sie auf der Startseite keiner; Stefan 18.11.2026).
+ */
+export const istMeine = (a: Pick<AufgabeKurz, "zustaendig" | "erstellt_von">, ich: string) =>
+  a.zustaendig.includes(ich) || (a.zustaendig.length === 0 && a.erstellt_von === ich);
+
+/** Dieselbe Regel als PostgREST-Filter für `.or(…)` */
+export const meineFilter = (ich: string) => `zustaendig.cs.{${ich}},and(zustaendig.eq.{},erstellt_von.eq.${ich})`;
+
 export const istErledigt = (a: Pick<AufgabeKurz, "status">) => a.status === "erledigt";
 
 export const istUeberfaellig = (a: Pick<AufgabeKurz, "status" | "faellig_am">, heute: string) =>

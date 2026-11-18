@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { alleZeilen } from "@/lib/abfrage";
 import { bildVerkleinern, sichererDateiname } from "@/lib/upload";
-import { zaehlen } from "@/lib/aufgaben";
+import { istMeine, meineFilter, zaehlen } from "@/lib/aufgaben";
 import { isoTag } from "@/lib/format";
 import type { Aufgabe, AufgabeVerlauf, Profil } from "@/lib/types";
 
@@ -35,16 +35,16 @@ export function useAufgaben(filter: { projektId?: string } = {}) {
   });
 }
 
-/** Offene Aufgaben, für die ich zuständig bin (Startseite) */
+/** Offene Aufgaben, für die ich zuständig bin — auch selbst angelegte ohne Zuständigen (Startseite) */
 export function useMeineAufgaben(userId: string | undefined) {
   return useQuery({
     queryKey: ["aufgaben", "meine", userId],
     enabled: !!userId,
     queryFn: async () => {
       const { data, error } = await supabase.from("aufgaben").select(FELDER)
-        .contains("zustaendig", [userId!]).neq("status", "erledigt").limit(200);
+        .or(meineFilter(userId!)).neq("status", "erledigt").limit(200);
       if (error) throw error;
-      return (data ?? []) as AufgabeMitInfo[];
+      return ((data ?? []) as AufgabeMitInfo[]).filter((a) => istMeine(a, userId!));
     },
   });
 }

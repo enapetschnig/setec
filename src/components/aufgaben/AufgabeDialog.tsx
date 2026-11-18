@@ -112,7 +112,7 @@ export function AufgabeDialog({
         <div className="space-y-2">
           <Label>Wer ist zuständig?</Label>
           <PersonenWahl personen={mitarbeiter} teams={teams} gewaehlt={zustaendig} onChange={setZustaendig} ich={profil?.id} label="Zuständig" />
-          {zustaendig.length === 0 && <p className="text-xs text-muted-foreground">Niemand gewählt — die Aufgabe sieht dann nur, wer sie anlegt, und der Chef.</p>}
+          {zustaendig.length === 0 && <p className="text-xs text-muted-foreground">Niemand gewählt — die Aufgabe steht dann bei dir auf der Startseite unter „Meine Aufgaben“; sonst sieht sie nur der Chef.</p>}
         </div>
 
         <div className="space-y-2">
