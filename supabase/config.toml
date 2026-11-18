@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.postfach-abruf]
 verify_jwt = false
+
+[functions.geo-suchen]
+verify_jwt = false

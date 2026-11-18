@@ -45,38 +45,8 @@ export const istLieferant = (k: { name: string; namen?: string[] | null }, text:
 };
 
 // ── Adresse und Koordinaten ──────────────────────────────────────────────
-type MitAdresse = { strasse?: string | null; plz?: string | null; ort?: string | null };
-
-export const adresseText = (k: MitAdresse) =>
-  [k.strasse?.trim(), [k.plz?.trim(), k.ort?.trim()].filter(Boolean).join(" ")].filter(Boolean).join(", ");
-
-/**
- * Was wir Nominatim fragen — und womit wir uns merken, wofür die
- * Koordinaten gelten. Ohne Ort oder PLZ fragen wir nicht (nur eine Straße
- * fände irgendeine in Europa).
- */
-export function geoAnfrage(k: MitAdresse): string | null {
-  if (!k.ort?.trim() && !k.plz?.trim()) return null;
-  return `${adresseText(k)}, Österreich`;
-}
-
-/** Noch nicht gesucht oder Adresse seither geändert */
-export const brauchtGeo = (k: MitAdresse & { geo_adresse?: string | null }) => {
-  const a = geoAnfrage(k);
-  return !!a && k.geo_adresse !== a;
-};
-
-export const nominatimUrl = (anfrage: string) =>
-  `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=at,de,it,si,hu,sk,cz,ch&accept-language=de&q=${encodeURIComponent(anfrage)}`;
-
-/** Antwort von Nominatim → Punkt oder null (nicht gefunden, Unsinn) */
-export function nominatimLesen(antwort: unknown): { lat: number; lng: number } | null {
-  if (!Array.isArray(antwort) || !antwort.length) return null;
-  const t = antwort[0] as { lat?: unknown; lon?: unknown };
-  const lat = Number(t.lat), lng = Number(t.lon);
-  if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
-  return { lat, lng };
-}
+// Gemeinsam mit der Edge Function `geo-suchen` (Hintergrund-Verortung per pg_cron)
+export { adresseText, brauchtGeo, geoAnfrage, nominatimLesen, nominatimUrl } from "../../../supabase/functions/_shared/geo.ts";
 
 // ── PV-Anlage ────────────────────────────────────────────────────────────
 export type Ueberwachung = "fronius" | "solax" | "huawei" | "sma" | "sonstige";

@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { Loader2, LocateFixed, MapPinOff } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import type { AnlageMitKunde } from "@/components/anlagen/anlagenDaten";
@@ -46,22 +47,34 @@ const FILTER: { wert: KartenFilter; text: string }[] = [
 ];
 
 /** Beim ersten Mal (und wenn sich die Auswahl ändert) alle Punkte ins Bild */
-function Einpassen({ punkte }: { punkte: [number, number][] }) {
+function Einpassen({ punkte, filter }: { punkte: [number, number][]; filter: string }) {
   const map = useMap();
   const schluessel = punkte.map((p) => p.join(",")).join(";");
+  // Hat man die Karte selbst verschoben/gezoomt, nicht mehr einpassen, wenn
+  // im Hintergrund neue Punkte dazukommen — erst wieder bei anderem Filter.
+  const angefasst = useRef(false);
   useEffect(() => {
-    if (!punkte.length) return;
+    const el = map.getContainer();
+    const an = () => { angefasst.current = true; };
+    el.addEventListener("wheel", an, { passive: true });
+    el.addEventListener("pointerdown", an);
+    return () => { el.removeEventListener("wheel", an); el.removeEventListener("pointerdown", an); };
+  }, [map]);
+  useEffect(() => { angefasst.current = false; }, [filter]);
+  useEffect(() => {
+    if (!punkte.length || angefasst.current) return;
     if (punkte.length === 1) map.setView(punkte[0], 14);
     else map.fitBounds(L.latLngBounds(punkte), { padding: [30, 30], maxZoom: 14 });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [map, schluessel]);
+  }, [map, schluessel, filter]);
   return null;
 }
 
 /**
  * Kontakte auf der Karte (OpenStreetMap). Farbe nach Art und Status,
  * Tippen zeigt Name, Adresse und PV-Eckdaten mit „Öffnen“. Koordinaten
- * kommen aus der Datenbank; fehlende sucht „Lage suchen“ (Nominatim, 1/s).
+ * kommen aus der Datenbank; fehlende sucht der Server im Hintergrund (geo-suchen,
+ * jede Minute) oder sofort „Jetzt suchen“ (Nominatim, 1/s).
  */
 export default function KontakteKarte({
   kontakte, projekte, anlagen, onOeffnen,
@@ -73,6 +86,15 @@ export default function KontakteKarte({
 }) {
   const [filter, setFilter] = useState<Set<KartenFilter>>(new Set());
   const { fehlend, laeuft, starten } = useGeokodierung(kontakte);
+  // Der Server sucht fehlende Lagen jede Minute im Hintergrund (Edge Function
+  // geo-suchen) — solange welche fehlen, die Punkte alle 30 s nachladen.
+  const qc = useQueryClient();
+  const nochOffen = fehlend.length > 0;
+  useEffect(() => {
+    if (!nochOffen || laeuft) return;
+    const t = setInterval(() => void qc.invalidateQueries({ queryKey: ["kunden"] }), 30_000);
+    return () => clearInterval(t);
+  }, [nochOffen, laeuft, qc]);
 
   const daten = useMemo(() => {
     const laufend = new Set(projekte.filter((p) => p.status === "aktiv" && p.kunde_id).map((p) => p.kunde_id!));
@@ -130,7 +152,7 @@ export default function KontakteKarte({
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
             maxZoom={19}
           />
-          <Einpassen punkte={punkte} />
+          <Einpassen punkte={punkte} filter={[...filter].sort().join(",")} />
           {sichtbar.map((d) => (
             <Marker key={d.k.id} position={[d.k.lat!, d.k.lng!]} icon={punkt(d.ton)} title={d.k.name}>
               <Popup>
@@ -166,11 +188,16 @@ export default function KontakteKarte({
           <span className="min-w-0 flex-1">
             {zahl(ohneLage)} {ohneLage === 1 ? "Kontakt" : "Kontakte"} ohne Lage
             {fehlend.length < ohneLage && <span className="text-muted-foreground"> · {zahl(ohneLage - fehlend.length)} ohne Ort oder nicht gefunden</span>}
+            {fehlend.length > 0 && !laeuft && (
+              <span className="block text-xs text-muted-foreground" data-geo-hintergrund>
+                Die übrigen werden im Hintergrund gesucht (etwa 40 je Minute) und erscheinen nach und nach — auch wenn die Seite zu ist.
+              </span>
+            )}
           </span>
           {fehlend.length > 0 && (
             <Button variant="outline" className="h-10" onClick={() => void suchen()} disabled={laeuft}>
               {laeuft ? <Loader2 className="h-4 w-4 animate-spin" /> : <LocateFixed className="h-4 w-4" />}
-              {laeuft ? "Sucht … (1 je Sekunde)" : `Lage suchen (${zahl(fehlend.length)})`}
+              {laeuft ? "Sucht … (1 je Sekunde)" : `Jetzt suchen (${zahl(fehlend.length)})`}
             </Button>
           )}
         </div>
