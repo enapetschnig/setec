@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -23,6 +23,7 @@ import { euro, zahl } from "@/lib/format";
 import { artikelVk } from "@/lib/preise";
 import { useHauptbilder } from "@/components/material/artikelDaten";
 import { ArtikelVorschau } from "@/components/material/ArtikelVorschau";
+import { artikelGefiltert, OHNE_FILTER, reiheMerken, type ArtikelFilter } from "@/components/material/artikelReihe";
 import { AufschlagDialog } from "@/components/material/AufschlagDialog";
 import { codeVarianten, normalisieren } from "@/lib/strichcode";
 import { KATEGORIEN_ARTIKEL, type Artikel, type StatusEintrag } from "@/lib/types";
@@ -35,6 +36,19 @@ const SUCHE_MAX = 200;
 const INAKTIV: StatusEintrag = { ton: "grau", text: "Inaktiv" };
 const NACHBESTELLEN: StatusEintrag = { ton: "gelb", text: "Nachbestellen" };
 
+const LISTE_SCHLUESSEL = "artikel-liste";
+type ListenStand = Omit<ArtikelFilter, "q"> & { text: string; seite: number };
+
+function listeLesen(): ListenStand {
+  const leer: ListenStand = { ...OHNE_FILTER, text: "", seite: 0 };
+  try {
+    const g = JSON.parse(sessionStorage.getItem(LISTE_SCHLUESSEL) ?? "null");
+    return g ? { ...leer, ...g } : leer;
+  } catch {
+    return leer;
+  }
+}
+
 type DialogZustand = { artikel: Artikel | null; vorgabe?: Partial<Artikel> };
 
 /**
@@ -45,17 +59,19 @@ type DialogZustand = { artikel: Artikel | null; vorgabe?: Partial<Artikel> };
 export default function ArtikelSeite() {
   const { firma, istChef, darf } = useSitzung();
   const pc = useIstPc();
-  const [text, setText] = useState("");
+  // Zurück aus der Artikelansicht: dieselbe Suche, dieselben Filter, dieselbe Seite
+  const [gemerkt] = useState(listeLesen);
+  const [text, setText] = useState(gemerkt.text);
   const q = useVerzoegert(text.trim(), 300);
-  const [kategorie, setKategorie] = useState("alle");
-  const [lieferant, setLieferant] = useState("alle");
-  const [hersteller, setHersteller] = useState("alle");
+  const [kategorie, setKategorie] = useState(gemerkt.kategorie);
+  const [lieferant, setLieferant] = useState(gemerkt.lieferant);
+  const [hersteller, setHersteller] = useState(gemerkt.hersteller);
   const [rabatteOffen, setRabatteOffen] = useState(false);
   const [aufschlagOffen, setAufschlagOffen] = useState(false);
   const navigate = useNavigate();
-  const [nurLager, setNurLager] = useState(false);
-  const [inaktive, setInaktive] = useState(false);
-  const [seite, setSeite] = useState(0);
+  const [nurLager, setNurLager] = useState(gemerkt.nurLager);
+  const [inaktive, setInaktive] = useState(gemerkt.inaktive);
+  const [seite, setSeite] = useState(gemerkt.seite);
   // Auswahl bleibt beim Schließen stehen, damit der Dialog nicht mitten in der Animation umspringt
   const [auswahl, setAuswahl] = useState<DialogZustand>({ artikel: null });
   const [dialogOffen, setDialogOffen] = useState(false);
@@ -77,6 +93,12 @@ export default function ArtikelSeite() {
 
   // Die Suchfunktion der Datenbank kennt nur aktive Artikel — inaktive sucht die Liste.
   const sucheAktiv = q.length > 0 && !inaktive;
+  const listenFilter: ArtikelFilter = { kategorie, lieferant, hersteller, nurLager, inaktive, q: inaktive ? q : "" };
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(LISTE_SCHLUESSEL, JSON.stringify({ text: q, kategorie, lieferant, hersteller, nurLager, inaktive, seite }));
+    } catch { /* privates Fenster */ }
+  }, [q, kategorie, lieferant, hersteller, nurLager, inaktive, seite]);
 
   // Anderer Filter → zurück auf Seite 1, noch im selben Render (sonst würde kurz Seite 3 des neuen Filters geladen)
   const filter = [q, kategorie, lieferant, hersteller, nurLager, inaktive].join("|");
@@ -114,18 +136,11 @@ export default function ArtikelSeite() {
     queryKey: ["artikel", "liste", kategorie, lieferant, hersteller, nurLager, inaktive, inaktive ? q : "", seite],
     enabled: !sucheAktiv,
     queryFn: async () => {
-      let abfrage = supabase.from("artikel").select("*", { count: "exact" }).eq("aktiv", !inaktive);
-      if (kategorie === "ohne") abfrage = abfrage.is("kategorie", null);
-      else if (kategorie !== "alle") abfrage = abfrage.eq("kategorie", kategorie);
-      if (lieferant !== "alle") abfrage = abfrage.eq("lieferant", lieferant);
-      if (hersteller === "-") abfrage = abfrage.is("hersteller", null);
-      else if (hersteller !== "alle") abfrage = abfrage.eq("hersteller", hersteller);
-      if (nurLager) abfrage = abfrage.eq("lagerartikel", true);
-      if (inaktive && q) abfrage = abfrage.ilike("bezeichnung", `%${q.replace(/[%_\\]/g, (c) => `\\${c}`)}%`);
       const von = seite * PRO_SEITE;
-      const { data, error, count } = await abfrage.order("bezeichnung").order("id").range(von, von + PRO_SEITE - 1);
+      const { data, error, count } = await artikelGefiltert("*", listenFilter, true)
+        .order("bezeichnung").order("id").range(von, von + PRO_SEITE - 1);
       if (error) throw error;
-      return { artikel: (data ?? []) as Artikel[], gesamt: count ?? 0 };
+      return { artikel: (data ?? []) as unknown as Artikel[], gesamt: count ?? 0 };
     },
     placeholderData: (vorher) => vorher,
   });
@@ -139,7 +154,11 @@ export default function ArtikelSeite() {
   const laedt = sucheAktiv ? suche.isLoading : liste.isLoading;
   const holt = sucheAktiv ? suche.isFetching : liste.isFetching;
   const { data: bilder } = useHauptbilder(zeilen.map((a) => a.id));
-  const oeffnen = (a: Artikel) => navigate(`/artikel/${a.id}`);
+  // Die Reihe merken, damit die Artikelansicht mit ‹ › darin blättert
+  const oeffnen = (a: Artikel) => {
+    reiheMerken(sucheAktiv ? { ids: treffer.map((t) => t.id) } : { filter: listenFilter });
+    navigate(`/artikel/${a.id}`);
+  };
   const gekappt = sucheAktiv && (suche.data?.length ?? 0) >= SUCHE_MAX;
   const gefiltert = !!q || kategorie !== "alle" || lieferant !== "alle" || hersteller !== "alle" || nurLager || inaktive;
 

@@ -1,9 +1,9 @@
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
-  Camera, Check, FileText, ImageOff, ImagePlus, Loader2, MapPin, Pencil, Plus, Star, Trash2, Truck, Upload, Warehouse,
+  Camera, Check, ChevronLeft, ChevronRight, FileText, ImageOff, ImagePlus, Loader2, MapPin, Pencil, Plus, Star, Trash2, Truck, Upload, Warehouse,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Seite } from "@/components/PageHeader";
@@ -17,6 +17,7 @@ import {
   artikelDateiHochladen, artikelDateiLoeschen, artikelDateiSichtbar, lagerplatzSetzen, platzSchluessel, useArtikelBewegungen, useArtikelDateien,
   useArtikelLieferanten, useLagerplaetze, type ArtikelDateiMitUrl, type ArtikelLieferant,
 } from "@/components/material/artikelDaten";
+import { useArtikelNachbarn } from "@/components/material/artikelReihe";
 import { aufschlagAus, besterLieferant, bewegungsGruppe, ekVon, mitBestandDanach, type BewegungsFilter } from "@/components/material/artikelLogik";
 import { fehlerText, mengeText, useAlleLagerorte, zeitpunktText, type BuchungMitBezug } from "@/components/material/materialDaten";
 import { useNeuLaden } from "@/hooks/useDaten";
@@ -60,6 +61,25 @@ export default function ArtikelDetail() {
   const { data: orteAlle = [] } = useAlleLagerorte();
   const { data: plaetze } = useLagerplaetze();
   const { data: bewegungen = [], isLoading: laedtBewegungen } = useArtikelBewegungen(id);
+  const nachbarn = useArtikelNachbarn(artikel);
+  // Blättern ersetzt den Eintrag im Verlauf — „Zurück“ führt gleich wieder zur Liste
+  const springen = (ziel: string | null) => { if (ziel) navigate(`/artikel/${ziel}`, { replace: true }); };
+
+  // PC: Pfeiltasten — nicht beim Tippen und nicht, solange ein Dialog offen ist
+  useEffect(() => {
+    const taste = (e: KeyboardEvent) => {
+      if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || e.defaultPrevented) return;
+      const ziel = e.key === "ArrowLeft" ? nachbarn.vor : e.key === "ArrowRight" ? nachbarn.nach : null;
+      if (!ziel) return;
+      const el = e.target as HTMLElement | null;
+      if (el?.closest("input, textarea, select, [contenteditable=true], [role=dialog], [role=listbox], [role=slider]")) return;
+      if (document.querySelector("[role=dialog]")) return;
+      e.preventDefault();
+      navigate(`/artikel/${ziel}`, { replace: true });
+    };
+    window.addEventListener("keydown", taste);
+    return () => window.removeEventListener("keydown", taste);
+  }, [nachbarn.vor, nachbarn.nach, navigate]);
 
   const bilder = dateien.filter((d) => d.art === "bild");
   const blaetter = dateien.filter((d) => d.art === "datenblatt");
@@ -84,9 +104,24 @@ export default function ArtikelDetail() {
       zurueckPfad="/artikel"
       breit
       aktionen={
-        <Button variant="outline" className="h-11 px-3" onClick={() => setBearbeiten(true)} aria-label={istChef ? "Artikel bearbeiten" : "Artikel ansehen"}>
-          <Pencil className="h-4 w-4" /><span className="hidden sm:inline">{istChef ? "Bearbeiten" : "Strichcodes"}</span>
-        </Button>
+        <>
+          <div className="flex items-center">
+            <Button variant="outline" className="h-11 w-11 rounded-r-none px-0" disabled={!nachbarn.vor}
+              onClick={() => springen(nachbarn.vor)} aria-label="Voriger Artikel" title="Voriger Artikel (←)">
+              <ChevronLeft className="h-5 w-5" />
+            </Button>
+            {nachbarn.text && (
+              <span className="zahl hidden h-11 items-center border-y px-2.5 text-xs text-muted-foreground lg:inline-flex">{nachbarn.text}</span>
+            )}
+            <Button variant="outline" className="-ml-px h-11 w-11 rounded-l-none px-0" disabled={!nachbarn.nach}
+              onClick={() => springen(nachbarn.nach)} aria-label="Nächster Artikel" title="Nächster Artikel (→)">
+              <ChevronRight className="h-5 w-5" />
+            </Button>
+          </div>
+          <Button variant="outline" className="h-11 px-3" onClick={() => setBearbeiten(true)} aria-label={istChef ? "Artikel bearbeiten" : "Artikel ansehen"}>
+            <Pencil className="h-4 w-4" /><span className="hidden sm:inline">{istChef ? "Bearbeiten" : "Strichcodes"}</span>
+          </Button>
+        </>
       }
     >
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:items-start">
