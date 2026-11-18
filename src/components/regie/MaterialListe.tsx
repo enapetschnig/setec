@@ -5,7 +5,8 @@ import { supabase } from "@/integrations/supabase/client";
 import FormularDialog from "@/components/FormularDialog";
 import { DiktatKnopf } from "@/components/DiktatKnopf";
 import { ArtikelSuche } from "@/components/material/ArtikelSuche";
-import { ScanDialog } from "@/components/scanner/ScanDialog";
+import { CodeUnbekanntDialog } from "@/components/material/CodeUnbekanntDialog";
+import { ScanDialog, type ScanRueckmeldung } from "@/components/scanner/ScanDialog";
 import { artikelZuCode, type CodeTreffer } from "@/components/scanner/artikelZuCode";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,6 +46,7 @@ export function MaterialListe({
   const [scan, setScan] = useState(false);
   const [frei, setFrei] = useState(false);
   const [sprache, setSprache] = useState(false);
+  const [unbekannt, setUnbekannt] = useState<string | null>(null);
 
   const setzen = (key: string, teil: Partial<MaterialZeile>) =>
     aendern((e) => ({ ...e, material: e.material.map((m) => (m.key === key ? { ...m, ...teil } : m)) }));
@@ -65,21 +67,32 @@ export function MaterialListe({
     });
   };
 
-  // Alle Schreibweisen wie auf der Scan-Seite (GS1-Etikett, GTIN-14, UPC-A …)
-  const codeGelesen = async (code: string) => {
+  // Alle Schreibweisen wie auf der Scan-Seite (GS1-Etikett, GTIN-14, UPC-A, Artikelnummer …).
+  // Die Rückmeldung steht im Scanner — ein Toast läge hinter dem Kamerabild.
+  const codeGelesen = async (code: string): Promise<ScanRueckmeldung> => {
     let treffer: CodeTreffer | null;
     try {
       treffer = await artikelZuCode(code);
     } catch (e) {
-      return toast.error("Code nicht gelesen", { description: e instanceof Error ? e.message : (e as { message?: string })?.message });
+      return { text: "Keine Verbindung", unter: e instanceof Error ? e.message : "Bitte noch einmal scannen.", ton: "warnung" };
     }
-    if (!treffer) return toast.error("Unbekannter Code", { description: `${codeBereinigen(code)} ist nicht im Artikelstamm. Über „Suchen“ oder „Frei“ eintragen.` });
+    if (!treffer) {
+      // Scanner zu, zuordnen oder anlegen — danach geht es mit dem Scanner weiter
+      setScan(false);
+      setUnbekannt(codeBereinigen(code));
+      return { text: "Code unbekannt", unter: codeBereinigen(code), ton: "warnung" };
+    }
     const { data: a, error: e2 } = await supabase.from("artikel").select("id, bezeichnung, einheit, ek_preis")
       .eq("id", treffer.artikel_id).maybeSingle();
-    if (e2 || !a) return toast.error("Artikel nicht gefunden", { description: e2?.message ?? code });
-    const menge = treffer.menge;
-    artikelDazu(a, menge);
-    toast.success(`${zahl(menge)} ${a.einheit} · ${a.bezeichnung}`);
+    if (e2 || !a) return { text: "Artikel nicht gefunden", unter: e2?.message ?? code, ton: "warnung" };
+    artikelDazu(a, treffer.menge);
+    return { text: a.bezeichnung, unter: `+${zahl(treffer.menge)} ${a.einheit} in der Liste` };
+  };
+
+  const unbekanntZu = () => {
+    setUnbekannt(null);
+    // erst den Dialog zugehen lassen, sonst streiten zwei Dialoge um den Fokus
+    window.setTimeout(() => setScan(true), 250);
   };
 
   /** Aus „reinreden“: Artikel wie gesucht (Menge dazu), der Rest als freie Position */
@@ -168,7 +181,20 @@ export function MaterialListe({
         )}
       </FormularDialog>
 
-      <ScanDialog open={scan} onOpenChange={setScan} onCode={(c) => void codeGelesen(c)} dauerhaft titel="Material scannen" />
+      <ScanDialog open={scan} onOpenChange={setScan} onCode={codeGelesen} dauerhaft titel="Material scannen" />
+
+      <CodeUnbekanntDialog
+        code={unbekannt}
+        open={unbekannt !== null}
+        onOpenChange={(o) => { if (!o) unbekanntZu(); }}
+        lagerartikel={standardQuelle !== DIREKT}
+        abbrechenText="Überspringen"
+        onFertig={(a, menge) => {
+          artikelDazu(a, menge);
+          toast.success(`${zahl(menge)} ${a.einheit} · ${a.bezeichnung}`);
+          unbekanntZu();
+        }}
+      />
 
       <FreiePosition
         open={frei}
