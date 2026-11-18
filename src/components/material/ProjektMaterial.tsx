@@ -48,7 +48,7 @@ const vorzeichen = (art: string) => (art === "rueckgabe" ? -1 : 1);
  */
 export function ProjektMaterial({ projekt }: { projekt: ProjektMitKunde }) {
   const pc = useIstPc();
-  const { profil, firma, istChef } = useSitzung();
+  const { profil, firma, istChef, darf } = useSitzung();
   const neuLaden = useNeuLaden();
   const { data: zeilen = [], isLoading, error } = useProjektMaterial(projekt.id);
   const { data: buchungen = [] } = useProjektBuchungen(projekt.id);
@@ -120,7 +120,8 @@ export function ProjektMaterial({ projekt }: { projekt: ProjektMitKunde }) {
 
   const scanLink = (modus: BuchungsArt) => `/scan?projekt=${projekt.id}&modus=${modus}`;
 
-  const aktionen = (
+  // Ohne „Material buchen“ (Rollen & Rechte) keine Knöpfe — /scan wäre gesperrt
+  const aktionen = !darf("material") ? null : (
     <div className="grid grid-cols-3 gap-2">
       <Button asChild className="h-auto min-h-14 flex-col gap-1 whitespace-normal px-1 py-2 text-center text-[0.8125rem] leading-tight">
         <Link to={scanLink("ausfassung")}><PackageMinus className="h-5 w-5" />Ausfassen</Link>

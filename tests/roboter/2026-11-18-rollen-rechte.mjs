@@ -30,11 +30,16 @@ const ok = (b, text) => { console.log(`${b ? "✓" : "✗"} ${text}`); if (!b) f
 
 async function konto(email, rolle, vorname) {
   const alt = (await admin.auth.admin.listUsers()).data.users.find((u) => u.email === email);
-  if (alt) await admin.auth.admin.deleteUser(alt.id);
-  const { data, error } = await admin.auth.admin.createUser({ email, password: PW, email_confirm: true });
-  if (error) throw error;
-  await admin.from("profiles").update({ aktiv: true, rolle, vorname, nachname: "ZZ", passwort_neu: false }).eq("id", data.user.id);
-  return data.user.id;
+  // Wer eine fertige Rechnung geschrieben hat, lässt sich nicht löschen (festgeschrieben) → wiederverwenden
+  let id = alt && (await admin.auth.admin.deleteUser(alt.id)).error ? alt.id : null;
+  if (id) await admin.auth.admin.updateUserById(id, { password: PW });
+  else {
+    const { data, error } = await admin.auth.admin.createUser({ email, password: PW, email_confirm: true });
+    if (error) throw error;
+    id = data.user.id;
+  }
+  await admin.from("profiles").update({ aktiv: true, rolle, rolle_id: null, vorname, nachname: "ZZ", passwort_neu: false }).eq("id", id);
+  return id;
 }
 async function als(email) {
   const c = createClient(API_URL, ANON_KEY, { auth: { persistSession: false } });
@@ -112,12 +117,38 @@ try {
   const s9 = await melanie.from("firma").update({ name: "ZZ Fremdfirma" }).eq("id", 1);
   ok(!!s9.error, "Büro (ohne Einstellungen) ändert die Betriebsdaten nicht");
 
+  // ── Büro arbeitet normal weiter (Rechnung, Eingangsrechnung, Datei) ──
+  const b1 = await melanie.from("belege").insert({ typ: "rechnung", status: "entwurf", empf_name: "ZZ Kunde Rolle", betreff: "ZZ Rollen-Test" }).select("id").single();
+  ok(!b1.error, `Büro legt eine Rechnung an${b1.error ? ": " + b1.error.message : ""}`);
+  if (b1.data) {
+    const b2 = await melanie.from("beleg_positionen").insert({ beleg_id: b1.data.id, pos: 1, art: "pauschale", bezeichnung: "ZZ Arbeit", menge: 1, einheit: "Psch", einzelpreis: 100 });
+    ok(!b2.error, `Büro schreibt Positionen${b2.error ? ": " + b2.error.message : ""}`);
+    const b3 = await melanie.rpc("beleg_fertigstellen", { p_id: b1.data.id });
+    ok(!b3.error, `Büro stellt die Rechnung fertig${b3.error ? ": " + b3.error.message : ""}`);
+  }
+  const e1 = await melanie.from("eingangsrechnungen").insert({ lieferant: "ZZ Rollen GmbH", nummer: "ZZ-R1", datum: "2026-11-18", netto: 10, ust_satz: 20, ust: 2, brutto: 12, betrieb: true, freigabe: "offen" }).select("id").single();
+  ok(!e1.error, `Büro erfasst eine Eingangsrechnung${e1.error ? ": " + e1.error.message : ""}`);
+  const e2 = await melanie.storage.from("eingangsrechnungen").upload(`zz-rollen/${Date.now()}.pdf`, new Blob(["%PDF-1.4 ZZ"], { type: "application/pdf" }));
+  ok(!e2.error, `Büro lädt die Datei dazu hoch${e2.error ? ": " + e2.error.message : ""}`);
+  if (!e2.error) await admin.storage.from("eingangsrechnungen").remove([e2.data.path]);
+  const k8 = await klaus.from("eingangsrechnungen").select("id").eq("nummer", "ZZ-R1");
+  ok((k8.data ?? []).length === 1, "Klaus (Eingang erlaubt) sieht die Eingangsrechnung");
+  const d1 = await klaus.from("profiles").delete().eq("id", ids.chef).select("id");
+  ok(!!d1.error || (d1.data ?? []).length === 0, "Klaus löscht das Konto des Chefs nicht");
+
   // ── Lehrling ─────────────────────────────────────────────────────────
   const l1 = await lehrling.from("projekte").insert({ name: "ZZ Lehrling-Projekt" });
   ok(!!l1.error, "Lehrling legt kein Projekt an (API)");
   const l2 = await lehrling.from("zeiten").insert({ user_id: ids.monteur, datum: "2026-11-18", stunden: 1, projekt_id: pm.data?.id ?? null });
   ok(!!l2.error, "Lehrling bucht keine Stunden für Kollegen (API)");
   ok((await lehrling.rpc("hat_recht", { p_recht: "regie" })).data === true, "Lehrling: Regiebericht ja");
+  await admin.from("projekte").update({ status: "aktiv" }).eq("id", pm.data?.id);
+  const l3 = await lehrling.from("zeiten").insert({ user_id: ids.lehrling, datum: "2026-11-18", stunden: 2, projekt_id: pm.data?.id });
+  ok(!l3.error, `Lehrling bucht eigene Stunden${l3.error ? ": " + l3.error.message : ""}`);
+  const l4 = await lehrling.from("regieberichte").insert({ projekt_id: pm.data?.id, datum: "2026-11-18", status: "entwurf" }).select("id").single();
+  ok(!l4.error, `Lehrling legt einen Regiebericht an${l4.error ? ": " + l4.error.message : ""}`);
+  const l5 = await lehrling.from("material_buchungen").insert({ art: "direkt", menge: 1, projekt_id: pm.data?.id, user_id: ids.lehrling, bezeichnung: "ZZ Kabel", einheit: "Stk", regiebericht_id: l4.data?.id ?? null });
+  ok(!l5.error, `Lehrling bucht Material in den Regiebericht${l5.error ? ": " + l5.error.message : ""}`);
 
   // ── alte App-Fassung und letzter Chef ────────────────────────────────
   const a1 = await chef.from("profiles").update({ rolle: "monteur" }).eq("id", ids.melanie).select("rolle, rolle_id").single();
@@ -216,6 +247,10 @@ try {
 } finally {
   await browser?.close();
   await admin.from("rechnung_kategorien").delete().like("name", "ZZ%");
+  await admin.from("eingangsrechnungen").delete().like("lieferant", "ZZ %");
+  await admin.from("material_buchungen").delete().eq("bezeichnung", "ZZ Kabel");
+  await admin.from("zeiten").delete().in("user_id", Object.values(ids));
+  await admin.from("regieberichte").delete().in("projekt_id", (await admin.from("projekte").select("id").like("name", "ZZ%")).data?.map((p) => p.id) ?? []);
   await admin.from("projekte").delete().like("name", "ZZ%");
   for (const id of Object.values(ids)) await admin.auth.admin.deleteUser(id);
   await admin.from("rollen").delete().like("name", "ZZ%");

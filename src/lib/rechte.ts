@@ -19,11 +19,11 @@ export type Recht =
   | "projekte_anlegen" | "stunden_andere" | "regie" | "material";
 
 export const RECHTE: { recht: Recht; titel: string; text: string; nurBuero?: boolean }[] = [
-  { recht: "rechnungen", titel: "Angebote & Rechnungen", text: "Angebote, Rechnungen, Offene Posten, Mahnen", nurBuero: true },
-  { recht: "eingang", titel: "Eingangsrechnungen & Bestellungen", text: "Rechnungen der Lieferanten, Einkaufspreise, Bestellen", nurBuero: true },
+  { recht: "rechnungen", titel: "Angebote & Rechnungen", text: "Angebote, Rechnungen, Offene Posten, Mahnen, Auswertung", nurBuero: true },
+  { recht: "eingang", titel: "Eingangsrechnungen & Bestellungen", text: "Rechnungen der Lieferanten prüfen, zahlen, Bestellen", nurBuero: true },
   { recht: "buchhaltung", titel: "Buchhaltung", text: "Übergabe an den Steuerberater, Kategorien", nurBuero: true },
   { recht: "personal", titel: "Personal-Dokumente aller", text: "Lohnzettel, Krankenscheine der anderen", nurBuero: true },
-  { recht: "mitarbeiter", titel: "Mitarbeiter & Zugänge", text: "Einladen, sperren, Passwort, Sollzeit, Lohnkosten", nurBuero: true },
+  { recht: "mitarbeiter", titel: "Mitarbeiter & Zugänge", text: "Einladen, sperren, Passwort, Sollzeit, Lohnkosten eintragen", nurBuero: true },
   { recht: "einstellungen", titel: "Betriebs-Einstellungen", text: "Firmendaten, Bank, Logo, E-Mail-Postfach", nurBuero: true },
   { recht: "projekte_anlegen", titel: "Projekte anlegen", text: "Neues Projekt / neue Baustelle" },
   { recht: "stunden_andere", titel: "Stunden für Kollegen buchen", text: "Für andere schreiben (Team, Partie)" },

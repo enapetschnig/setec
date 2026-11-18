@@ -53,7 +53,9 @@ export function NachkalkulationKarte({ projekt, zeiten }: {
   projekt: { id: string; stundensatz: number | null };
   zeiten: NkZeit[];
 }) {
-  const { firma, istChef } = useSitzung();
+  const { firma, istChef: chef, darf } = useSitzung();
+  // Ohne Rechnungen oder Eingangsrechnungen fehlten Umsatz bzw. Kosten — dann gar nicht zeigen
+  const istChef = chef && darf("rechnungen") && darf("eingang");
   const { saetzeFuer } = useMitarbeiterSaetze(istChef);
   const { data: angebot } = useProjektAngebot(projekt.id, istChef);
   const { data: eingang = [] } = useProjektEingang(projekt.id, istChef);
