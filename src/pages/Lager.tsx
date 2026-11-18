@@ -45,7 +45,9 @@ const SEITE = 150;
  */
 export default function Lager() {
   const pc = useIstPc();
-  const { istChef } = useSitzung();
+  const { istChef, darf } = useSitzung();
+  const dMat = darf("material");
+  const dBest = istChef && darf("eingang");
   const { data: bestand = [], isLoading: laedtBestand, error: bestandFehler } = useLagerbestand();
   const { data: lagerArtikel = [], isLoading: laedtArtikel } = useLagerArtikel();
   const { data: alleOrte = [] } = useAlleLagerorte();
@@ -286,17 +288,21 @@ export default function Lager() {
 
   return (
     <Seite titel="Lager" untertitel={ortName ? `Bestand · ${ortName}` : "Bestand über alle Lagerorte"} breit>
-      <div className={cn("grid grid-cols-2 gap-3", istChef ? "lg:max-w-4xl lg:grid-cols-4" : "lg:max-w-md")}>
-        <AktionsKachel icon={ArrowRightLeft} titel="Bus auffüllen" unter="Vom Lager in den Bus umbuchen" to="/scan?modus=umbuchung"
-          className={istChef ? undefined : "col-span-2"} />
-        {istChef && (
-          <>
-            <AktionsKachel icon={PackagePlus} titel="Wareneingang" unter="Lieferung einbuchen" to={`/scan?modus=zugang${lagerParam}`} />
-            <AktionsKachel icon={ClipboardCheck} titel="Inventur" unter="Zählen, korrigieren" to={`/scan?modus=korrektur${lagerParam}`} />
-            <AktionsKachel icon={ShoppingCart} titel="Bestellungen" unter="Beim Großhändler bestellen" to="/bestellungen" />
-          </>
-        )}
-      </div>
+      {(dMat || dBest) && (
+        <div className={cn("grid grid-cols-2 gap-3", istChef ? "lg:max-w-4xl lg:grid-cols-4" : "lg:max-w-md")}>
+          {dMat && (
+            <AktionsKachel icon={ArrowRightLeft} titel="Bus auffüllen" unter="Vom Lager in den Bus umbuchen" to="/scan?modus=umbuchung"
+              className={istChef ? undefined : "col-span-2"} />
+          )}
+          {istChef && dMat && (
+            <>
+              <AktionsKachel icon={PackagePlus} titel="Wareneingang" unter="Lieferung einbuchen" to={`/scan?modus=zugang${lagerParam}`} />
+              <AktionsKachel icon={ClipboardCheck} titel="Inventur" unter="Zählen, korrigieren" to={`/scan?modus=korrektur${lagerParam}`} />
+            </>
+          )}
+          {dBest && <AktionsKachel icon={ShoppingCart} titel="Bestellungen" unter="Beim Großhändler bestellen" to="/bestellungen" />}
+        </div>
+      )}
 
       <div className={cn("grid gap-3", istChef ? "grid-cols-2 lg:grid-cols-3" : "grid-cols-2")}>
         <Kennzahl titel="Artikel mit Bestand" wert={zahl(mitBestand)} icon={Package} />
@@ -339,9 +345,9 @@ export default function Lager() {
       <section className="space-y-2.5">
         {istChef && nurNachbestellen && nachbestellen.length > 0 && (
           <div className="grid gap-2 sm:flex">
-            <Button asChild className="h-11 gap-2">
+            {dBest && <Button asChild className="h-11 gap-2">
               <Link to="/bestellungen?neu=lager"><ShoppingCart className="h-4 w-4" /> Bestellung anlegen</Link>
-            </Button>
+            </Button>}
             <Button variant="outline" className="h-11 gap-2" onClick={bestelllisteLaden}>
               <Download className="h-4 w-4" /> Bestellliste als CSV · {nachbestellen.length} Artikel
             </Button>

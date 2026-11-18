@@ -324,7 +324,7 @@ export default function Index() {
             <FolderPlus className="h-4 w-4" /> Neue Baustelle anlegen
           </Button>
         )}
-        {istChef && (
+        {dRech && (
           <Link to="/belege/neu?typ=angebot&sprache=1"
             className="mt-2.5 flex min-h-16 items-center gap-3 rounded-lg border border-primary/30 bg-primary-soft p-3 transition-colors hover:border-primary active:scale-[0.99]">
             <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">

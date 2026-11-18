@@ -514,7 +514,7 @@ export function RegieEditor({ voll }: { voll: RegieVoll | null }) {
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border border-status-lila bg-status-lila p-3 text-sm text-status-lila-fg">
           <Receipt className="h-4 w-4 shrink-0" />
           <span className="min-w-0 flex-1">Schon verrechnet{voll.rechnung?.nummer ? ` mit Rechnung ${voll.rechnung.nummer}` : ""}.</span>
-          {istChef && <Link to={`/belege/${voll.rechnung_id}`} className="inline-flex min-h-11 items-center font-semibold hover:underline">Rechnung öffnen</Link>}
+          {istChef && darf("rechnungen") && <Link to={`/belege/${voll.rechnung_id}`} className="inline-flex min-h-11 items-center font-semibold hover:underline">Rechnung öffnen</Link>}
         </div>
       )}
 

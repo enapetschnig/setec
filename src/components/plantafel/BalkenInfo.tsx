@@ -47,8 +47,8 @@ export function BalkenInfo({
     return () => { document.removeEventListener("pointerdown", weg, true); window.removeEventListener("keydown", taste); };
   }, [onZu]);
   const navigate = useNavigate();
-  const { profil } = useSitzung();
-  const weiter = terminWeiter(t, darf || (!!profil && t.mitarbeiter.includes(profil.id)));
+  const { profil, darf: darfRecht } = useSitzung();
+  const weiter = terminWeiter(t, darf || (!!profil && t.mitarbeiter.includes(profil.id)), darfRecht("regie"));
   const farbe = terminFarbe(t.art, projekt).streifen;
   const leute = t.mitarbeiter.map((id) => mitarbeiter.find((m) => m.id === id)).filter((m): m is Profil => !!m);
   const geraete = fahrzeuge.filter((f) => f.aktiv !== false);

@@ -24,7 +24,7 @@ const tel = (n: string) => `tel:${n.replace(/[^\d+]/g, "")}`;
  * dabei ist, Bus und Geräte, offene Hinweise und der Weg ins Projekt.
  */
 export function EinsatzDetails({ t }: { t: Termin }) {
-  const { profil, istChef } = useSitzung();
+  const { profil, istChef, darf } = useSitzung();
   const { data: projekt, isLoading } = useProjekt(t.projekt_id ?? undefined);
   const { data: mitarbeiter = [] } = useMitarbeiter();
   const { data: fahrzeuge = [] } = useFahrzeuge();
@@ -40,7 +40,7 @@ export function EinsatzDetails({ t }: { t: Termin }) {
   });
 
   // Besichtigung → Erstaufnahme, Service → Regiebericht (wer eingeteilt ist oder der Chef)
-  const weiter = terminWeiter(t, istChef || (!!profil && t.mitarbeiter.includes(profil.id)));
+  const weiter = terminWeiter(t, istChef || (!!profil && t.mitarbeiter.includes(profil.id)), darf("regie"));
   const adresse = (projekt ? [projekt.strasse, [projekt.plz, projekt.ort].filter(Boolean).join(" ")].filter(Boolean).join(", ") : "") || t.ort || "";
   const kunde = projekt?.kunden;
   const kollegen = t.mitarbeiter.filter((id) => id !== profil?.id).map((id) => mitarbeiter.find((m) => m.id === id)).filter((m): m is NonNullable<typeof m> => !!m);
@@ -122,7 +122,7 @@ export function EinsatzDetails({ t }: { t: Termin }) {
           {hinweise.map((h) => <li key={h} className="flex items-start gap-1.5"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />{h}</li>)}
         </ul>
       )}
-      {t.projekt_id && <MaterialLautAngebot projektId={t.projekt_id} buchbar={projekt?.status !== "angebot"} />}
+      {t.projekt_id && <MaterialLautAngebot projektId={t.projekt_id} buchbar={projekt?.status !== "angebot"} ausfassen={darf("material")} />}
       {t.projekt_id && (
         <Button asChild className="h-11 w-full sm:w-auto"><Link to={`/projekte/${t.projekt_id}`}><FolderKanban className="h-4 w-4" /> Ins Projekt</Link></Button>
       )}
@@ -140,7 +140,7 @@ export function EinsatzDetails({ t }: { t: Termin }) {
  * „Das Material brauche ich“: was laut Angebot noch mitzunehmen ist — ohne
  * Preise, schon Ausgefasstes abgezogen (wie der Vorschlag beim Ausfassen).
  */
-function MaterialLautAngebot({ projektId, buchbar }: { projektId: string; buchbar: boolean }) {
+function MaterialLautAngebot({ projektId, buchbar, ausfassen }: { projektId: string; buchbar: boolean; ausfassen: boolean }) {
   const [offen, setOffen] = useState(false);
   const { data: angebot } = useAngebotMaterial(projektId);
   const { data: projektMaterial } = useProjektMaterial(angebot ? projektId : null);
@@ -176,7 +176,7 @@ function MaterialLautAngebot({ projektId, buchbar }: { projektId: string; buchba
               );
             })}
           </ul>
-          {buchbar && nochOffen > 0 && (
+          {buchbar && ausfassen && nochOffen > 0 && (
             <Button asChild variant="outline" className="mt-2 h-11 w-full">
               <Link to={`/scan?projekt=${projektId}&modus=ausfassung`}><ScanBarcode className="h-4 w-4" /> Jetzt ausfassen</Link>
             </Button>

@@ -104,5 +104,7 @@ describe("terminWeiter", () => {
     expect(terminWeiter({ ...t, art: "montage" }, true)).toBeNull();
     expect(terminWeiter({ ...t, art: "buero" }, true)).toBeNull();
     expect(terminWeiter({ ...t, art: "besichtigung" }, false)).toBeNull();
+    expect(terminWeiter({ ...t, art: "service", projekt_id: "p1" }, true, false)).toBeNull();
+    expect(terminWeiter({ ...t, art: "besichtigung" }, true, false)?.art).toBe("erstaufnahme");
   });
 });

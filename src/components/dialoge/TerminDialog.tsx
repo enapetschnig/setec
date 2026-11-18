@@ -90,7 +90,7 @@ export function TerminDialog({
   bis?: string;
 }) {
   const neuLaden = useNeuLaden();
-  const { profil, istChef } = useSitzung();
+  const { profil, istChef, darf } = useSitzung();
   const { data: projekte = [] } = useProjekte();
   const { data: kunden = [] } = useKunden();
   const { data: mitarbeiter = [] } = useMitarbeiter();
@@ -214,7 +214,7 @@ export function TerminDialog({
   const navigate = useNavigate();
   // Nur für gespeicherte Termine in der gespeicherten Art (sonst passt der Kunde nicht)
   const weiter = termin && terminArt(termin.art) === w.art
-    ? terminWeiter({ ...termin, kunde_id: termin.kunde_id ?? null }, istChef || (!!profil && termin.mitarbeiter.includes(profil.id)))
+    ? terminWeiter({ ...termin, kunde_id: termin.kunde_id ?? null }, istChef || (!!profil && termin.mitarbeiter.includes(profil.id)), darf("regie"))
     : null;
   const darfStatus = istChef || (!!termin && !!profil && termin.mitarbeiter.includes(profil.id));
 

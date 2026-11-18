@@ -448,7 +448,9 @@ function Feldchen({ label, wert, onChange, platz, text }: { label: string; wert:
 function Ansicht({ p }: { p: PruefungVoll }) {
   const navigate = useNavigate();
   const neuLaden = useNeuLaden();
-  const { firma, istChef } = useSitzung();
+  const { firma, istChef, darf } = useSitzung();
+  // Rechnung erstellen/öffnen nur mit „Angebote & Rechnungen“ (Route /belege, Regel auf belege)
+  const dRech = istChef && darf("rechnungen");
   const { data: kunden = [] } = useKunden();
   const pdf = usePdf();
   const a = p.anlagen;
@@ -489,9 +491,9 @@ function Ansicht({ p }: { p: PruefungVoll }) {
       {p.rechnung_id ? (
         <div className="flex flex-wrap items-center gap-3 rounded-md border border-status-lila bg-status-lila p-3 text-sm text-status-lila-fg">
           <Receipt className="h-4 w-4 shrink-0" /> <span className="flex-1">Verrechnet — das Protokoll ist festgeschrieben.</span>
-          {istChef && <Link to={`/belege/${p.rechnung_id}`} className="inline-flex min-h-11 items-center gap-1.5 font-semibold hover:underline">Rechnung öffnen <ExternalLink className="h-4 w-4" /></Link>}
+          {dRech && <Link to={`/belege/${p.rechnung_id}`} className="inline-flex min-h-11 items-center gap-1.5 font-semibold hover:underline">Rechnung öffnen <ExternalLink className="h-4 w-4" /></Link>}
         </div>
-      ) : istChef && (
+      ) : dRech && (
         <Button variant="outline" className="h-11 w-full sm:w-auto" onClick={() => void verrechnen()} disabled={laeuft}>
           {laeuft ? <Loader2 className="h-4 w-4 animate-spin" /> : <Receipt className="h-4 w-4" />} Rechnung erstellen
         </Button>

@@ -43,7 +43,7 @@ export function baustelleText(p: { strasse: string | null; plz: string | null; o
  * als PDF teilen und (Chef) zur Rechnung springen.
  */
 export function RegieAnsicht({ voll }: { voll: RegieVoll }) {
-  const { istChef } = useSitzung();
+  const { istChef, darf } = useSitzung();
   const pdf = useRegiePdf();
   const bild = useUnterschriftBild(voll.unterschrift_pfad);
   const p = voll.projekte;
@@ -93,7 +93,7 @@ export function RegieAnsicht({ voll }: { voll: RegieVoll }) {
           <span className="min-w-0 flex-1">
             Verrechnet{voll.rechnung?.nummer ? ` mit Rechnung ${voll.rechnung.nummer}` : ""} — der Bericht ist festgeschrieben.
           </span>
-          {istChef && voll.rechnung_id && (
+          {istChef && darf("rechnungen") && voll.rechnung_id && (
             <Link to={`/belege/${voll.rechnung_id}`} className="inline-flex min-h-11 items-center gap-1.5 font-semibold underline-offset-2 hover:underline">
               Rechnung öffnen <ExternalLink className="h-4 w-4" />
             </Link>

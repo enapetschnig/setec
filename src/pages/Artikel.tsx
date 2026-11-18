@@ -43,7 +43,7 @@ type DialogZustand = { artikel: Artikel | null; vorgabe?: Partial<Artikel> };
  * Handy: Karten. PC: Tabelle über die volle Breite.
  */
 export default function ArtikelSeite() {
-  const { firma, istChef } = useSitzung();
+  const { firma, istChef, darf } = useSitzung();
   const pc = useIstPc();
   const [text, setText] = useState("");
   const q = useVerzoegert(text.trim(), 300);
@@ -204,7 +204,7 @@ export default function ArtikelSeite() {
       breit
       aktionen={
         <>
-          {istChef && (
+          {istChef && darf("rechnungen") && (
             <Button variant="outline" className="hidden h-11 px-3 sm:inline-flex" onClick={() => navigate("/belege/neu?typ=angebot&ki=1")} aria-label="Material per KI zusammenstellen">
               <Sparkles className="h-4 w-4" /><span className="hidden sm:inline">KI-Angebot</span>
             </Button>

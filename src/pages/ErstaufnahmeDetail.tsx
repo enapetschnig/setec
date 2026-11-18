@@ -115,10 +115,12 @@ type ZeichnenAuftrag =
 function ErstaufnahmeSeite({ id }: { id: string }) {
   const navigate = useNavigate();
   const neuLaden = useNeuLaden();
-  const { istChef } = useSitzung();
+  const { istChef, darf: darfRecht } = useSitzung();
+  // Angebote nur mit dem Recht „Angebote & Rechnungen“ (Route /belege, Regel auf belege)
+  const dRech = istChef && darfRecht("rechnungen");
   const { data: kunden = [] } = useKunden();
   const { data, isLoading, error, refetch } = useErstaufnahme(id);
-  const angebote = useEaAngebote(id, istChef);
+  const angebote = useEaAngebote(id, dRech);
   const [f, setF] = useState<EaFelder | null>(null);
   const [zustand, setZustand] = useState<"gespeichert" | "geaendert" | "speichert" | "fehler">("gespeichert");
   const [zeichnen, setZeichnen] = useState<ZeichnenAuftrag | null>(null);
@@ -374,12 +376,12 @@ function ErstaufnahmeSeite({ id }: { id: string }) {
             <div className="space-y-3 rounded-lg border bg-card p-3">
               <p className="text-sm font-semibold">Wie geht es weiter?</p>
               <div className="flex flex-wrap gap-2">
-                {darf.angebot && (
+                {darf.angebot && dRech && (
                   <Button className="h-11 gap-1.5" onClick={() => void angebotErstellen()} disabled={laeuft}>
                     <FilePlus2 className="h-4 w-4" /> {angebote.data?.length ? "Weiteres Angebot" : "Angebot erstellen"}
                   </Button>
                 )}
-                {darf.gleichProjekt && (
+                {darf.gleichProjekt && darfRecht("projekte_anlegen") && (
                   <Button variant="outline" className="h-11 gap-1.5" onClick={() => setFrage("projekt")} disabled={laeuft}>
                     <FolderPlus className="h-4 w-4" /> Gleich Projekt
                   </Button>
@@ -399,7 +401,7 @@ function ErstaufnahmeSeite({ id }: { id: string }) {
                 Das Projekt entsteht erst, wenn der Kunde annimmt — dann sind Fotos, Skizzen und Notizen schon drin.
                 „Gleich Projekt“ = Kleinauftrag ohne Angebot.
               </p>
-              {!!angebote.data?.length && (
+              {dRech && !!angebote.data?.length && (
                 <ul className="divide-y rounded-md border">
                   {angebote.data.map((b) => (
                     <li key={b.id}>

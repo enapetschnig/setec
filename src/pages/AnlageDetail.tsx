@@ -35,7 +35,7 @@ export default function AnlageDetail() {
   const navigate = useNavigate();
   const pc = useIstPc();
   const heute = isoTag();
-  const { firma, istChef } = useSitzung();
+  const { firma, istChef, darf } = useSitzung();
   const neuLaden = useNeuLaden();
   const { data: anlage, isLoading } = useAnlage(id);
   const { data: pruefungen = [] } = usePruefungen(id);
@@ -139,7 +139,7 @@ export default function AnlageDetail() {
             {laeuft === "start" ? <Loader2 className="h-4 w-4 animate-spin" /> : <ClipboardCheck className="h-4 w-4" />}
             {offenerEntwurf ? "Angefangene Prüfung weitermachen" : "Prüfung starten"}
           </Button>
-          {istChef && zuVerrechnen.length > 0 && (
+          {istChef && darf("rechnungen") && zuVerrechnen.length > 0 && (
             <Button variant="outline" className="h-11" onClick={() => void verrechnen()} disabled={!!laeuft}>
               {laeuft === "rechnung" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Receipt className="h-4 w-4" />}
               Rechnung erstellen{zuVerrechnen.length > 1 ? ` (${zuVerrechnen.length} Prüfungen)` : ""}
