@@ -429,7 +429,7 @@ function Mitarbeiter() {
   const { data: alle = [], refetch } = useQuery({
     queryKey: ["mitarbeiter", "alle"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("profiles").select("*").order("vorname");
+      const { data, error } = await supabase.from("profiles").select("*").eq("versteckt", false).order("vorname");
       if (error) throw error;
       return ((data ?? []) as Profil[]).sort((a, b) => ZUGANG_REIHENFOLGE[zugang(a)] - ZUGANG_REIHENFOLGE[zugang(b)]);
     },

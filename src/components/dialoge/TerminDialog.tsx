@@ -71,7 +71,7 @@ export function terminFehler(
  * Gespeicherte Besichtigung → Knopf „Erstaufnahme“, Service → „Regiebericht“ (`terminWeiter`).
  */
 export function TerminDialog({
-  open, onOpenChange, termin, datum: vorDatum, bisDatum: vorBis, projektId: vorProjekt, mitarbeiterId, teamId, fahrzeugId, von: vorVon, bis: vorBisZeit,
+  open, onOpenChange, termin, datum: vorDatum, bisDatum: vorBis, projektId: vorProjekt, mitarbeiterId, teamId, fahrzeugId, von: vorVon, bis: vorBisZeit, titel: vorTitel,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
@@ -88,6 +88,8 @@ export function TerminDialog({
   /** Aus dem Terminplaner: Uhrzeit der angetippten Zelle */
   von?: string;
   bis?: string;
+  /** Aus dem schnellen Einplanen: schon getippter Text */
+  titel?: string;
 }) {
   const neuLaden = useNeuLaden();
   const { profil, istChef, darf } = useSitzung();
@@ -103,7 +105,7 @@ export function TerminDialog({
   const setze = (teil: Partial<TerminWerte>) => setW((x) => ({ ...x, ...teil }));
 
   // Nur beim Öffnen füllen: Nachladen (Projekte, Profil) setzt keine Eingabe zurück
-  useBeimOeffnen(open ? termin?.id ?? `neu|${vorDatum ?? ""}|${vorBis ?? ""}|${vorProjekt ?? ""}|${mitarbeiterId ?? ""}|${teamId ?? ""}|${fahrzeugId ?? ""}|${vorVon ?? ""}` : null, () => {
+  useBeimOeffnen(open ? termin?.id ?? `neu|${vorDatum ?? ""}|${vorBis ?? ""}|${vorProjekt ?? ""}|${mitarbeiterId ?? ""}|${teamId ?? ""}|${fahrzeugId ?? ""}|${vorVon ?? ""}|${vorTitel ?? ""}` : null, () => {
     let v: TerminWerte;
     if (termin) {
       v = {
@@ -128,7 +130,7 @@ export function TerminDialog({
       v = {
         ...leer(vorDatum || isoTag()),
         bisDatum: vorBis && vorBis > (vorDatum || "") ? vorBis : "",
-        titel: p?.name ?? "",
+        titel: p?.name ?? vorTitel?.trim() ?? "",
         projektId: p?.id ?? "",
         kundeId: p?.kunde_id ?? "",
         ort: adresseZeile(p),

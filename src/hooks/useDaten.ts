@@ -57,12 +57,12 @@ export function useKunden() {
   });
 }
 
-/** Aktive Mitarbeiter (inkl. Chef), alphabetisch */
+/** Aktive Mitarbeiter (inkl. Chef), alphabetisch — ohne versteckte Konten (ePower), auch für sich selbst nicht */
 export function useMitarbeiter() {
   return useQuery({
     queryKey: ["mitarbeiter"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("profiles").select("*").eq("aktiv", true).order("vorname");
+      const { data, error } = await supabase.from("profiles").select("*").eq("aktiv", true).eq("versteckt", false).order("vorname");
       if (error) throw error;
       return (data ?? []) as Profil[];
     },

@@ -1,34 +1,32 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronRight, FolderKanban, PanelRightClose, Search } from "lucide-react";
+import { ChevronRight, FolderKanban, Search, X } from "lucide-react";
 import type { ProjektMitKunde } from "@/hooks/useDaten";
 import { nichtEingeplant } from "@/lib/kalender";
 import { projektFarbe } from "@/lib/plantafel";
 import { projekteSuchen } from "@/lib/projektSuche";
 import { cn } from "@/lib/utils";
 
-const STREIFEN_KEY = "elektro.plantafel.streifen";
-
-/** Wohin ein Projekt gezogen wurde: Spalte (Person oder „g:<Gerät>“) und Tag */
+/** Wohin ein Projekt gezogen wurde: Spalte (Person) und Tag */
 export type Ablage = { spalte: string; tag: string };
 
 /**
- * Rechts im Kalender (PC, Chef): Projekte „In Arbeit“ ohne Einsatz ab heute.
- * Auf eine Person oder ein Gerät an einem Tag ziehen = Montage bis Freitag,
- * antippen = Formular mit dem Projekt. Die Suche findet alle laufenden, auch
- * die noch im Angebot. Zuklappbar (gemerkt).
+ * Rechts im Kalender (PC, Chef) auf Knopfdruck statt des Monatskalenders:
+ * Projekte „In Arbeit“ ohne Einsatz ab heute. Auf eine Person an einem Tag
+ * ziehen = Montage bis Freitag, antippen = Formular mit dem Projekt. Die Suche
+ * findet alle laufenden, auch die noch im Angebot.
  */
-export function NichtEingeplant({ projekte, eingeplant, onAblegen, onAntippen }: {
+export function NichtEingeplant({ projekte, eingeplant, onAblegen, onAntippen, onZu }: {
   projekte: ProjektMitKunde[];
   eingeplant: Set<string>;
   onAblegen: (projektId: string, ziel: Ablage) => void;
   onAntippen: (projektId: string) => void;
+  /** zurück zum Monatskalender */
+  onZu: () => void;
 }) {
-  const [offen, setOffen] = useState(() => { try { return localStorage.getItem(STREIFEN_KEY) !== "zu"; } catch { return true; } });
   const [suche, setSuche] = useState("");
   const [zug, setZug] = useState<{ id: string; x: number; y: number; bewegt: boolean } | null>(null);
   const zugRef = useRef(zug);
   zugRef.current = zug;
-  const umschalten = () => { setOffen(!offen); try { localStorage.setItem(STREIFEN_KEY, offen ? "zu" : "auf"); } catch { /* egal */ } };
   const ungeplant = nichtEingeplant(projekte, eingeplant);
   const q = suche.trim();
   const liste = (q ? projekteSuchen(projekte.filter((p) => p.status === "aktiv" || p.status === "angebot"), q) : ungeplant).slice(0, 60);
@@ -85,61 +83,52 @@ export function NichtEingeplant({ projekte, eingeplant, onAblegen, onAntippen }:
 
   return (
     <>
-      {!offen ? (
-        <button type="button" onClick={umschalten} aria-expanded={false}
-          className="flex w-10 shrink-0 flex-col items-center gap-2 border-l border-t bg-card py-3 text-xs font-semibold hover:bg-muted" title="Noch nicht eingeplant — aufklappen">
-          <FolderKanban className="h-4 w-4 text-muted-foreground" />
+      <aside className="flex w-60 shrink-0 flex-col border-l border-t bg-card xl:w-64" aria-label="Noch nicht eingeplant">
+        <div className="flex items-center gap-2 border-b px-3 py-2">
+          <FolderKanban className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <span className="min-w-0 flex-1 text-sm font-semibold">Noch nicht eingeplant</span>
           {zahl}
-          <span className="[writing-mode:vertical-rl]">Noch nicht eingeplant</span>
-        </button>
-      ) : (
-        <aside className="flex w-60 shrink-0 flex-col border-l border-t bg-card xl:w-64" aria-label="Noch nicht eingeplant">
-          <div className="flex items-center gap-2 border-b px-3 py-2">
-            <FolderKanban className="h-4 w-4 shrink-0 text-muted-foreground" />
-            <span className="min-w-0 flex-1 text-sm font-semibold">Noch nicht eingeplant</span>
-            {zahl}
-            <button type="button" onClick={umschalten} className="rounded p-1 text-muted-foreground hover:bg-muted" aria-label="Seitenliste zuklappen"><PanelRightClose className="h-4 w-4" /></button>
-          </div>
-          <label className="relative mx-3 mt-2 block">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <input value={suche} onChange={(e) => setSuche(e.target.value)} placeholder="Projekt, Kunde, Ort …" aria-label="Projekt suchen"
-              className="h-10 w-full rounded-md border bg-background pl-8 pr-2 text-base [@media(pointer:fine)]:text-sm" />
-          </label>
-          <p className="px-3 pb-1 pt-2 text-[11px] text-muted-foreground">
-            {q ? "Laufende Projekte" : "In Arbeit, ohne Einsatz ab heute"} — auf eine Person oder ein Gerät ziehen oder antippen
-          </p>
-          <ul className="min-h-0 flex-1 space-y-1.5 overflow-y-auto px-3 pb-3">
-            {liste.map((p) => {
-              const ort = p.ort ?? p.kunden?.ort;
-              return (
-                <li key={p.id}>
-                  <div onPointerDown={(e) => runter(p.id, e)} data-projekt-ziehen={p.id}
-                    title={`${p.nummer} ${p.name} — auf eine Person oder ein Gerät ziehen, antippen = Formular`}
-                    className={cn("flex cursor-grab touch-none select-none items-stretch gap-2 rounded-md border bg-card py-1.5 pl-1.5 pr-2 hover:border-foreground/40",
-                      zug?.bewegt && zug.id === p.id && "opacity-40")}>
-                    <span className="w-1.5 shrink-0 rounded-full" style={{ background: projektFarbe(p) }} />
-                    <span className="min-w-0 flex-1">
-                      <span className="flex items-center gap-1.5 text-xs">
-                        <span className="font-mono font-semibold">{p.nummer}</span>
-                        {p.status === "angebot" && <span className="rounded-full bg-muted px-1.5 text-[10px] font-semibold text-muted-foreground">Angebot</span>}
-                        {eingeplant.has(p.id) && <span className="text-[10px] text-muted-foreground">eingeplant</span>}
-                      </span>
-                      <span className="block truncate text-sm font-medium">{p.name}</span>
-                      {(p.kunden?.name || ort) && <span className="block truncate text-xs text-muted-foreground">{[p.kunden?.name, ort].filter(Boolean).join(" · ")}</span>}
+          <button type="button" onClick={onZu} className="rounded p-1 text-muted-foreground hover:bg-muted" aria-label="Wieder den Monatskalender zeigen" title="Wieder den Monatskalender zeigen"><X className="h-4 w-4" /></button>
+        </div>
+        <label className="relative mx-3 mt-2 block">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <input value={suche} onChange={(e) => setSuche(e.target.value)} placeholder="Projekt, Kunde, Ort …" aria-label="Projekt suchen"
+            className="h-10 w-full rounded-md border bg-background pl-8 pr-2 text-base [@media(pointer:fine)]:text-sm" />
+        </label>
+        <p className="px-3 pb-1 pt-2 text-[11px] text-muted-foreground">
+          {q ? "Laufende Projekte" : "In Arbeit, ohne Einsatz ab heute"} — auf eine Person ziehen oder antippen
+        </p>
+        <ul className="min-h-0 flex-1 space-y-1.5 overflow-y-auto px-3 pb-3">
+          {liste.map((p) => {
+            const ort = p.ort ?? p.kunden?.ort;
+            return (
+              <li key={p.id}>
+                <div onPointerDown={(e) => runter(p.id, e)} data-projekt-ziehen={p.id}
+                  title={`${p.nummer} ${p.name} — auf eine Person ziehen, antippen = Formular`}
+                  className={cn("flex cursor-grab touch-none select-none items-stretch gap-2 rounded-md border bg-card py-1.5 pl-1.5 pr-2 hover:border-foreground/40",
+                    zug?.bewegt && zug.id === p.id && "opacity-40")}>
+                  <span className="w-1.5 shrink-0 rounded-full" style={{ background: projektFarbe(p) }} />
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-1.5 text-xs">
+                      <span className="font-mono font-semibold">{p.nummer}</span>
+                      {p.status === "angebot" && <span className="rounded-full bg-muted px-1.5 text-[10px] font-semibold text-muted-foreground">Angebot</span>}
+                      {eingeplant.has(p.id) && <span className="text-[10px] text-muted-foreground">eingeplant</span>}
                     </span>
-                    <ChevronRight className="h-4 w-4 shrink-0 self-center text-muted-foreground/50" />
-                  </div>
-                </li>
-              );
-            })}
-            {!liste.length && <li className="py-4 text-center text-xs text-muted-foreground">{q ? "Kein Projekt gefunden." : "Alle Projekte in Arbeit sind eingeplant."}</li>}
-          </ul>
-        </aside>
-      )}
+                    <span className="block truncate text-sm font-medium">{p.name}</span>
+                    {(p.kunden?.name || ort) && <span className="block truncate text-xs text-muted-foreground">{[p.kunden?.name, ort].filter(Boolean).join(" · ")}</span>}
+                  </span>
+                  <ChevronRight className="h-4 w-4 shrink-0 self-center text-muted-foreground/50" />
+                </div>
+              </li>
+            );
+          })}
+          {!liste.length && <li className="py-4 text-center text-xs text-muted-foreground">{q ? "Kein Projekt gefunden." : "Alle Projekte in Arbeit sind eingeplant."}</li>}
+        </ul>
+      </aside>
       {gezogen && zug && (
         <div className="pointer-events-none fixed z-50 max-w-64 truncate rounded-md border-2 bg-card px-2 py-1 text-xs font-semibold shadow-lg"
           style={{ left: zug.x + 14, top: zug.y + 12, borderColor: projektFarbe(gezogen) }}>
-          {gezogen.nummer} {gezogen.name} — auf Person oder Gerät loslassen
+          {gezogen.nummer} {gezogen.name} — auf eine Person loslassen
         </div>
       )}
     </>

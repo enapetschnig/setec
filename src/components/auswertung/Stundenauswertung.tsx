@@ -68,7 +68,7 @@ export function Stundenauswertung() {
   const { data: mitarbeiter = [] } = useQuery({
     queryKey: ["mitarbeiter", "alle"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("profiles").select("*").order("vorname");
+      const { data, error } = await supabase.from("profiles").select("*").eq("versteckt", false).order("vorname");
       if (error) throw error;
       return data ?? [];
     },

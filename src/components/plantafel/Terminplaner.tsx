@@ -1,35 +1,35 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ChevronDown, ChevronLeft, ChevronRight, GripVertical, Truck } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Avatar } from "@/components/Bausteine";
 import { fehlerText } from "@/components/stamm/stammDaten";
 import { BalkenInfo } from "@/components/plantafel/BalkenInfo";
-import { FAHRZEUG_ICON } from "@/components/fuhrpark/fuhrparkDaten";
+import { FahrzeugTag } from "@/components/plantafel/FahrzeugTag";
 import type { ProjektMitKunde } from "@/hooks/useDaten";
 import { datum as datumText, isoTag, isoZuDatum, tageDazu, uhrzeit } from "@/lib/format";
-import { geraetDoppelt, MONTAGE_ORANGE, terminFarbe } from "@/lib/kalender";
+import { MONTAGE_ORANGE, terminFarbe } from "@/lib/kalender";
 import { tageZwischen, type Konflikt } from "@/lib/plantafel";
 import {
   abwesenheitTon, einrasten, gruppenBilden, kalenderwoche, minuten, nebeneinander, planVerschieben, stundenBereich, zeitAus, zeitLage, zeitraumAus, type Gruppe,
 } from "@/lib/terminplaner";
 import { feiertagName } from "@/lib/zeitkonto";
-import { ABWESENHEIT_ART, FAHRZEUG_ART, name, type AbwesenheitArt, type Fahrzeug, type FahrzeugArt, type Profil, type Team, type Termin } from "@/lib/types";
+import { ABWESENHEIT_ART, name, type AbwesenheitArt, type Fahrzeug, type Profil, type Team, type Termin } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 /**
  * Kalender (früher Wochenplan/Terminplaner) — wie SETECs alter Terminplaner:
- * Spalten = Leute (Geschäftsführung, Büro, Teams, ohne Team), rechts davon
- * zuklappbar „Geräte & Fahrzeuge“; Zeilen = Tage mit den Stunden. Termine als
+ * Spalten = Leute (Geschäftsführung, Büro, Teams, ohne Team); Zeilen = Tage mit
+ * den Stunden, in der Tageszeile die Geräte & Fahrzeuge des Tages. Termine als
  * Blöcke über die Zeit (Montage in Projektfarbe/orange, Besichtigung weiß,
  * Service blau, Büro grau), Urlaub/ZA grün, Krank rot, Schule gelb.
  * - PC: alle Leute nebeneinander; rechts „Noch nicht eingeplant“ und Monatskalender
- * - Antippen = kleines Fenster; leere Zelle = Wahl „Einsatz | Abwesenheit“ (auf
- *   einer Abwesenheit: bearbeiten/löschen); am PC leere Zellen aufziehen =
- *   Uhrzeit bzw. Zeitraum über mehrere Tage; leere Gerätezelle = Termin mit Gerät
- * - Ziehen = andere Uhrzeit, anderer Tag, andere Person; unterer Rand = länger;
- *   Gerät am Griff ⋮⋮ auf einen Termin = mitnehmen; doppelt belegt = rot
+ * - Antippen = kleines Fenster; leere Zelle = schnell einplanen (Projekt oder
+ *   Kunde tippen) oder Abwesenheit (auf einer Abwesenheit: bearbeiten/löschen);
+ *   am PC leere Zellen aufziehen = Uhrzeit bzw. Zeitraum über mehrere Tage
+ * - Ziehen = andere Uhrzeit, anderer Tag, andere Person; unterer Rand = länger
+ * - Tageszeile: „+ Fahrzeug“ = zu einem Einsatz mitnehmen; doppelt belegt = rot
  * - Handy: ein Tag (Leute untereinander, Zeit quer) oder eine Person (Mo–Fr)
  */
 
@@ -46,6 +46,8 @@ export type Abwesend = { id: string | null; user_id: string | null; von: string 
 export type PlanLeer = {
   datum: string; bisDatum?: string; von?: string; bis?: string; mitarbeiterId: string;
   x: number; y: number; abwesenheit?: Abwesend | null;
+  /** Zeit bzw. Tage aufgezogen (statt nur angetippt) — dann gilt genau dieser Zeitraum */
+  aufgezogen?: boolean;
 };
 
 const ABW_KLASSE = {
@@ -178,10 +180,6 @@ function BlockText({ t, projekt, kunde, hoehe, konflikt }: { t: Termin; projekt?
 
 const blockFarbe = (t: Termin, projekt?: ProjektMitKunde) => terminFarbe(t.art, projekt);
 
-/** Breite der zugeklappten Gerätespalte */
-const ZU_BREITE = 30;
-const GERAETE_KEY = "elektro.kalender.geraete";
-
 /** Im Halten ziehen (Tablet), sonst sofort; Tippen = öffnen */
 function startZiehen(e: React.PointerEvent, los: () => void, tippen: () => void) {
   if (e.pointerType !== "touch") { los(); return; }
@@ -209,11 +207,11 @@ type Zug = {
 
 export function Terminplaner(p: Gemeinsam & {
   gruppen: Gruppe<Profil>[]; seite?: ReactNode; className?: string;
-  /** Geräte & Fahrzeuge als Spalten rechts (schon sortiert, nur aktive) */
+  /** Geräte & Fahrzeuge für die Tageszeile (schon sortiert, nur aktive) */
   geraete: Fahrzeug[];
   /** Alle Konflikte der Woche — doppelt belegte Geräte werden rot */
   konfliktListe: Konflikt[];
-  /** Leere Gerätezelle angetippt (Chef): Termin mit diesem Gerät */
+  /** „Eigenen Termin für …“ (Chef): großes Formular mit diesem Gerät */
   onGeraetLeer: (v: { fahrzeugId: string; datum: string; von?: string; bis?: string }) => void;
 }) {
   const { tage, termine, gruppen, abwesend, projekte, darf, heute, geraete } = p;
@@ -228,20 +226,14 @@ export function Terminplaner(p: Gemeinsam & {
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
-  const [geraeteOffen, setGeraeteOffenState] = useState(() => { try { return localStorage.getItem(GERAETE_KEY) !== "zu"; } catch { return true; } });
-  const setGeraeteOffen = (o: boolean) => { setGeraeteOffenState(o); try { localStorage.setItem(GERAETE_KEY, o ? "auf" : "zu"); } catch { /* egal */ } };
-  const mitGeraeten = geraete.length > 0;
-
   const leute = gruppen.flatMap((g) => g.leute);
-  const gBreite = 104;
-  const geraeteBreite = !mitGeraeten ? 0 : geraeteOffen ? gBreite * geraete.length : ZU_BREITE;
-  const breite = Math.max(118, Math.floor((platz - ZEIT - geraeteBreite - 2) / Math.max(1, leute.length)));
+  const breite = Math.max(118, Math.floor((platz - ZEIT - 2) / Math.max(1, leute.length)));
   const [ab, bis] = useMemo(() => stundenBereich(termine, tage, p.stunden[0], p.stunden[1]), [termine, tage, p.stunden]);
   const tagHoehe = ((bis - ab) / 60) * STD;
   const sichtbarIds = new Set(leute.map((m) => m.id));
   const weg = (pid: string, tag: string) => abwesend.find((a) => a.user_id === pid && a.von && a.bis && a.von <= tag && a.bis >= tag);
   // Sa/So nur, wenn dort etwas steht
-  const belegt = (tag: string) => termine.some((t) => zeitLage(t, tag, ab, bis) && (t.mitarbeiter.some((m) => sichtbarIds.has(m)) || (geraeteOffen && t.fahrzeuge.some((f) => geraete.some((g) => g.id === f)))));
+  const belegt = (tag: string) => termine.some((t) => zeitLage(t, tag, ab, bis) && (t.mitarbeiter.some((m) => sichtbarIds.has(m)) || t.fahrzeuge.length > 0));
   const zeilenTage = tage.filter((t) => wochentag(t) < 5 || belegt(t));
   const freiesWochenende = tage.filter((t) => wochentag(t) >= 5 && !belegt(t));
 
@@ -249,42 +241,6 @@ export function Terminplaner(p: Gemeinsam & {
   const [jetzt, setJetzt] = useState(() => new Date());
   useEffect(() => { const i = window.setInterval(() => setJetzt(new Date()), 60_000); return () => window.clearInterval(i); }, []);
   const jetztMin = jetzt.getHours() * 60 + jetzt.getMinutes();
-
-  // ------------------------------------------------------------- Gerät am Griff auf einen Termin
-  const [geraetZug, setGeraetZugState] = useState<{ id: string; x: number; y: number } | null>(null);
-  const geraetZugRef = useRef(geraetZug);
-  const setGeraetZug = (z: typeof geraetZug) => { geraetZugRef.current = z; setGeraetZugState(z); };
-  useEffect(() => {
-    if (!geraetZug) return;
-    const bewegen = (e: PointerEvent) => { const z = geraetZugRef.current; if (z) setGeraetZug({ ...z, x: e.clientX, y: e.clientY }); };
-    const los = (e: PointerEvent) => {
-      const z = geraetZugRef.current;
-      setGeraetZug(null);
-      if (!z) return;
-      const id = ((document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null)?.closest("[data-block]") as HTMLElement | null)?.dataset.block;
-      const t = termine.find((x) => x.id === id);
-      const f = geraete.find((x) => x.id === z.id);
-      if (!t || !f) { toast("Gerät auf einen Termin ziehen = mitnehmen"); return; }
-      if (t.fahrzeuge.includes(f.id)) { toast(`${f.name} ist bei ${t.titel} schon dabei`); return; }
-      void aendern(t, { fahrzeuge: [...t.fahrzeuge, f.id] }, `${f.name} → ${t.titel}`);
-    };
-    const abbrechen = () => setGeraetZug(null);
-    const halt = (e: TouchEvent) => { if (e.cancelable) e.preventDefault(); };
-    window.addEventListener("pointermove", bewegen);
-    window.addEventListener("pointerup", los);
-    window.addEventListener("pointercancel", abbrechen);
-    document.addEventListener("touchmove", halt, { passive: false });
-    return () => {
-      window.removeEventListener("pointermove", bewegen); window.removeEventListener("pointerup", los);
-      window.removeEventListener("pointercancel", abbrechen); document.removeEventListener("touchmove", halt);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [geraetZug !== null]);
-  const griffDown = (f: Fahrzeug, e: React.PointerEvent) => {
-    if (e.button !== 0 || !darf) return;
-    e.stopPropagation();
-    startZiehen(e, () => setGeraetZug({ id: f.id, x: e.clientX, y: e.clientY }), () => undefined);
-  };
 
   // ------------------------------------------------------------- Aufziehen (leere Zellen)
   type Auf = { person: string; start: { tag: string; minute: number }; ende: { tag: string; minute: number }; bewegt: boolean; x: number; y: number };
@@ -294,7 +250,7 @@ export function Terminplaner(p: Gemeinsam & {
   const minuteIn = (zelle: Element, y: number) => Math.max(ab, Math.min(bis, ab + ((y - zelle.getBoundingClientRect().top) / STD) * 60));
   const leerFertig = (a: Auf) => {
     const z = zeitraumAus(a.start, a.ende, ab, bis);
-    p.onLeer({ ...z, mitarbeiterId: a.person, x: a.x, y: a.y, abwesenheit: a.bewegt ? null : weg(a.person, a.start.tag) ?? null });
+    p.onLeer({ ...z, mitarbeiterId: a.person, x: a.x, y: a.y, abwesenheit: a.bewegt ? null : weg(a.person, a.start.tag) ?? null, aufgezogen: a.bewegt });
   };
 
   useEffect(() => {
@@ -340,8 +296,7 @@ export function Terminplaner(p: Gemeinsam & {
 
   const zielUnter = (z: Zug, x: number, y: number): Zug["ziel"] => {
     const zelle = (document.elementFromPoint(x, y) as HTMLElement | null)?.closest("[data-zelle]") as HTMLElement | null;
-    // Gerätespalten nehmen keine Leute auf — dort zählt nur die Spalte darunter nicht
-    if (!zelle || zelle.dataset.zelle!.startsWith("g:")) return z.ziel;
+    if (!zelle) return z.ziel;
     const r = zelle.getBoundingClientRect();
     const minute = einrasten(ab + ((y - r.top - (z.griff === "mitte" ? z.versatz : 0)) / STD) * 60);
     return { person: zelle.dataset.zelle!, tag: zelle.dataset.tag!, minute: Math.max(0, Math.min(24 * 60, minute)) };
@@ -470,7 +425,6 @@ export function Terminplaner(p: Gemeinsam & {
               className={cn("absolute z-[2] overflow-hidden rounded px-1.5 py-0.5 text-[11px] leading-[14px] shadow-sm",
                 klasse, t.status === "erledigt" && "opacity-60", p.konfliktIds.has(t.id) && "ring-2 ring-status-rot-fg",
                 meins && "ring-2 ring-primary ring-offset-1", info?.id === t.id && "ring-2 ring-foreground", gezogen && "opacity-40",
-                geraetZug && "outline-dashed outline-2 outline-primary",
                 darf ? "cursor-grab touch-none" : "cursor-pointer")}
               style={{ ...stil, top: ((lage.oben - ab) / 60) * STD + 1, height: hoehe, left: 2 + (sp.spalte * (breite - 4)) / sp.anzahl, width: (breite - 4) / sp.anzahl - 2 }}>
               <BlockText t={t} projekt={projekt} kunde={kunde} hoehe={hoehe} konflikt={p.konfliktIds.has(t.id)} />
@@ -496,72 +450,20 @@ export function Terminplaner(p: Gemeinsam & {
     );
   };
 
-  /** Zelle eines Geräts: alle Termine, die es mitnehmen; doppelt belegt = rot */
-  const geraetZelle = (f: Fahrzeug, tag: string, erste: boolean) => {
-    const liste = termine.map((t) => ({ t, lage: t.fahrzeuge.includes(f.id) ? zeitLage(t, tag, ab, bis) : null }))
-      .filter((x): x is { t: Termin; lage: NonNullable<ReturnType<typeof zeitLage>> } => !!x.lage);
-    const spalten = nebeneinander(liste.map((x) => ({ id: x.t.id, oben: x.lage.oben, unten: x.lage.unten })));
-    const doppelt = geraetDoppelt(p.konfliktListe, f.id, tag);
-    return (
-      <div key={f.id} data-zelle={`g:${f.id}`} data-tag={tag}
-        className={cn("relative shrink-0 border-r bg-muted/30", erste && "border-l-2 border-l-foreground/20", darf && "cursor-cell", doppelt.size > 0 && "bg-status-rot/50")}
-        style={{ width: gBreite, height: tagHoehe }}
-        title={darf ? `${f.name} · ${kurz(tag)} — antippen = Termin mit ${f.name}` : f.name}
-        onPointerDown={(e) => { if (e.target === e.currentTarget) setInfo(null); }}
-        onClick={(e) => {
-          if (e.target !== e.currentTarget || !darf) return;
-          const r = e.currentTarget.getBoundingClientRect();
-          const pkt = { tag, minute: Math.max(ab, Math.min(bis, ab + ((e.clientY - r.top) / STD) * 60)) };
-          const z = zeitraumAus(pkt, pkt, ab, bis);
-          p.onGeraetLeer({ fahrzeugId: f.id, datum: z.datum, von: z.von, bis: z.bis });
-        }}>
-        {liste.map(({ t, lage }) => {
-          const sp = spalten.get(t.id) ?? { spalte: 0, anzahl: 1 };
-          const projekt = projekte.find((x) => x.id === t.projekt_id);
-          const kunde = kundeVon(p, t);
-          const { klasse, stil } = blockFarbe(t, projekt);
-          const hoehe = ((lage.unten - lage.oben) / 60) * STD - 2;
-          const rot = doppelt.has(t.id);
-          return (
-            <button key={t.id} type="button" data-block={t.id}
-              onClick={(e) => { e.stopPropagation(); setInfo((alt) => (alt?.id === t.id ? null : { id: t.id, x: e.clientX, y: e.clientY })); }}
-              title={[`${f.name}${rot ? " — doppelt belegt" : ""}`, projekt ? `${projekt.nummer} ${projekt.name}` : null, kunde?.name, t.titel, zeitText(t)].filter(Boolean).join(" · ")}
-              className={cn("absolute z-[2] overflow-hidden rounded px-1 py-0.5 text-left text-[11px] leading-[14px]", klasse,
-                t.status === "erledigt" && "opacity-60", rot && "ring-2 ring-status-rot-fg", info?.id === t.id && "ring-2 ring-foreground")}
-              style={{ ...stil, top: ((lage.oben - ab) / 60) * STD + 1, height: hoehe, left: 2 + (sp.spalte * (gBreite - 4)) / sp.anzahl, width: (gBreite - 4) / sp.anzahl - 2 }}>
-              <BlockText t={t} projekt={projekt} kunde={kunde} hoehe={hoehe} konflikt={rot} />
-            </button>
-          );
-        })}
-      </div>
-    );
-  };
-  const geraeteZu = (
-    <div className="shrink-0 border-l-2 border-l-foreground/20 bg-muted/40" style={{ width: ZU_BREITE, height: tagHoehe }} aria-hidden />
-  );
-
   const stunden: number[] = [];
   for (let h = ab; h < bis; h += 60) stunden.push(h);
-  const gezogenesGeraet = geraetZug ? geraete.find((f) => f.id === geraetZug.id) : undefined;
 
   return (
-    <div className={cn("flex min-h-0", (zug || auf || geraetZug) && "select-none", p.className)}>
+    <div className={cn("flex min-h-0", (zug || auf) && "select-none", p.className)}>
       <div ref={boxRef} className="relative min-h-0 min-w-0 flex-1 overflow-auto border-t bg-card" onScroll={() => info && setInfo(null)}>
-        <div style={{ width: ZEIT + breite * leute.length + geraeteBreite }}>
-          {/* Kopf: Gruppen, darunter die Leute; rechts Geräte & Fahrzeuge */}
+        <div style={{ width: ZEIT + breite * leute.length }}>
+          {/* Kopf: Gruppen, darunter die Leute */}
           <div className="sticky top-0 z-30 border-b-2 border-foreground/15 bg-card">
             <div className="flex h-7 text-xs font-bold">
               <div className="sticky left-0 z-10 shrink-0 border-r bg-card" style={{ width: ZEIT }} />
               {gruppen.map((g) => (
                 <div key={g.schluessel} title={g.titel} className="shrink-0 truncate border-r-2 border-r-foreground/20 bg-muted px-2 text-center leading-7" style={{ width: breite * g.leute.length }}>{g.titel}</div>
               ))}
-              {mitGeraeten && (
-                <button type="button" onClick={() => setGeraeteOffen(!geraeteOffen)} aria-expanded={geraeteOffen}
-                  title={geraeteOffen ? "Geräte & Fahrzeuge zuklappen" : "Geräte & Fahrzeuge aufklappen"}
-                  className="flex shrink-0 items-center justify-center gap-1 border-l-2 border-l-foreground/20 bg-muted px-1 hover:bg-muted/70" style={{ width: geraeteBreite }}>
-                  {geraeteOffen ? <><ChevronDown className="h-3.5 w-3.5 shrink-0" /><span className="truncate">Geräte & Fahrzeuge</span></> : <Truck className="h-3.5 w-3.5" />}
-                </button>
-              )}
             </div>
             <div className="flex border-t">
               <div className="sticky left-0 z-10 flex shrink-0 items-end border-r bg-card px-2 pb-1 text-[11px] text-muted-foreground" style={{ width: ZEIT }}>KW {kalenderwoche(tage[0])}</div>
@@ -572,26 +474,6 @@ export function Terminplaner(p: Gemeinsam & {
                   <span className="truncate text-xs font-semibold">{breite < 150 && m.vorname && m.nachname ? `${m.vorname} ${m.nachname[0]}.` : name(m)}</span>
                 </div>
               )))}
-              {mitGeraeten && (geraeteOffen ? geraete.map((f, i) => {
-                const Icon = FAHRZEUG_ICON[f.art as FahrzeugArt] ?? Truck;
-                return (
-                  <div key={f.id} title={`${f.name} · ${FAHRZEUG_ART[f.art as FahrzeugArt]?.text ?? "Gerät"}${darf ? " — am Griff auf einen Termin ziehen" : ""}`}
-                    className={cn("flex shrink-0 items-center gap-1 border-r bg-muted/30 px-1 py-1.5", i === 0 && "border-l-2 border-l-foreground/20")} style={{ width: gBreite }}>
-                    {darf && (
-                      <span className="shrink-0 cursor-grab touch-none text-muted-foreground/60 hover:text-foreground" onPointerDown={(e) => griffDown(f, e)} aria-label={`${f.name} auf einen Termin ziehen`}>
-                        <GripVertical className="h-4 w-4" />
-                      </span>
-                    )}
-                    <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                    <span className="truncate text-xs font-semibold">{f.name}</span>
-                  </div>
-                );
-              }) : (
-                <button type="button" onClick={() => setGeraeteOffen(true)} className="shrink-0 border-l-2 border-l-foreground/20 bg-muted/40 text-[10px] font-semibold text-muted-foreground hover:bg-muted"
-                  style={{ width: ZU_BREITE }} title="Geräte & Fahrzeuge aufklappen" aria-label="Geräte & Fahrzeuge aufklappen">
-                  <span className="[writing-mode:vertical-rl]">Geräte</span>
-                </button>
-              ))}
             </div>
           </div>
 
@@ -600,10 +482,16 @@ export function Terminplaner(p: Gemeinsam & {
             const frei = wochentag(tag) >= 5 || !!fei;
             return (
               <div key={tag} className="border-b-2 border-foreground/15" data-tagzeile={tag}>
-                <div className={cn("sticky top-[66px] z-20 flex h-6 items-center border-b text-xs", tag === heute ? "bg-primary-soft" : "bg-muted")}>
-                  <div className={cn("sticky left-0 px-2 font-semibold", tag === heute && "text-primary")}>
-                    {tag === heute ? "Heute, " : `${["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"][wochentag(tag)]}, `}{datumText(tag)}
-                    {fei && <span className="font-normal text-muted-foreground"> · {fei}</span>}
+                <div className={cn("sticky top-[66px] z-20 flex min-h-6 items-center border-b text-xs", tag === heute ? "bg-primary-soft" : "bg-muted")}>
+                  {/* Datum, daneben Geräte & Fahrzeuge des Tages — bleibt beim seitlichen Rollen stehen */}
+                  <div className="sticky left-0 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 px-2 py-0.5" style={{ maxWidth: platz || undefined }}>
+                    <span className={cn("mr-1 font-semibold", tag === heute && "text-primary")}>
+                      {tag === heute ? "Heute, " : `${["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"][wochentag(tag)]}, `}{datumText(tag)}
+                      {fei && <span className="font-normal text-muted-foreground"> · {fei}</span>}
+                    </span>
+                    <FahrzeugTag tag={tag} fahrzeuge={geraete} termine={termine} konfliktListe={p.konfliktListe} mitarbeiter={p.mitarbeiter} darf={darf}
+                      aendern={aendern} onReservieren={(fahrzeugId, datum) => p.onGeraetLeer({ fahrzeugId, datum })}
+                      onTermin={(t, x, y) => setInfo({ id: t.id, x, y })} />
                   </div>
                 </div>
                 <div className="relative flex">
@@ -615,7 +503,6 @@ export function Terminplaner(p: Gemeinsam & {
                   <div className={cn("relative flex", frei && "bg-muted/50")}
                     style={{ backgroundImage: `repeating-linear-gradient(to bottom, transparent 0 ${STD - 1}px, hsl(var(--border)) ${STD - 1}px ${STD}px)` }}>
                     {gruppen.map((g) => g.leute.map((m, i) => zelle(m, tag, i === g.leute.length - 1)))}
-                    {mitGeraeten && (geraeteOffen ? geraete.map((f, i) => geraetZelle(f, tag, i === 0)) : geraeteZu)}
                     {tag === heute && jetztMin > ab && jetztMin < bis && (
                       <div className="pointer-events-none absolute inset-x-0 z-[4] h-0.5 bg-primary" style={{ top: ((jetztMin - ab) / 60) * STD }} />
                     )}
@@ -633,12 +520,6 @@ export function Terminplaner(p: Gemeinsam & {
       {p.seite}
 
       {info && <Info info={info} p={{ ...p, aendern, loeschen }} onZu={() => setInfo(null)} />}
-      {gezogenesGeraet && geraetZug && (
-        <div className="pointer-events-none fixed z-50 whitespace-nowrap rounded-md border-2 border-primary bg-card px-2 py-1 text-xs font-semibold"
-          style={{ left: geraetZug.x + 14, top: geraetZug.y + 12 }}>
-          {gezogenesGeraet.name} — auf einen Termin loslassen
-        </div>
-      )}
       {auf?.bewegt && aufRaum && (
         <div className="pointer-events-none fixed z-50 whitespace-nowrap rounded-md border-2 border-primary bg-card px-2 py-1 text-xs font-semibold"
           style={{ left: auf.x + 14, top: auf.y + 12 }}>
@@ -656,14 +537,17 @@ export function Terminplaner(p: Gemeinsam & {
   );
 }
 
-/** Rechts am PC: drei Monate zum Springen, die gezeigte Woche markiert */
+/**
+ * Rechts am PC: Monatskalender untereinander zum Springen, wie in Stefans
+ * altem Terminplaner — die gezeigte Woche und heute markiert, KW davor.
+ */
 export function MiniKalender({ bezug, woche, heute, onTag }: { bezug: string; woche: string[]; heute: string; onTag: (iso: string) => void }) {
   const [versatz, setVersatz] = useState(0);
   const d = isoZuDatum(bezug);
   useEffect(() => setVersatz(0), [bezug]);
-  const monate = [0, 1, 2].map((i) => new Date(d.getFullYear(), d.getMonth() + versatz + i, 1, 12));
+  const monate = [0, 1, 2, 3, 4, 5].map((i) => new Date(d.getFullYear(), d.getMonth() + versatz + i, 1, 12));
   return (
-    <aside className="hidden w-60 shrink-0 overflow-y-auto border-l border-t bg-card px-3 py-2 2xl:block" aria-label="Monatskalender">
+    <aside className="w-60 shrink-0 overflow-y-auto border-l border-t bg-card px-3 py-2" aria-label="Monatskalender">
       <div className="mb-1 flex items-center justify-between">
         <button type="button" className="rounded p-1.5 text-muted-foreground hover:bg-muted" aria-label="Früher" onClick={() => setVersatz(versatz - 1)}><ChevronLeft className="h-4 w-4" /></button>
         <span className="text-xs font-medium text-muted-foreground">Springen</span>

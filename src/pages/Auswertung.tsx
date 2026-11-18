@@ -203,7 +203,7 @@ function Ueberblick({ zeitraum, setZeitraum }: { zeitraum: Zeitraum; setZeitraum
   const { data: mitarbeiterAlle = [] } = useQuery({
     queryKey: ["mitarbeiter", "alle"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("profiles").select("*").order("vorname");
+      const { data, error } = await supabase.from("profiles").select("*").eq("versteckt", false).order("vorname");
       if (error) throw error;
       return data ?? [];
     },

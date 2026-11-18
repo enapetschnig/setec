@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { AlertTriangle, CalendarPlus, ChevronLeft, ChevronRight, MapPin, Settings2, Truck, UserRound } from "lucide-react";
+import { AlertTriangle, CalendarPlus, ChevronLeft, ChevronRight, FolderKanban, MapPin, Settings2, Truck, UserRound } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { PageHeader, Seite } from "@/components/PageHeader";
 import { Avatar } from "@/components/Bausteine";
@@ -18,11 +18,12 @@ import { fehlerText } from "@/components/stamm/stammDaten";
 import { useFahrzeuge, useKunden, useMitarbeiter, useNeuLaden, useProjekte, useTeams } from "@/hooks/useDaten";
 import { useSitzung } from "@/hooks/useSitzung";
 import { datum as datumText, isoTag, isoZuDatum, tageDazu, uhrzeit } from "@/lib/format";
-import { artText, einsatzAusProjekt, geraeteSpalten, terminArt, terminFarbe } from "@/lib/kalender";
+import { adresseZeile, artText, einsatzAusProjekt, geraeteSpalten, nichtEingeplant, terminArt, terminFarbe, titelVorschlag } from "@/lib/kalender";
 import { kalenderwoche, planStunden } from "@/lib/terminplaner";
 import { amTag, konflikte, type Konflikt } from "@/lib/plantafel";
 import { feiertagName } from "@/lib/zeitkonto";
 import { ABWESENHEIT_ART, name, type AbwesenheitArt, type Fahrzeug, type Kunde, type Profil, type Projekt, type Team, type Termin } from "@/lib/types";
+import type { ProjektMitKunde } from "@/hooks/useDaten";
 import { cn } from "@/lib/utils";
 
 const WOCHENTAGE = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
@@ -32,13 +33,16 @@ type Handy = HandyModus | "liste";
 const lesen = (k: string) => { try { return localStorage.getItem(k); } catch { return null; } };
 const merken = (k: string, w: string) => { try { localStorage.setItem(k, w); } catch { /* egal */ } };
 const montagVon = (iso: string) => tageDazu(iso, -((isoZuDatum(iso).getDay() + 6) % 7));
+type SchnellTermin = Pick<Termin, "titel" | "art" | "projekt_id" | "kunde_id" | "ort" | "datum" | "bis_datum" | "ganztags" | "mitarbeiter" | "fahrzeuge"> & { von: string; bis: string };
 const zeitText = (t: Termin) => (t.ganztags || !t.von ? "ganztägig" : `${uhrzeit(t.von)}${t.bis ? `–${uhrzeit(t.bis)}` : ""}`);
 
 /**
  * /kalender — der einzige Ort zum Einteilen (früher Plantafel mit Gantt).
- * Eine Woche: Spalten = Leute nach Gruppen, rechts Geräte & Fahrzeuge
- * (zuklappbar), Zeilen = Tage mit Stunden (components/plantafel/Terminplaner).
- * - Chef: alles eintragen, ziehen, rechts „Noch nicht eingeplant“
+ * Eine Woche: Spalten = Leute nach Gruppen, Zeilen = Tage mit Stunden, in der
+ * Tageszeile Geräte & Fahrzeuge (components/plantafel/Terminplaner). Rechts
+ * Monatskalender zum Springen wie in Stefans altem Terminplaner.
+ * - Chef: leere Stelle antippen = schnell einplanen (Projekt/Kunde tippen),
+ *   ziehen, Knopf „Nicht eingeplant“ = Projektliste statt Monatskalender
  * - Monteur: nur lesen, eigene Termine hervorgehoben; Abwesenheit anderer
  *   nur „abwesend“ (Sicht abwesenheit_kalender)
  * - Handy: Tag | Person | Woche (Liste, Monteur: „Meine“)
@@ -59,9 +63,10 @@ export default function Kalender() {
   const [filter, setFilter] = useState("");
   const [tagIndex, setTagIndex] = useState(() => Math.min(6, (isoZuDatum(heute).getDay() + 6) % 7));
   const [person, setPerson] = useState(profil?.id ?? "");
-  const [dialog, setDialog] = useState<{ termin?: Termin | null; datum?: string; bisDatum?: string; mitarbeiterId?: string; teamId?: string; fahrzeugId?: string; projektId?: string; von?: string; bis?: string } | null>(null);
+  const [dialog, setDialog] = useState<{ termin?: Termin | null; datum?: string; bisDatum?: string; mitarbeiterId?: string; teamId?: string; fahrzeugId?: string; projektId?: string; von?: string; bis?: string; titel?: string } | null>(null);
   const [teamsOffen, setTeamsOffen] = useState(false);
   const [wahl, setWahl] = useState<(LeerWahl & { mitarbeiterId: string }) | null>(null);
+  const [projektListe, setProjektListe] = useState(false);
   const [abwDialog, setAbwDialog] = useState<{ userId?: string; von?: string; bis?: string; id?: string } | null>(null);
 
   const start = montagVon(bezug);
@@ -94,7 +99,7 @@ export default function Kalender() {
   // Für „Noch nicht eingeplant“: Projekte mit einem Einsatz ab heute
   const { data: eingeplant = new Set<string>() } = useQuery({
     queryKey: ["termine", "eingeplant", heute],
-    enabled: pc && istChef,
+    enabled: istChef,
     queryFn: async () => {
       const { data, error } = await supabase.from("termine").select("projekt_id").not("projekt_id", "is", null)
         .or(`datum.gte.${heute},bis_datum.gte.${heute}`);
@@ -117,6 +122,7 @@ export default function Kalender() {
   const meine = nurMeine && profil ? termine.filter((t) => t.mitarbeiter.includes(profil.id)) : termine;
 
   const blaettern = (r: number) => setBezug(tageDazu(bezug, r * 7));
+  const ungeplant = nichtEingeplant(projekte, eingeplant).length;
   const titel = `KW ${kalenderwoche(von)} · ${datumText(von).slice(0, 6)} – ${datumText(bis)}`;
 
   const wer = (id: string | null | undefined) => name(mitarbeiter.find((m) => m.id === id));
@@ -134,15 +140,14 @@ export default function Kalender() {
   };
   const neuerTermin = () => setDialog({ datum: tage.includes(heute) ? heute : von });
 
-  /** Projekt aus „Noch nicht eingeplant“ auf eine Person oder ein Gerät gezogen */
+  /** Projekt aus „Noch nicht eingeplant“ auf eine Person gezogen */
   const projektAblegen = async (projektId: string, ziel: Ablage) => {
     const p = projekte.find((x) => x.id === projektId);
     if (!p || !istChef) return;
-    const geraet = ziel.spalte.startsWith("g:");
-    const werte = einsatzAusProjekt(p, ziel.tag, geraet ? { art: "geraet", id: ziel.spalte.slice(2) } : { art: "person", id: ziel.spalte });
+    const werte = einsatzAusProjekt(p, ziel.tag, { art: "person", id: ziel.spalte });
     const { data, error } = await supabase.from("termine").insert(werte).select("id").single();
     if (error) { toast.error("Nicht gespeichert", { description: fehlerText(error) }); return; }
-    const wo = geraet ? fahrzeuge.find((f) => f.id === ziel.spalte.slice(2))?.name : wer(ziel.spalte);
+    const wo = wer(ziel.spalte);
     toast.success(`${p.nummer} ${p.name}`, {
       description: `${wo ?? ""} · ${datumText(werte.datum).slice(0, 6)}${werte.bis_datum ? ` – ${datumText(werte.bis_datum).slice(0, 6)}` : ""}`,
       duration: 8000,
@@ -151,15 +156,64 @@ export default function Kalender() {
     void neuLaden("termine");
   };
 
+  /**
+   * Schnell einplanen aus dem kleinen Fenster: Projekt = Montage (angetippt:
+   * der Tag 7:00–15:30, aufgezogen: genau der Zeitraum), Kunde = Besichtigung
+   * zur angetippten Uhrzeit. Gibt es dieselbe Montage dort schon (gleiches
+   * Projekt, gleiche Tage und Zeit), kommt die Person dazu statt eines zweiten Termins.
+   */
+  const schnellEinplanen = async (w: LeerWahl & { mitarbeiterId: string }, ziel: { projekt: ProjektMitKunde } | { kunde: Kunde }) => {
+    setWahl(null);
+    const zeit = { von: w.von ?? "07:00", bis: w.bis ?? "15:30" };
+    const werte: SchnellTermin = "projekt" in ziel
+      ? {
+          titel: ziel.projekt.name, art: "montage", projekt_id: ziel.projekt.id, kunde_id: ziel.projekt.kunde_id,
+          ort: adresseZeile(ziel.projekt) || adresseZeile(kunden.find((k) => k.id === ziel.projekt.kunde_id)) || null,
+          datum: w.datum, bis_datum: w.bisDatum && w.bisDatum > w.datum ? w.bisDatum : null, ganztags: false,
+          ...(w.aufgezogen ? zeit : { von: "07:00", bis: "15:30" }),
+          mitarbeiter: [w.mitarbeiterId], fahrzeuge: [],
+        }
+      : {
+          titel: titelVorschlag("besichtigung", ziel.kunde.name), art: "besichtigung", projekt_id: null, kunde_id: ziel.kunde.id,
+          ort: adresseZeile(ziel.kunde) || null,
+          datum: w.datum, bis_datum: null, ganztags: false, ...zeit,
+          mitarbeiter: [w.mitarbeiterId], fahrzeuge: [],
+        };
+    const wann = `${datumText(werte.datum).slice(0, 6)}${werte.bis_datum ? ` – ${datumText(werte.bis_datum).slice(0, 6)}` : ""} · ${werte.von}–${werte.bis}`;
+    const gleich = werte.projekt_id ? termine.find((t) => t.projekt_id === werte.projekt_id && t.datum === werte.datum && (t.bis_datum ?? null) === werte.bis_datum
+      && t.von?.slice(0, 5) === werte.von && t.bis?.slice(0, 5) === werte.bis) : undefined;
+    if (gleich) {
+      if (gleich.mitarbeiter.includes(w.mitarbeiterId)) { toast(`${w.wer} ist bei ${gleich.titel} schon dabei`); return; }
+      const alt = gleich.mitarbeiter;
+      const { error } = await supabase.from("termine").update({ mitarbeiter: [...alt, w.mitarbeiterId] }).eq("id", gleich.id);
+      if (error) { toast.error("Nicht gespeichert", { description: fehlerText(error) }); return; }
+      toast.success(`${w.wer} → ${gleich.titel}`, {
+        description: wann, duration: 8000,
+        action: { label: "Rückgängig", onClick: () => void supabase.from("termine").update({ mitarbeiter: alt }).eq("id", gleich.id).then(() => neuLaden("termine")) },
+      });
+      void neuLaden("termine");
+      return;
+    }
+    const { data, error } = await supabase.from("termine").insert(werte).select("id").single();
+    if (error) { toast.error("Nicht gespeichert", { description: fehlerText(error) }); return; }
+    toast.success(werte.titel, {
+      description: `${w.wer} · ${wann}`, duration: 8000,
+      action: { label: "Rückgängig", onClick: () => void supabase.from("termine").delete().eq("id", data.id).then(() => neuLaden("termine")) },
+    });
+    void neuLaden("termine");
+  };
+
   const dialoge = (
     <>
       <TerminDialog open={!!dialog} onOpenChange={(o) => !o && setDialog(null)} termin={dialog?.termin} datum={dialog?.datum} bisDatum={dialog?.bisDatum}
-        mitarbeiterId={dialog?.mitarbeiterId} teamId={dialog?.teamId} fahrzeugId={dialog?.fahrzeugId} projektId={dialog?.projektId} von={dialog?.von} bis={dialog?.bis} />
+        mitarbeiterId={dialog?.mitarbeiterId} teamId={dialog?.teamId} fahrzeugId={dialog?.fahrzeugId} projektId={dialog?.projektId} von={dialog?.von} bis={dialog?.bis} titel={dialog?.titel} />
       <AbwesenheitDialog open={!!abwDialog} onOpenChange={(o) => !o && setAbwDialog(null)} userId={abwDialog?.userId} von={abwDialog?.von} bis={abwDialog?.bis} abwesenheitId={abwDialog?.id} />
       <TeamsDialog open={teamsOffen} onOpenChange={setTeamsOffen} />
       {wahl && istChef && (
-        <ZellWahl wahl={wahl} onZu={() => setWahl(null)}
-          onEinsatz={() => { setDialog({ datum: wahl.datum, bisDatum: wahl.bisDatum, von: wahl.von, bis: wahl.bis, mitarbeiterId: wahl.mitarbeiterId }); setWahl(null); }}
+        <ZellWahl wahl={wahl} onZu={() => setWahl(null)} projekte={projekte} kunden={kunden} eingeplant={eingeplant}
+          onProjekt={(p) => void schnellEinplanen(wahl, { projekt: p })}
+          onKunde={(k) => void schnellEinplanen(wahl, { kunde: k })}
+          onMehr={(text) => { setDialog({ datum: wahl.datum, bisDatum: wahl.bisDatum, von: wahl.von, bis: wahl.bis, mitarbeiterId: wahl.mitarbeiterId, titel: text }); setWahl(null); }}
           onAbwesenheit={() => { setAbwDialog({ userId: wahl.mitarbeiterId, von: wahl.datum, bis: wahl.bisDatum ?? wahl.datum }); setWahl(null); }}
           onAbwBearbeiten={(id) => { setAbwDialog({ id }); setWahl(null); }}
           onAbwLoeschen={(id) => void abwLoeschen(id)} />
@@ -217,6 +271,13 @@ export default function Kalender() {
         <label className="flex items-center gap-1.5 text-sm text-muted-foreground" title="Gehe zu Datum"><span className="hidden 2xl:inline">Gehe zu</span>
           <input type="date" className="h-9 rounded-md border bg-card px-2 text-base text-foreground [@media(pointer:fine)]:text-sm" onChange={(e) => e.target.value && setBezug(e.target.value)} />
         </label>
+        {istChef && (
+          <Button variant={projektListe ? "secondary" : "outline"} className="h-9 gap-1.5" aria-pressed={projektListe} onClick={() => setProjektListe(!projektListe)}
+            title={projektListe ? "Wieder den Monatskalender zeigen" : "Projekte in Arbeit ohne Einsatz — zum Hineinziehen"}>
+            <FolderKanban className="h-4 w-4" /> Nicht eingeplant
+            <span className={cn("rounded-full px-1.5 text-xs font-semibold", ungeplant ? "bg-status-gelb text-status-gelb-fg" : "bg-muted text-muted-foreground")}>{ungeplant}</span>
+          </Button>
+        )}
         {!istChef && <span className="text-sm text-muted-foreground">Nur lesen — deine Termine sind umrandet</span>}
         <Legende className="ml-auto hidden 2xl:flex" />
         {liste.length > 0 && istChef && <KonfliktKnopf liste={liste} termine={termine} mitarbeiter={mitarbeiter} fahrzeuge={fahrzeuge} onTermin={(t) => setDialog({ termin: t })} />}
@@ -224,15 +285,12 @@ export default function Kalender() {
 
       <Terminplaner className="flex-1" {...planDaten} gruppen={sichtbar} geraete={geraete} konfliktListe={liste}
         onGeraetLeer={(v) => setDialog({ datum: v.datum, von: v.von, bis: v.bis, fahrzeugId: v.fahrzeugId })}
-        seite={(
-          <>
-            {istChef && (
-              <NichtEingeplant projekte={projekte} eingeplant={eingeplant}
-                onAblegen={(id, ziel) => void projektAblegen(id, ziel)}
-                onAntippen={(id) => setDialog({ projektId: id, datum: tage.includes(heute) ? heute : von })} />
-            )}
-            <MiniKalender bezug={bezug} woche={tage} heute={heute} onTag={setBezug} />
-          </>
+        seite={istChef && projektListe ? (
+          <NichtEingeplant projekte={projekte} eingeplant={eingeplant} onZu={() => setProjektListe(false)}
+            onAblegen={(id, ziel) => void projektAblegen(id, ziel)}
+            onAntippen={(id) => setDialog({ projektId: id, datum: tage.includes(heute) ? heute : von })} />
+        ) : (
+          <MiniKalender bezug={bezug} woche={tage} heute={heute} onTag={setBezug} />
         )} />
       {dialoge}
     </div>

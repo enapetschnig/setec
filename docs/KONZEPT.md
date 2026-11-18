@@ -820,26 +820,40 @@ Migrationen `20261110100000_fuhrpark_teams_plantafel.sql` und
   Teams in ihrer Reihenfolge, „Ohne Team“ (Migration `20261113112000_profil_gruppe.sql`).
   Termine als Blöcke (Kunde, Titel, Zeit), Überlappendes nebeneinander
   (`nebeneinander`), Abwesenheit als Fläche: Urlaub/ZA grün, Krank rot, Schule/Arzt
-  gelb. Filter Alle/Gruppe/Person, „Gehe zu“ Datum, ab 1536 px rechts Monatskalender.
-- **Geräte & Fahrzeuge** rechts als zuklappbare Spaltengruppe
-  (`elektro.kalender.geraete`; aktive, Reihenfolge `geraeteSpalten`: Steiger,
-  Maschinen, Anhänger, Messgeräte, Busse, PKW). In der Spalte eines Geräts stehen alle
-  Termine mit ihm in `fahrzeuge[]`; doppelt belegt (`konflikte` → `geraetDoppelt`)
-  = Zelle und Block rot. Gerät am Griff ⋮⋮ auf einen Termin ziehen = mitnehmen;
-  im kleinen Fenster an-/abhaken; leere Gerätezelle antippen = Termin mit dem Gerät.
-- **Chef**: leere Zelle antippen = Wahl `ZellWahl` „Einsatz | Abwesenheit“ (halbe
-  Stunde, 2 h lang; auf einer Abwesenheit: bearbeiten, löschen, „Trotzdem Einsatz“);
-  am PC aufziehen (`zeitraumAus`): im Tag = genau diese Uhrzeit, über mehrere Tage =
-  Zeitraum (sonst 7:00–15:30), gestrichelte Vorschau. Block antippen = `BalkenInfo`
+  gelb. Filter Alle/Gruppe/Person, „Gehe zu“ Datum. Rechts am PC **immer der
+  Monatskalender** zum Springen (`MiniKalender`, 6 Monate mit KW, wie in Stefans
+  altem Terminplaner — bis 18.11.2026 erst ab 1536 px, daher „weg“).
+  Versteckte Konten (`profiles.versteckt`, ePower-Zugang) stehen nirgends: weder in
+  der Geschäftsführung noch in Listen, Auswertungen, Einstellungen (`useMitarbeiter`
+  und die eigenen Abfragen filtern `versteckt = false`).
+- **Geräte & Fahrzeuge** (seit 18.11.2026 keine eigenen Spalten mehr) in der
+  Tageszeile neben dem Datum (`FahrzeugTag`): je an dem Tag belegtem Gerät ein
+  Kärtchen (doppelt belegt = rot mit ⚠, `konflikte` → `geraetDoppelt`), dahinter
+  **„+ Fahrzeug“** (Chef) = kleines Fenster mit allen aktiven (Reihenfolge
+  `geraeteSpalten`, je „frei“ / „bei …“ / „doppelt“) → Gerät wählen → „Mitnehmen zu“
+  einem Einsatz des Tages (mit Leuten), „Dabei bei“ mit ✕ abnehmen oder „Eigenen
+  Termin für …“. Kärtchen antippen = dasselbe Fenster für dieses Gerät. Im
+  `BalkenInfo` weiter an-/abhaken.
+- **Chef**: leere Zelle antippen oder am PC aufziehen = kleines Fenster `ZellWahl`
+  zum **schnell Einplanen** (kein großes Formular): Suche, ohne Suche zuerst die
+  noch nicht eingeplanten Projekte; Projekt antippen = Montage (angetippt: der Tag
+  7:00–15:30, aufgezogen: genau der Zeitraum), Kunde = Besichtigung im angetippten
+  2-h-Fenster mit Kundenadresse als Ort; Enter nimmt den ersten Treffer. Gibt es zum
+  selben Projekt und Zeitraum schon einen Termin, kommt die Person dazu.
+  „Rückgängig“ im Hinweis. Unten „Abwesenheit“ und „Mit Details …“ (Formular, Titel
+  aus der Suche vorbelegt). Auf einer Abwesenheit: bearbeiten, löschen oder trotzdem einplanen.
+  Aufziehen (`zeitraumAus`): im Tag = genau diese Uhrzeit, über mehrere Tage =
+  Zeitraum, gestrichelte Vorschau. Block antippen = `BalkenInfo`
   (Art, Kunde, Projekt, Zeit, Ort, Leute herausnehmen, Geräte an/ab, Erledigt,
   Löschen; „Bearbeiten“ = Formular). Ziehen = andere Zeit/Tag/Person
   (`planVerschieben`, 15-Min.-Raster), unterer Rand = Ende; „Rückgängig“ im Hinweis.
   Konflikte (doppelt, abwesend, Gerät doppelt) als roter Knopf in der Leiste.
-- Rechts **„Noch nicht eingeplant“** (PC, Chef; zuklappbar, `elektro.plantafel.streifen`,
-  `components/plantafel/NichtEingeplant.tsx`): Projekte „In Arbeit“ ohne Termin ab
-  heute (`nichtEingeplant`; Suche findet alle laufenden, auch im Angebot). Auf eine
-  Person oder ein Gerät an einem Tag ziehen = Montage bis Freitag 7:00–15:30 mit
-  Kunde (`einsatzAusProjekt`, Rückgängig im Hinweis), antippen = Formular mit dem Projekt.
+- **„Nicht eingeplant (n)“** (PC, Chef) als Knopf in der Leiste — zeigt rechts statt
+  des Monatskalenders die Liste (`components/plantafel/NichtEingeplant.tsx`, ✕ = wieder
+  Monatskalender): Projekte „In Arbeit“ ohne Termin ab heute (`nichtEingeplant`; Suche
+  findet alle laufenden, auch im Angebot). Auf eine Person an einem Tag ziehen =
+  Montage bis Freitag 7:00–15:30 mit Kunde (`einsatzAusProjekt`, Rückgängig im
+  Hinweis), antippen = Formular mit dem Projekt.
 - **Monteur**: Menüpunkt Kalender nur lesend (`darf` = Chef): eigene Spalte und
   eigene Termine hervorgehoben, Abwesenheit anderer nur „abwesend“ (Sicht
   `abwesenheit_kalender`), Termin antippen → „Öffnen“ (Formular nur lesen, „Erledigt“,
