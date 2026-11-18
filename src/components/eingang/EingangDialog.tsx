@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Camera, ExternalLink, FileText, Loader2, Plus, RotateCcw, Sparkles, ThumbsDown, ThumbsUp, Trash2, X } from "lucide-react";
 import FormularDialog from "@/components/FormularDialog";
+import { useIstPc } from "@/components/AppLayout";
 import { Gruppentitel, StatusPille } from "@/components/Bausteine";
+import { DateiVorschau, vorschauArt, type DateiQuelle } from "@/components/DateiVorschau";
 import { ProjektWahl } from "@/components/ProjektWahl";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -89,6 +91,8 @@ const fmt = (n: number) => zahlFeld(Math.round(n * 100) / 100);
 /**
  * Eingangsrechnung erfassen und zuordnen — ein Formular: oben Foto/PDF und
  * Beträge, darunter „Wohin gehört sie?“ (ein Projekt, aufgeteilt, oder Betrieb).
+ * Der Beleg steht gleich beim Öffnen da: am PC links groß neben dem Formular,
+ * am Handy oben (⤢ = Vollbild).
  * `projektVorgabe`: aus dem Projekt geöffnet → gleich diesem Projekt zuordnen.
  */
 export function EingangDialog({
@@ -103,6 +107,7 @@ export function EingangDialog({
   projektVorgabe?: string;
 }) {
   const neuLaden = useNeuLaden();
+  const pc = useIstPc();
   const heute = isoTag();
   const [k, setK] = useState<Kopf>(kopfAus(null, heute));
   const [anteile, setAnteile] = useState<AnteilEntwurf[]>([]);
@@ -110,6 +115,9 @@ export function EingangDialog({
   const [datei, setDatei] = useState<File | null>(null);
   // für die KI schon hochgeladen (neue Rechnung: unter der vorab vergebenen ID)
   const [hochgeladen, setHochgeladen] = useState<Hochgeladen | null>(null);
+  // Die zuletzt gewählte Datei bleibt für die Vorschau im Gerät — auch nachdem
+  // die KI sie hochgeladen hat (sonst lüde die Vorschau mitten im Lesen neu)
+  const [gewaehlt, setGewaehlt] = useState<File | null>(null);
   const [neueId, setNeueId] = useState(() => crypto.randomUUID());
   const [kiLaeuft, setKiLaeuft] = useState(false);
   const [kiHinweis, setKiHinweis] = useState<string | null>(null);
@@ -133,6 +141,7 @@ export function EingangDialog({
     setPositionen(p);
     setDatei(null);
     setHochgeladen(null);
+    setGewaehlt(null);
     setNeueId(crypto.randomUUID());
     setKiHinweis(null);
     setAblehnen(null);
@@ -160,6 +169,15 @@ export function EingangDialog({
   const verrechnet = anteile.some((a) => a.rechnung_id);
   const geaendert = !!datei || !!hochgeladen || JSON.stringify([k, anteile, positionen]) !== basis;
   const status = rechnung ? ablauf(rechnung) : null;
+  // Vorschau: die gerade gewählte Datei, sonst die schon hochgeladene, sonst die gespeicherte
+  const vorschau: { quelle: DateiQuelle; name: string; mime: string | null } | null = gewaehlt
+    ? { quelle: gewaehlt, name: gewaehlt.name, mime: gewaehlt.type || null }
+    : hochgeladen ? { quelle: { bucket: BUCKET, pfad: hochgeladen.pfad }, name: hochgeladen.name, mime: hochgeladen.mime }
+    : rechnung?.datei_pfad ? { quelle: { bucket: BUCKET, pfad: rechnung.datei_pfad }, name: rechnung.datei_name ?? "Beleg", mime: rechnung.datei_mime }
+    : null;
+  const mitVorschau = !!vorschau && !!vorschauArt(vorschau.mime, vorschau.name);
+  // Am PC zwei Spalten: links der Beleg über die volle Höhe, rechts scrollt das Formular
+  const zweiSpalten = pc && mitVorschau;
   const ibanText = k.iban.trim();
   const ibanOk = !ibanText || !!ibanPruefen(ibanText);
   const { data: alleKat = [] } = useKategorien(open);
@@ -398,6 +416,8 @@ export function EingangDialog({
       beschreibung="Rechnung von Großhändler oder Subunternehmer — fotografieren, Betrag eintragen, zuordnen."
       gesperrt={speichert || kiLaeuft}
       ungespeichert={geaendert}
+      breite={zweiSpalten ? "sehr-breit" : "normal"}
+      fuellend={zweiSpalten}
       fuss={(
         <>
           {rechnung && !verrechnet && (
@@ -412,6 +432,13 @@ export function EingangDialog({
         </>
       )}
     >
+      <div className={zweiSpalten ? "grid min-h-0 flex-1 grid-cols-2 grid-rows-[minmax(0,1fr)] gap-6" : "space-y-4"}>
+      {/* Der Beleg im Original — PC links über die volle Höhe, Handy oben */}
+      {mitVorschau && vorschau && (
+        <DateiVorschau quelle={vorschau.quelle} name={vorschau.name} mime={vorschau.mime}
+          className={zweiSpalten ? "h-full" : "h-[45vh] min-h-64"} />
+      )}
+      <div className={cn("space-y-4", zweiSpalten && "min-h-0 overflow-y-auto overscroll-contain pb-1 pr-2")}>
       {/* Ablauf: prüfen → freigeben → überweisen */}
       {rechnung && status && (
         <section className="space-y-2 rounded-lg border bg-card p-3">
@@ -468,6 +495,7 @@ export function EingangDialog({
             if (hochgeladen) void supabase.storage.from(BUCKET).remove([hochgeladen.pfad]);
             setHochgeladen(null);
             setDatei(f);
+            setGewaehlt(f);
           }
           e.target.value = "";
         }}
@@ -485,6 +513,7 @@ export function EingangDialog({
             if (hochgeladen) void supabase.storage.from(BUCKET).remove([hochgeladen.pfad]);
             setDatei(null);
             setHochgeladen(null);
+            setGewaehlt(null);
           }}><X className="h-4 w-4" /></Button>
         )}
         {!datei && !hochgeladen && rechnung?.datei_pfad && (
@@ -692,6 +721,8 @@ export function EingangDialog({
       <Feld id="e-notiz" label={<>Notiz<Zusatz>(optional)</Zusatz></>}>
         <Textarea id="e-notiz" rows={2} value={k.notiz} onChange={(e) => setz({ notiz: e.target.value })} />
       </Feld>
+      </div>
+      </div>
 
       <AlertDialog open={loeschFrage} onOpenChange={setLoeschFrage}>
         <AlertDialogContent>

@@ -208,6 +208,11 @@ Rechnungen von Großhändlern und Subunternehmern, nur der Chef
 - `eingangsrechnungen`: Lieferant, Nummer, Datum, fällig, netto/USt/brutto,
   Art (Material, Fremdleistung, Werkzeug, Fahrzeug, Büro, Sonstiges),
   `bezahlt_am`, Foto/PDF im privaten Bucket `eingangsrechnungen`.
+- **Beleg gleich sichtbar** (`components/DateiVorschau.tsx`): öffnet man eine
+  Rechnung mit Foto/PDF, steht der Beleg eingebettet da — am PC links groß
+  neben dem Formular, am Handy oben (⤢ = Vollbild). PDF über pdf.js (auch am
+  iPhone), auch für eine gerade gewählte, noch nicht gespeicherte Datei.
+  „Ansehen“ öffnet ihn weiter im neuen Tab.
 - **Zuordnen** = `eingang_anteile` (Projekt, Betrag netto, Text). Eine
   Rechnung ganz auf ein Projekt oder aufgeteilt; `betrieb = true` heißt: der
   Rest gehört dem Betrieb (Lager, Werkzeug). „Zuzuordnen“ ist, was weder
@@ -460,7 +465,7 @@ Rechnung (`/belege/:id`) bzw. die Eingangsrechnung, das Symbol daneben das Origi
   (Enter in „Bezahlt“ der letzten Zeile = neue Zeile; Netto oder Brutto genügt) oder CSV mit wählbaren
   Spalten (UTF-8 oder Windows-1252); je Zeile optional das Original-PDF (ins Rechnungsarchiv). Unbekannte
   Kunden legt das Speichern an. `/belege/:id` zeigt statt des Editors `AltrechnungAnsicht`: Daten,
-  Kategorie, Original, Zahlungen/Ausbuchen/Mahnen (`OpKarte`), Bearbeiten, Löschen. Regeln in der Datenbank
+  Kategorie, Original (gleich eingebettet), Zahlungen/Ausbuchen/Mahnen (`OpKarte`), Bearbeiten, Löschen. Regeln in der Datenbank
   (`altrechnung_anlegen`, `beleg_schutz`): Nummer, Kunde, Netto + USt = Brutto > 0; nicht festgeschrieben,
   aber nie storniert, nie zurück zur normalen Rechnung; Betrag geändert → Status aus den Zahlungen neu (nicht
   unter das Bezahlte); löschen geht (samt Zahlungen und Mahnungen). **Nie in der Übergabe**: der Export
@@ -652,6 +657,10 @@ Bewusst einfach, kein eigenes Kalkulationsblatt:
   Fehlt das Original (ältere Rechnung, Ablegen gescheitert), legt der
   PDF-Knopf es nach. Stornierte erscheinen neu erzeugt mit Stempel;
   Stornorechnungen kommen beim Stornieren ins Archiv wie fertige Rechnungen.
+  Auch die **Vorschau** im Editor (daneben und Vollbild) zeigt bei fertigen
+  Rechnungen das Original; fehlt es, die neu erzeugte Fassung mit Hinweis —
+  ablegen tut nur der PDF-Knopf, nie die Vorschau. Im Entwurf (auch nach
+  „Rechnung ändern“) läuft die Vorschau beim Schreiben mit.
 - Angebote sind Kostenvoranschläge. Bei Verbrauchern gilt einer als
   verbindlich, wenn nicht ausdrücklich anders erklärt (§ 5 Abs. 2 KSchG) —
   deshalb steht im PDF immer, was gilt (`kvHinweis`). Schalter im Kopf

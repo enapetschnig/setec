@@ -16,11 +16,13 @@ type Dok = pdfjs.PDFDocumentProxy;
  * Seite oder gar nichts. Blättern, Zoom (+/−, Strg+Mausrad), Vollbild,
  * Herunterladen bzw. am Handy Teilen. Wird per React.lazy geladen.
  */
-export default function PdfAnsicht({ url, name, vollbild = false, onVollbild, onSchliessen, className }: {
+export default function PdfAnsicht({ url, name, vollbild = false, hoch = false, onVollbild, onSchliessen, className }: {
   url: string;
   name: string;
   /** im Vollbild-Dialog: Kopfleiste mit Schließen, Seite füllt die Höhe */
   vollbild?: boolean;
+  /** eingebettet ohne Höhengrenze: die Seite füllt den Rahmen (Höhe kommt über `className`, z. B. Spalte am PC) */
+  hoch?: boolean;
   /** eingebettet: Knopf „Vollbild“ */
   onVollbild?: () => void;
   onSchliessen?: () => void;
@@ -58,7 +60,7 @@ export default function PdfAnsicht({ url, name, vollbild = false, onVollbild, on
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       // Vollbild: ganze Seite sichtbar (Breite oder Höhe), eingebettet: Breite
       const hoehe = vollbild ? (box.current?.clientHeight ?? 0) - 16 : 0;
-      const passend = hoehe > 0 ? Math.min((breite - 16) / v1.width, hoehe / v1.height) : breite / v1.width;
+      const passend = hoehe > 0 ? Math.min(breite / v1.width, hoehe / v1.height) : breite / v1.width;
       const vp = p.getViewport({ scale: passend * zoom * dpr });
       const c = leinwand.current;
       c.width = Math.floor(vp.width);
@@ -130,7 +132,8 @@ export default function PdfAnsicht({ url, name, vollbild = false, onVollbild, on
         {onVollbild && <button type="button" className={knopf} onClick={onVollbild} aria-label="Vollbild"><Maximize2 className="h-4 w-4" /></button>}
         {onSchliessen && <button type="button" className={knopf} onClick={onSchliessen} aria-label="Schließen"><X className="h-5 w-5" /></button>}
       </div>
-      <div ref={box} className={cn("relative min-h-0 flex-1 overflow-auto", vollbild ? "p-2" : "max-h-[75vh] bg-muted/40 p-2")}>
+      {/* eingebettet: Platz für die Scrollleiste immer frei — sonst ist die Seite um ihre Breite zu breit */}
+      <div ref={box} className={cn("relative min-h-0 flex-1 overflow-auto", vollbild ? "p-2" : cn("bg-muted/40 p-2 [scrollbar-gutter:stable]", !hoch && "max-h-[75vh]"))}>
         {fehler && <p className="m-2 rounded-md bg-status-rot px-3 py-2 text-sm text-status-rot-fg">{fehler}</p>}
         {!dok && !fehler && <div className="flex h-60 items-center justify-center text-sm opacity-70"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> PDF wird geladen …</div>}
         {zeichnet && dok && <Loader2 className="absolute right-3 top-3 h-4 w-4 animate-spin opacity-60" />}
@@ -158,7 +161,9 @@ function useBreite(ref: React.RefObject<HTMLElement>) {
     const el = ref.current;
     if (!el) return;
     const ro = new ResizeObserver(() => {
-      const w = Math.round(el.clientWidth);
+      // Platz für die Seite: ohne Polster (die Scrollleiste zählt clientWidth schon nicht mit)
+      const st = getComputedStyle(el);
+      const w = Math.round(el.clientWidth - (parseFloat(st.paddingLeft) || 0) - (parseFloat(st.paddingRight) || 0));
       setB((alt) => (Math.abs(alt - w) > 24 ? w : alt));
     });
     ro.observe(el);

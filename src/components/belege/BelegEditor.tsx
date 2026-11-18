@@ -4,7 +4,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
-  Ban, Calculator, Check, Clock, Copy, Download, Eye, FileText, FolderInput, HandCoins, LayoutTemplate, LockOpen, Mail, Mic, MoreHorizontal, MoreVertical, PenLine,
+  Ban, Calculator, Check, Clock, Copy, Download, Eye, FileText, FolderInput, HandCoins, LayoutTemplate, Loader2, LockOpen, Mail, Mic, MoreHorizontal, MoreVertical, PenLine,
   Percent, Plus, LayoutGrid, Receipt, RotateCcw, Rows3, Save, Sparkles, SplitSquareHorizontal, ThumbsDown, ThumbsUp, Trash2, Type, Undo2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -191,6 +191,9 @@ export function BelegEditor({
     : beleg?.teil_nr ? "Teilrechnung" : positionen.some((p) => p.art === "abzug") ? "Schlussrechnung" : "Rechnung";
   const entwurf = status === "entwurf";
   const bearbeitbar = entwurf || (istAngebot && status === "offen" && entsperrt);
+  // Fertige Rechnung (auch Stornorechnung): „PDF“ und Vorschau zeigen das abgelegte Original.
+  // Stornierte erscheinen neu erzeugt mit Stempel; ein Entwurf (auch nach „Rechnung ändern“) läuft live mit.
+  const mitOriginal = !istAngebot && !!beleg?.nummer && (status === "offen" || status === "bezahlt" || status === "storno");
 
   // Angebot aus einer Erstaufnahme: Wunsch, Messwerte, Fotos beim Kalkulieren im Blick
   const eaDaten = useErstaufnahme(kopf.erstaufnahme_id ?? null);
@@ -601,6 +604,9 @@ export function BelegEditor({
     return (ersetztQuelle.data ?? (await ersetztQuelle.refetch()).data)?.nummer ?? null;
   };
 
+  /** Original eben abgelegt → die Vorschau holt es (statt „kein abgelegtes Original“) */
+  const archivNeu = (belegId: string) => void qc.invalidateQueries({ queryKey: ["belege", "archiv", belegId] });
+
   /**
    * Fertige Rechnung (oder neue Stornorechnung) ablegen — aus dem Stand in der
    * Datenbank (Nummer und Fälligkeit setzt erst das Fertigstellen)
@@ -618,6 +624,7 @@ export function BelegEditor({
       ...verweise,
     });
     if (!(await archivieren(d.beleg.id, blob))) toast.warning("PDF nicht abgelegt — das passiert beim nächsten Öffnen.");
+    else archivNeu(d.beleg.id);
   };
 
   /** PDF aus dem Stand im Editor (auch ungespeichert) — für „PDF“ und die Vorschau */
@@ -662,8 +669,7 @@ export function BelegEditor({
     if (!entwurf && dirty) throw new Error("Bitte zuerst speichern.");
     // Fertige Rechnung: das abgelegte Original. Fehlt es (vor dem Archiv
     // fertiggestellt, Ablegen gescheitert), jetzt erzeugen und ablegen.
-    const original = !istAngebot && !!beleg?.nummer && (status === "offen" || status === "bezahlt" || status === "storno");
-    const archiv = original ? await archivLaden(id) : null;
+    const archiv = mitOriginal ? await archivLaden(id) : null;
     if (archiv) {
       const datei = { blob: new Blob([archiv], { type: "application/pdf" }), dateiname: pdfDateiname(typText, beleg?.nummer, beleg?.empf_name) };
       if (pc) setVorschau({ url: URL.createObjectURL(datei.blob), ...datei });
@@ -671,7 +677,7 @@ export function BelegEditor({
       return;
     }
     const { blob, dateiname } = await entwurfPdf(firma);
-    if (original) void archivieren(id, blob);
+    if (mitOriginal) void archivieren(id, blob).then((ok) => { if (ok) archivNeu(id); });
     if (pc) setVorschau({ url: URL.createObjectURL(blob), blob, dateiname });
     else await pdfTeilenOderLaden(blob, dateiname);
   });
@@ -682,6 +688,7 @@ export function BelegEditor({
     if (!(await archivLaden(id))) {
       const { blob } = await entwurfPdf(firma);
       if (!(await archivieren(id, blob))) throw new Error("Das PDF konnte nicht abgelegt werden — bitte einmal „PDF“ öffnen.");
+      archivNeu(id);
     }
     return null;
   };
@@ -902,7 +909,8 @@ export function BelegEditor({
 
   const vorschauKnopf = (
     <Button variant={(breitGenug && seitenVorschau) || vollVorschau ? "secondary" : "outline"} className={pc ? "h-10" : "h-11 w-11 px-0"}
-      aria-pressed={breitGenug ? seitenVorschau : vollVorschau} aria-label="Vorschau" title="So sieht das PDF für den Kunden aus — läuft beim Schreiben mit"
+      aria-pressed={breitGenug ? seitenVorschau : vollVorschau} aria-label="Vorschau"
+      title={mitOriginal ? "Das abgelegte Original — so hat es der Kunde bekommen" : "So sieht das PDF für den Kunden aus — läuft beim Schreiben mit"}
       onClick={() => (pc && breitGenug ? setSeitenVorschau(!seitenVorschau) : setVollVorschau(true))}>
       <Eye className={pc ? "h-4 w-4" : "h-5 w-5"} />{pc && " Vorschau"}
     </Button>
@@ -1153,8 +1161,29 @@ export function BelegEditor({
   );
 
   const mitSeite = pc && breitGenug && seitenVorschau;
-  const vorschauStand = JSON.stringify([kopf, positionen, firma?.id, beleg?.nummer, status]);
-  const vorschauErzeugen = async () => (firma ? (await entwurfPdf(firma)).blob : null);
+  // Fertige Rechnung: die Vorschau zeigt das abgelegte Original (wie „PDF“) — hier wird nichts abgelegt, nur angezeigt
+  const { data: archivPdf, isLoading: archivLaedt } = useQuery({
+    queryKey: ["belege", "archiv", id],
+    enabled: mitOriginal && (mitSeite || vollVorschau),
+    queryFn: () => archivLaden(id),
+  });
+  const archivOriginal = mitOriginal ? archivPdf ?? null : null;
+  const ohneOriginal = mitOriginal && !archivLaedt && !archivOriginal;
+  const vorschauStand = archivOriginal
+    ? `original:${beleg?.archiv_stand ?? 0}:${archivOriginal.size}`
+    : JSON.stringify([kopf, positionen, firma?.id, beleg?.nummer, status]);
+  const vorschauErzeugen = async () => archivOriginal ?? (firma ? (await entwurfPdf(firma)).blob : null);
+  const vorschauHinweis = ohneOriginal && (
+    <p className={cn("rounded-md px-2.5 py-1.5 text-xs font-medium", TON_KLASSE.gelb)}>
+      Kein abgelegtes Original — diese Vorschau ist neu aus den Daten erzeugt und kann vom verschickten PDF abweichen.
+    </p>
+  );
+  // Erst das Original laden, dann zeigen — sonst blitzte vorher das neu erzeugte PDF auf
+  const vorschauInhalt = (klasse?: string) => (mitOriginal && archivLaedt ? (
+    <div className={cn("flex aspect-[1/1.414] items-center justify-center gap-2 rounded-sm border bg-white text-sm text-muted-foreground", klasse)}>
+      <Loader2 className="h-4 w-4 animate-spin" /> Original wird geladen …
+    </div>
+  ) : <LiveVorschau stand={vorschauStand} erzeugen={vorschauErzeugen} className={klasse} />);
 
   return (
     <Seite titel={titel} untertitel={untertitel} aktionen={aktionen} breit={pc} className={mitSeite ? "max-w-none" : undefined}>
@@ -1308,10 +1337,12 @@ export function BelegEditor({
       {mitSeite && (
         <aside className="sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto rounded-lg border bg-muted/40 p-3" aria-label="PDF-Vorschau">
           <div className="mb-2 flex items-center justify-between px-1">
-            <p className="text-sm font-semibold">Vorschau</p>
+            <p className="text-sm font-semibold">{archivOriginal ? "Original" : "Vorschau"}</p>
             <button type="button" className="text-xs font-medium text-muted-foreground hover:text-foreground" onClick={() => setSeitenVorschau(false)}>ausblenden</button>
           </div>
-          <LiveVorschau stand={vorschauStand} erzeugen={vorschauErzeugen} />
+          {archivOriginal && <p className="mb-2 px-1 text-xs text-muted-foreground">Abgelegtes PDF — so hat es der Kunde bekommen.</p>}
+          {vorschauHinweis && <div className="mb-2">{vorschauHinweis}</div>}
+          {vorschauInhalt()}
         </aside>
       )}
       </div>
@@ -1545,10 +1576,16 @@ export function BelegEditor({
         speichertGerade={laeuft === "speichern"}
       />
 
-      <FormularDialog open={vollVorschau} onOpenChange={setVollVorschau} titel="Vorschau" breite="breit"
-        beschreibung="So bekommt es der Kunde — mit allen Änderungen, auch ungespeicherten."
-        fuss={<Button className="h-12" onClick={() => setVollVorschau(false)}>Zurück zum Bearbeiten</Button>}>
-        {vollVorschau && <LiveVorschau stand={vorschauStand} erzeugen={vorschauErzeugen} className="mx-auto w-full max-w-3xl" />}
+      <FormularDialog open={vollVorschau} onOpenChange={setVollVorschau} titel={archivOriginal ? "Original" : "Vorschau"} breite="breit"
+        beschreibung={!mitOriginal ? "So bekommt es der Kunde — mit allen Änderungen, auch ungespeicherten."
+          : ohneOriginal ? "Aus den gespeicherten Daten erzeugt." : "Das abgelegte PDF — so hat es der Kunde bekommen."}
+        fuss={<Button className="h-12" onClick={() => setVollVorschau(false)}>{bearbeitbar ? "Zurück zum Bearbeiten" : "Zurück"}</Button>}>
+        {vollVorschau && (
+          <>
+            {vorschauHinweis && <div className="mx-auto w-full max-w-3xl">{vorschauHinweis}</div>}
+            {vorschauInhalt("mx-auto w-full max-w-3xl")}
+          </>
+        )}
       </FormularDialog>
 
       <FormularDialog

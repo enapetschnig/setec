@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { FileText, FileUp, Loader2, Pencil, Trash2 } from "lucide-react";
 import { Karte, StatusPille } from "@/components/Bausteine";
+import { DateiVorschau } from "@/components/DateiVorschau";
 import FormularDialog from "@/components/FormularDialog";
 import { KundeWahl } from "@/components/KundeWahl";
 import { Seite } from "@/components/PageHeader";
@@ -30,8 +31,9 @@ import { KategorieWahl } from "./KategorieTeile";
 
 /**
  * /belege/:id für eine Altrechnung: was im alten Programm stand, das Original
- * (falls hinterlegt), Zahlungen, Ausbuchen und Mahnen wie bei jeder Rechnung.
- * Anders als eigene Rechnungen lässt sie sich korrigieren und löschen.
+ * (falls hinterlegt — gleich eingebettet zu sehen), Zahlungen, Ausbuchen und
+ * Mahnen wie bei jeder Rechnung. Anders als eigene Rechnungen lässt sie sich
+ * korrigieren und löschen.
  */
 export function AltrechnungAnsicht({ beleg }: { beleg: Beleg }) {
   const pc = useIstPc();
@@ -47,12 +49,16 @@ export function AltrechnungAnsicht({ beleg }: { beleg: Beleg }) {
   const { data: original, isLoading: originalLaedt } = useQuery({
     queryKey: ["belege", "archiv", beleg.id],
     queryFn: () => archivLaden(beleg.id),
+    // Ein abgelegtes Original ändert sich nie: beim Neuladen (Zahlung gebucht, Fenster wieder vorn)
+    // dasselbe Blob behalten — sonst lädt die Vorschau neu und springt auf Seite 1
+    structuralSharing: (alt, neu) => (alt instanceof Blob && neu instanceof Blob && alt.size === neu.size ? alt : neu),
   });
 
   const fertig = () => neuLaden("belege", "buchhaltung", "op");
+  const dateiname = `${sichererDateiname(beleg.nummer ?? "Altrechnung")}.pdf`;
   const pdfZeigen = async () => {
     if (!original) return;
-    const d = { blob: original, dateiname: `${sichererDateiname(beleg.nummer ?? "Altrechnung")}.pdf` };
+    const d = { blob: original, dateiname };
     if (pc) setVorschau(d);
     else await pdfTeilenOderLaden(d.blob, d.dateiname);
   };
@@ -89,7 +95,8 @@ export function AltrechnungAnsicht({ beleg }: { beleg: Beleg }) {
   return (
     <Seite titel={`Altrechnung ${beleg.nummer ?? ""}`} untertitel="aus dem bisherigen Programm" zurueckPfad="/buchhaltung?reiter=alt"
       aktionen={<Button variant="outline" className="h-11 gap-1.5" onClick={() => setBearbeiten(true)}><Pencil className="h-4 w-4" /> <span className="hidden sm:inline">Bearbeiten</span></Button>}>
-      <div className="grid gap-5 lg:grid-cols-[1fr_24rem]">
+      {/* minmax(0,…): lange Zeilen (Zahlungsnotiz, PDF) dürfen die Spalte nicht über den Bildschirm hinaus aufschieben */}
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_24rem]">
         <div className="space-y-5">
           <Karte>
             <div className="flex flex-wrap items-start justify-between gap-3 pt-4">
@@ -119,7 +126,10 @@ export function AltrechnungAnsicht({ beleg }: { beleg: Beleg }) {
             <input ref={pdfFeld} type="file" accept="application/pdf" className="hidden"
               onChange={(e) => { const f = e.target.files?.[0]; if (f) void pdfAblegen(f); e.target.value = ""; }} />
             {originalLaedt ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /> : original ? (
-              <Button variant="outline" className="h-11 gap-1.5" onClick={() => void pdfZeigen()}><FileText className="h-4 w-4" /> PDF ansehen</Button>
+              <div className="space-y-3">
+                <DateiVorschau quelle={original} name={dateiname} mime="application/pdf" className="h-[70vh] min-h-80 lg:h-[80vh]" />
+                <Button variant="outline" className="h-11 gap-1.5" onClick={() => void pdfZeigen()}><FileText className="h-4 w-4" /> PDF ansehen</Button>
+              </div>
             ) : (
               <div className="flex flex-wrap items-center gap-3">
                 <p className="text-sm text-muted-foreground">Kein PDF hinterlegt.</p>
