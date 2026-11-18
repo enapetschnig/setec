@@ -37,6 +37,19 @@ Software für Elektriker — am Handy auf der Baustelle bedienbar.
 | Einstellungen Betrieb, Mitarbeiter einladen (Link/QR/SMS) / sperren, vorläufiges Passwort | ✓ | – |
 
 `useSitzung().istChef` im Frontend, `public.ist_chef()` in der Datenbank.
+
+**Rollen & Rechte** (18.11.2026, Stefan: „Büro, Lehrling — Rechte selbst festlegen“; Migration
+`20261118120000_rollen_rechte.sql`, `lib/rechte.ts`, `components/rollen/RollenRechte.tsx`):
+`profiles.rolle` bleibt die Grundstufe (chef = Büro-Zugang, monteur = Baustelle) — alle Regeln mit
+`ist_chef()` gelten weiter. Darüber `rollen` (eingebaut: Chef, Büro, Monteur, Lehrling; eigene dazu)
+mit `rechte[]`: rechnungen, eingang, buchhaltung, personal, mitarbeiter, einstellungen (nur Büro-Zugang)
+und projekte_anlegen, stunden_andere, regie, material. `profiles.rolle_id` leer = eingebaute Rolle der
+Grundstufe (bestehende Konten unverändert). Datenbank: `hat_recht(x)` in RESTRICTIVE-Regeln je
+Bereich (nur `authenticated`), in den Beleg-RPCs, `passwort_setzen`, Trigger `firma_recht`
+(Arbeitsfelder frei, Fibu-Felder = buchhaltung, Rest = einstellungen) und in den Edge Functions
+(`hat_recht_von`). Rollen vergibt/ändert nur der volle Chef (`ist_voller_chef()`, `profil_schutz`);
+„mindestens ein aktiver Chef“ zählt nur volle Chefs. Frontend: `useSitzung().darf(recht)`,
+`istVollerChef`; `NavEintrag.recht`, `ProtectedRoute recht=…`.
 Was die Oberfläche einem Monteur nicht zeigt, verbietet auch die Datenbank —
 direkte API-Aufrufe kommen nicht weiter (Migration `20261025190000_rechte_monteur.sql`):
 `rechnung_id` setzen oder lösen nur der Chef; `erstellt_von` setzt der Server,

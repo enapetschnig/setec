@@ -95,7 +95,10 @@ const START_MONTEUR: { titel: string; pfade: string[] }[] = [
 export default function Index() {
   const navigate = useNavigate();
   const pc = useIstPc();
-  const { profil, firma, istChef } = useSitzung();
+  const { profil, firma, istChef, darf } = useSitzung();
+  // Bereiche der Rolle (Büro ohne Buchhaltung, ohne Rechnungen …)
+  const dRech = istChef && darf("rechnungen");
+  const dEing = istChef && darf("eingang");
   const { data: projekte = [] } = useProjekte();
   const { data: zahlen = {} } = useProjektZahlen();
   const [fotoOffen, setFotoOffen] = useState(false);
@@ -167,7 +170,7 @@ export default function Index() {
   })();
 
   // Direkt gezählt statt über projekt_zahlen — auch Regieberichte ohne Projekt (Service)
-  const { data: offeneRegie = [] } = useOffeneRegieberichte(istChef);
+  const { data: offeneRegie = [] } = useOffeneRegieberichte(dRech);
   const regieOffen = offeneRegie.length;
   const zuVerrechnen = projekte.filter((p) => {
     const z = zahlen[p.id];
@@ -177,7 +180,7 @@ export default function Index() {
   // warn = rot und vorgereiht; oben = gute Nachricht, die trotzdem ganz nach oben gehört
   type Punkt = { icon: typeof Receipt; text: string; to: string; warn?: boolean; oben?: boolean };
   // Eingangsrechnungen: noch keinem Projekt (oder dem Betrieb) zugeordnet
-  const { data: eingang = [] } = useEingangsrechnungen(istChef);
+  const { data: eingang = [] } = useEingangsrechnungen(dEing);
   const eingangZuordnen = eingang.filter((r) => zuordnung(r, r.eingang_anteile) !== "zugeordnet").length;
   const eingangPruefen = eingang.filter((r) => ablauf(r) === "pruefen").length;
   const zuUeberweisen = eingang.filter((r) => ablauf(r) === "freigegeben");
@@ -191,7 +194,7 @@ export default function Index() {
   const fuhrparkUeber = fuhrparkFaellig.filter((x) => x.ueberfaellig).length;
   const schaedenOffen = Object.values(schaeden).reduce((s, n) => s + n, 0);
   // Offene Posten: überfällig, und die Frist der letzten Mahnung ist vorbei
-  const { data: op = [] } = useOffenePosten(istChef);
+  const { data: op = [] } = useOffenePosten(dRech);
   const heuteIso = isoTag();
   const zuMahnen = firma ? op.filter((b) => mahnVorschlag(b, b.zahlungen, b.mahnungen, firma, heuteIso) && mahnFristAbgelaufen(b.mahnungen, heuteIso)).length : 0;
 
@@ -205,7 +208,7 @@ export default function Index() {
     .sort((a, b) => a.inTagen - b.inTagen);
 
   // Bestellungen: unterwegs, davon Liefertermin vorbei
-  const { data: bestellungen = [] } = useBestellungen(istChef);
+  const { data: bestellungen = [] } = useBestellungen(dEing);
   const unterwegs = bestellungen.filter((b) => istOffen(b.status));
   const spaet = unterwegs.filter((b) => b.liefertermin && b.liefertermin < heuteIso).length;
 
@@ -244,12 +247,12 @@ export default function Index() {
     },
     aufgabenZahl.ueberfaellig > 0 && { icon: ListTodo, text: `${aufgabenZahl.ueberfaellig} ${aufgabenZahl.ueberfaellig === 1 ? "Aufgabe ist" : "Aufgaben sind"} überfällig`, to: "/aufgaben?filter=ueberfaellig", warn: true },
     antraege.length > 0 && { icon: CalendarOff, text: `${antraege.length} ${antraege.length === 1 ? "Antrag wartet" : "Anträge warten"} auf Entscheidung`, to: "/zeiten" },
-    erledigtOffen.length > 0 && {
+    dRech && erledigtOffen.length > 0 && {
       icon: CheckCircle2,
       text: `${erledigtOffen.length} ${erledigtOffen.length === 1 ? "Projekt" : "Projekte"} mit erledigtem Einsatz, noch nicht verrechnet`,
       to: erledigtOffen.length === 1 ? `/projekte/${erledigtOffen[0]}` : "/projekte",
     },
-    buero.wartend > 0 && { icon: UserCheck, text: `${buero.wartend} ${buero.wartend === 1 ? "Mitarbeiter wartet" : "Mitarbeiter warten"} auf Freischaltung`, to: "/mitarbeiter", warn: true },
+    darf("mitarbeiter") && buero.wartend > 0 && { icon: UserCheck, text: `${buero.wartend} ${buero.wartend === 1 ? "Mitarbeiter wartet" : "Mitarbeiter warten"} auf Freischaltung`, to: "/mitarbeiter", warn: true },
     buero.ueberfaellig > 0 && { icon: AlertTriangle, text: `${buero.ueberfaellig} ${buero.ueberfaellig === 1 ? "Rechnung ist" : "Rechnungen sind"} überfällig`, to: "/offene-posten?filter=ueberfaellig", warn: true },
     zuMahnen > 0 && { icon: BellRing, text: `${zuMahnen} ${zuMahnen === 1 ? "Rechnung" : "Rechnungen"} zu mahnen`, to: "/offene-posten", warn: true },
     buero.offen > 0 && { icon: Receipt, text: `${buero.offen} offene ${buero.offen === 1 ? "Rechnung" : "Rechnungen"} · ${euro(buero.offenSumme)}`, to: "/offene-posten?filter=alle" },
@@ -273,7 +276,7 @@ export default function Index() {
       to: "/bestellungen",
       warn: spaet > 0,
     },
-    regieOffen > 0 && { icon: ClipboardSignature, text: `${regieOffen} ${regieOffen === 1 ? "Regiebericht" : "Regieberichte"} unterschrieben, nicht verrechnet`, to: "/rechnungen" },
+    dRech && regieOffen > 0 && { icon: ClipboardSignature, text: `${regieOffen} ${regieOffen === 1 ? "Regiebericht" : "Regieberichte"} unterschrieben, nicht verrechnet`, to: "/rechnungen" },
     skontoBald > 0 && { icon: Banknote, text: `${skontoBald} ${skontoBald === 1 ? "Rechnung" : "Rechnungen"}: Skonto läuft in 3 Tagen ab`, to: "/eingang?filter=freigegeben", warn: true },
     eingangPruefen > 0 && { icon: Inbox, text: `${eingangPruefen} ${eingangPruefen === 1 ? "Eingangsrechnung" : "Eingangsrechnungen"} prüfen und freigeben`, to: "/eingang" },
     zuUeberweisen.length > 0 && { icon: Banknote, text: `${zuUeberweisen.length} ${zuUeberweisen.length === 1 ? "Rechnung" : "Rechnungen"} überweisen · ${euro(ueberweisenSumme)}`, to: "/eingang?filter=freigegeben" },
@@ -285,7 +288,7 @@ export default function Index() {
     },
     schaedenOffen > 0 && { icon: Wrench, text: `${schaedenOffen} ${schaedenOffen === 1 ? "Schaden" : "Schäden"} an Fahrzeugen gemeldet`, to: "/fuhrpark", warn: true },
     eingangZuordnen > 0 && { icon: Inbox, text: `${eingangZuordnen} ${eingangZuordnen === 1 ? "Eingangsrechnung" : "Eingangsrechnungen"} zuordnen`, to: "/eingang?filter=zuzuordnen" },
-    zuVerrechnen > 0 && { icon: FolderKanban, text: `${zuVerrechnen} ${zuVerrechnen === 1 ? "Projekt hat" : "Projekte haben"} offene Stunden oder Material`, to: "/projekte?filter=offen" },
+    dRech && zuVerrechnen > 0 && { icon: FolderKanban, text: `${zuVerrechnen} ${zuVerrechnen === 1 ? "Projekt hat" : "Projekte haben"} offene Stunden oder Material`, to: "/projekte?filter=offen" },
     buero.nachfassen > 0 && { icon: PhoneCall, text: `${buero.nachfassen} ${buero.nachfassen === 1 ? "Angebot" : "Angebote"} nachfassen — Gültigkeit läuft ab`, to: "/angebote?filter=nachfassen", warn: true },
     buero.angebote > buero.nachfassen && { icon: FileText, text: `${buero.angebote} ${buero.angebote === 1 ? "Angebot wartet" : "Angebote warten"} auf Antwort`, to: "/angebote?filter=offen" },
     buero.entwuerfeAngebote > 0 && { icon: FileText, text: `${buero.entwuerfeAngebote} ${buero.entwuerfeAngebote === 1 ? "Angebot" : "Angebote"} noch Entwurf`, to: "/angebote?filter=entwurf" },
@@ -295,7 +298,7 @@ export default function Index() {
   // Dringendes zuerst; Handy höchstens 5, PC 9 (drei Reihen) — der Rest auf Tipp
   const { sichtbar: punkteSichtbar, rest: punkteRest } = ordneZuErledigen(offenePunkte, alleOffen ? Infinity : pc ? 9 : 5);
 
-  const menue = sichtbareNavigation(istChef).filter((n) => n.pfad !== "/");
+  const menue = sichtbareNavigation(istChef, false, darf).filter((n) => n.pfad !== "/");
 
   // Einsatz, Aufgaben und die Handgriffe — am Handy oben, am PC unter „Zu erledigen“
   const handgriffe = (
@@ -312,11 +315,11 @@ export default function Index() {
         <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
           <SchnellKnopf icon={Camera} titel="Foto" unter="zum Projekt" primaer onClick={() => setFotoOffen(true)} />
           <SchnellKnopf icon={Clock} titel="Stunden" unter="buchen" onClick={() => { setZeitProjekt(undefined); setZeitOffen(true); }} />
-          <SchnellKnopf icon={ScanBarcode} titel="Material" unter="scannen" onClick={() => navigate("/scan")} />
-          <SchnellKnopf icon={ClipboardSignature} titel="Regiebericht" unter="mit Unterschrift" onClick={() => navigate("/regie/neu")} />
+          {darf("material") && <SchnellKnopf icon={ScanBarcode} titel="Material" unter="scannen" onClick={() => navigate("/scan")} />}
+          {darf("regie") && <SchnellKnopf icon={ClipboardSignature} titel="Regiebericht" unter="mit Unterschrift" onClick={() => navigate("/regie/neu")} />}
         </div>
         {/* Monteur: kleine Baustelle selbst anlegen („Licht geht nicht“) — Projekte hat er nicht im Menü */}
-        {!istChef && (
+        {!istChef && darf("projekte_anlegen") && (
           <Button variant="outline" className="mt-2.5 h-12 w-full gap-2" onClick={() => setProjektOffen(true)}>
             <FolderPlus className="h-4 w-4" /> Neue Baustelle anlegen
           </Button>
@@ -381,8 +384,8 @@ export default function Index() {
         {/* PC: was man am häufigsten neu anlegt, gleich unter dem Gruß */}
         {pc && (
           <div className={cn("grid gap-3", istChef ? "grid-cols-3" : "grid-cols-1")}>
-            <SchnellAktion icon={FolderPlus} titel="Neues Projekt" onClick={() => setProjektOffen(true)} />
-            {istChef && <SchnellAktion icon={FilePlus2} titel="Neue Rechnung" onClick={() => navigate("/belege/neu?typ=rechnung")} />}
+            {darf("projekte_anlegen") && <SchnellAktion icon={FolderPlus} titel="Neues Projekt" onClick={() => setProjektOffen(true)} />}
+            {dRech && <SchnellAktion icon={FilePlus2} titel="Neue Rechnung" onClick={() => navigate("/belege/neu?typ=rechnung")} />}
             {istChef && <SchnellAktion icon={CalendarPlus} titel="Termin eintragen" onClick={() => setTerminOffen(true)} />}
           </div>
         )}
@@ -401,7 +404,7 @@ export default function Index() {
             {zuletzt.length === 0 ? (
               <div className="px-4 pb-4 text-sm text-muted-foreground">
                 Noch kein laufendes Projekt.{" "}
-                <button type="button" className="min-h-11 font-medium text-primary hover:underline" onClick={() => setProjektOffen(true)}>Projekt anlegen</button>
+                {darf("projekte_anlegen") && <button type="button" className="min-h-11 font-medium text-primary hover:underline" onClick={() => setProjektOffen(true)}>Projekt anlegen</button>}
               </div>
             ) : (
               <ul className="grid grid-cols-1 divide-y xl:grid-cols-2 xl:divide-y-0">

@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import type { Session } from "@supabase/supabase-js";
 import { alleSicherungenLoeschen } from "@/components/belege/sicherung";
 import { supabase } from "@/integrations/supabase/client";
+import { darfRecht, istVollerChef, type Recht, type RollenZeile } from "@/lib/rechte";
 import type { Firma, Profil } from "@/lib/types";
 
 /**
@@ -16,7 +17,13 @@ interface Sitzung {
   session: Session | null;
   profil: Profil | null;
   firma: Firma | null;
+  /** Grundstufe Büro (Chef oder eine Büro-Rolle) */
   istChef: boolean;
+  /** Der Chef selbst (eingebaute Rolle „Chef“) — vergibt Rollen und Rechte */
+  istVollerChef: boolean;
+  /** Recht der Rolle (Rollen & Rechte auf „Mitarbeiter & Zugänge“) */
+  darf: (recht: Recht) => boolean;
+  rollen: RollenZeile[];
   /** Profil ließ sich nicht laden (Funkloch) und am Gerät ist keins gemerkt */
   ohneVerbindung: boolean;
   neuLaden: () => Promise<void>;
@@ -32,7 +39,7 @@ const gleich = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(
   ohnehin die Datenbank. Beim Abmelden gelöscht.
 */
 const MERK = "setec.sitzung";
-type Gemerkt = { id: string; profil: Profil; firma: Firma | null };
+type Gemerkt = { id: string; profil: Profil; firma: Firma | null; rollen?: RollenZeile[] };
 function gemerkt(id: string): Gemerkt | null {
   try {
     const g = JSON.parse(localStorage.getItem(MERK) || "null") as Gemerkt | null;
@@ -51,6 +58,7 @@ export function SitzungProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profil, setProfil] = useState<Profil | null>(null);
   const [firma, setFirma] = useState<Firma | null>(null);
+  const [rollen, setRollen] = useState<RollenZeile[]>([]);
   const [ohneVerbindung, setOhneVerbindung] = useState(false);
   // Für wen ist das Profil geladen? Neue Anmeldung → bis dahin „lädt“, sonst
   // stünde kurz (oder nach einem späten Nachladen dauerhaft) „Zugang nicht aktiv“ da
@@ -64,9 +72,10 @@ export function SitzungProvider({ children }: { children: ReactNode }) {
       setLaden(false);
       return;
     }
-    const [{ data: p, error: pFehler }, { data: f, error: fFehler }] = await Promise.all([
+    const [{ data: p, error: pFehler }, { data: f, error: fFehler }, { data: r, error: rFehler }] = await Promise.all([
       supabase.from("profiles").select("*").eq("id", s.user.id).maybeSingle(),
       supabase.from("firma").select("*").eq("id", 1).maybeSingle(),
+      supabase.from("rollen").select("*").order("reihenfolge").order("name"),
     ]);
     if (pFehler || fFehler) {
       // Funkloch o. Ä.: Bekanntes behalten (sonst stünde mitten in der Arbeit
@@ -75,13 +84,17 @@ export function SitzungProvider({ children }: { children: ReactNode }) {
       profilFuer.current = s.user.id;
       setProfil((alt) => (alt?.id === s.user.id ? alt : g?.profil ?? null));
       setFirma((alt) => alt ?? g?.firma ?? null);
+      setRollen((alt) => (alt.length ? alt : g?.rollen ?? []));
       setOhneVerbindung(!g);
       setLaden(false);
       return;
     }
     setOhneVerbindung(false);
     profilFuer.current = s.user.id;
-    merken(p ? { id: s.user.id, profil: p, firma: f ?? null } : null);
+    // Rollen nicht geladen (z. B. kurz weg): die gemerkten behalten
+    const rl = rFehler ? gemerkt(s.user.id)?.rollen ?? [] : ((r ?? []) as RollenZeile[]);
+    merken(p ? { id: s.user.id, profil: p, firma: f ?? null, rollen: rl } : null);
+    setRollen((alt) => (gleich(alt, rl) ? alt : rl));
     // Unveränderte Daten behalten ihr Objekt — Supabase meldet sich bei jeder
     // Rückkehr in den Tab neu an, und ein neues Objekt setzt offene Formulare zurück
     setProfil((alt) => (gleich(alt, p ?? null) ? alt : p ?? null));
@@ -112,6 +125,9 @@ export function SitzungProvider({ children }: { children: ReactNode }) {
     profil,
     firma,
     istChef: !!profil?.aktiv && profil.rolle === "chef",
+    istVollerChef: istVollerChef(profil, rollen),
+    darf: (recht) => darfRecht(profil, rollen, recht),
+    rollen,
     ohneVerbindung,
     // immer mit der aktuellen Sitzung — die im Render festgehaltene kann veraltet
     // sein (z. B. /passwort-neu: gerendert ohne, gespeichert mit Anmeldung)

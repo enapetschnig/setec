@@ -21,6 +21,8 @@ import { InstallAnleitung } from "@/components/Installieren";
 import { MitteilungenKarte } from "@/components/Mitteilungen";
 import { pushBeimAbmelden } from "@/lib/push";
 import { EinladenKarte } from "@/components/einladung/Einladungen";
+import { RollenRechte } from "@/components/rollen/RollenRechte";
+import { RECHTE, rolleVon, rollenName, type RollenZeile } from "@/lib/rechte";
 import { LohnSaetze, WhatsAppVorlagenKarte } from "@/components/projekt/ProjektEinstellungen";
 import { InterneArten } from "@/components/zeiten/InterneArten";
 import { PlanZeiten } from "@/components/plantafel/PlanZeiten";
@@ -32,7 +34,7 @@ import { dezimalLesen } from "@/lib/format";
 import { bicPruefen, ibanLesbar, ibanPruefen, uidPruefen } from "@/lib/bank";
 import { fehlerText } from "@/components/stamm/stammDaten";
 import { authFehler, vorlaeufigesPasswort } from "@/lib/konto";
-import { name, type Firma, type Profil, type Rolle } from "@/lib/types";
+import { name, type Firma, type Profil } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { KUNDE } from "@/kunde.config";
 import { SCHRIFTGROESSEN, schriftLesen, schriftSetzen, type Schriftgroesse } from "@/lib/schrift";
@@ -59,9 +61,9 @@ const saetzeAendern = (j: Firma["stundensaetze"], i: number, teil: Partial<SatzZ
   saetzeRoh(j).map((z, k) => (k === i ? { ...z, ...teil } : z));
 
 export default function Einstellungen() {
-  const { istChef } = useSitzung();
+  const { istChef, darf } = useSitzung();
   const [params, setParams] = useSearchParams();
-  const erlaubt = BEREICHE.filter((b) => !b.nurChef || istChef);
+  const erlaubt = BEREICHE.filter((b) => !b.nurChef || (istChef && darf("einstellungen")));
   const bereich = (erlaubt.find((b) => b.wert === params.get("bereich"))?.wert ?? erlaubt[0].wert) as Bereich;
   // Mitarbeiter sind seit 16.11.2026 ein eigener Menüpunkt — alte Links führen dorthin
   if (params.get("bereich") === "mitarbeiter") return <Navigate to="/mitarbeiter" replace />;
@@ -385,6 +387,28 @@ type Zugang = "neu" | "aktiv" | "gesperrt";
 const zugang = (p: Profil): Zugang => (p.aktiv ? "aktiv" : p.gesperrt ? "gesperrt" : "neu");
 const ZUGANG_REIHENFOLGE: Record<Zugang, number> = { neu: 0, aktiv: 1, gesperrt: 2 };
 
+/** Rolle einer Person: eingebaute (Monteur, Lehrling, Büro, Chef) und eigene */
+function RollenWahl({ p, rollen, gesperrt, onWaehlen }: { p: Profil; rollen: RollenZeile[]; gesperrt: boolean; onWaehlen: (r: RollenZeile) => void }) {
+  const jetzt = rolleVon(p, rollen);
+  // Baustelle zuerst (wie bisher Monteur | Chef), dann Büro, Chef ganz rechts
+  const liste = [...rollen].sort((a, b) => (a.basis === b.basis ? 0 : a.basis === "monteur" ? -1 : 1)
+    || (a.schluessel === "chef" ? 1 : 0) - (b.schluessel === "chef" ? 1 : 0) || a.reihenfolge - b.reihenfolge);
+  if (!liste.length) return null;
+  return (
+    <div className="flex flex-wrap overflow-hidden rounded-md border text-sm" role="group" aria-label={`Rolle ${name(p)}`}
+      title={gesperrt ? "Rollen vergibt der Chef" : undefined}>
+      {liste.map((r, i) => (
+        <button key={r.id} type="button" disabled={gesperrt} aria-pressed={jetzt?.id === r.id}
+          onClick={() => { if (jetzt?.id !== r.id) onWaehlen(r); }}
+          className={cn("h-9 px-3 font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60", i > 0 && "border-l",
+            jetzt?.id === r.id ? "bg-primary text-primary-foreground" : "hover:bg-muted")}>
+          {r.name}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /** Freischalten, Rolle, Farbe, Sperren, vorläufiges Passwort. Neue Mitarbeiter registrieren sich selbst. */
 /** Eigener Menüpunkt „Mitarbeiter & Zugänge“ (Chef): wer hat Zugang, Rolle, Sätze, einladen */
 export function MitarbeiterSeite() {
@@ -396,7 +420,7 @@ export function MitarbeiterSeite() {
 }
 
 function Mitarbeiter() {
-  const { profil: ich } = useSitzung();
+  const { profil: ich, istVollerChef, rollen } = useSitzung();
   const neuLaden = useNeuLaden();
   const [sperren, setSperren] = useState<Profil | null>(null);
   const [passwort, setPasswort] = useState<{ p: Profil; neu: string | null } | null>(null);
@@ -413,7 +437,7 @@ function Mitarbeiter() {
 
   const { firma: betrieb } = useSitzung();
   const saetze = stundensaetzeLesen(betrieb?.stundensaetze);
-  const aendern = async (p: Profil, daten: Partial<Pick<Profil, "aktiv" | "gesperrt" | "rolle" | "farbe" | "lohnart" | "wochenstunden" | "urlaub_tage" | "konto_ab">>, meldung?: string) => {
+  const aendern = async (p: Profil, daten: Partial<Pick<Profil, "aktiv" | "gesperrt" | "rolle" | "rolle_id" | "farbe" | "lohnart" | "wochenstunden" | "urlaub_tage" | "konto_ab">>, meldung?: string) => {
     const { error } = await supabase.from("profiles").update(daten).eq("id", p.id);
     if (error) {
       toast.error("Nicht geändert", { description: error.message });
@@ -446,6 +470,7 @@ function Mitarbeiter() {
   return (
     <div className="space-y-4">
       <EinladenKarte />
+      {istVollerChef && <RollenRechte personen={alle.filter((p) => p.aktiv)} />}
 
       <div className="space-y-2">
         {alle.map((p) => (
@@ -461,7 +486,7 @@ function Mitarbeiter() {
                 <Button size="sm" className="h-10" onClick={() => aendern(p, { aktiv: true, gesperrt: false }, `${name(p)} ist freigeschaltet`)}>Freischalten</Button>
               )}
               {zugang(p) === "gesperrt" && <StatusPille eintrag={{ ton: "rot", text: "Gesperrt" }} />}
-              {zugang(p) === "aktiv" && <StatusPille eintrag={{ ton: p.rolle === "chef" ? "blau" : "grau", text: p.rolle === "chef" ? "Chef" : "Monteur" }} />}
+              {zugang(p) === "aktiv" && <StatusPille eintrag={{ ton: p.rolle === "chef" ? "blau" : "grau", text: rollenName(p, rollen) }} />}
             </div>
             {zugang(p) === "gesperrt" && (
               <div className="mt-3 flex justify-end border-t pt-3">
@@ -471,27 +496,27 @@ function Mitarbeiter() {
               </div>
             )}
             {p.aktiv && (
-              <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-3 border-t pt-3">
-                <div className="flex h-9 overflow-hidden rounded-md border text-sm">
-                  {(["monteur", "chef"] as Rolle[]).map((r, i) => (
-                    <button key={r} type="button" disabled={p.id === ich?.id} aria-pressed={p.rolle === r}
-                      onClick={() => {
-                        if (p.rolle === r) return;
-                        if (r !== "chef") return void aendern(p, { rolle: r });
-                        setFrage({
-                          titel: `${name(p)} zum Chef machen?`,
-                          text: `${p.vorname || name(p)} sieht dann alles wie du — Rechnungen, Angebote, Preise, Stunden und Dokumente aller Mitarbeiter — und kann Rechnungen fertigstellen, Mitarbeiter sperren und Rollen ändern.`,
-                          knopf: "Ja, Chef",
-                          aktion: () => aendern(p, { rolle: "chef" }, `${name(p)} ist jetzt Chef`),
-                        });
-                      }}
-                      className={cn("px-3 font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60", i > 0 && "border-l",
-                        p.rolle === r ? "bg-primary text-primary-foreground" : "hover:bg-muted")}>
-                      {r === "chef" ? "Chef" : "Monteur"}
-                    </button>
-                  ))}
+              <div className="mt-3 flex flex-wrap items-end gap-x-5 gap-y-3 border-t pt-3">
+                <div className="space-y-1">
+                <p className="text-xs font-medium">Rolle</p>
+                <RollenWahl p={p} rollen={rollen} gesperrt={p.id === ich?.id || !istVollerChef}
+                  onWaehlen={(r) => {
+                    const daten = { rolle_id: r.schluessel === "chef" || r.schluessel === "monteur" ? null : r.id, rolle: r.basis };
+                    if (r.basis !== "chef") return void aendern(p, daten, `${name(p)} ist jetzt ${r.name}`);
+                    const darf = r.schluessel === "chef" ? null : RECHTE.filter((x) => x.nurBuero && r.rechte.includes(x.recht)).map((x) => x.titel);
+                    setFrage({
+                      titel: `${name(p)} ${r.schluessel === "chef" ? "zum Chef machen" : `auf „${r.name}“ setzen`}?`,
+                      text: darf
+                        ? `${p.vorname || name(p)} sieht dann das Büro — Projekte, Kontakte, Kalender, Artikel, Lager${darf.length ? `, dazu: ${darf.join(", ")}` : ""}. Rollen vergibt weiter nur der Chef.`
+                        : `${p.vorname || name(p)} sieht dann alles wie du — Rechnungen, Angebote, Preise, Stunden und Dokumente aller Mitarbeiter — und kann Rechnungen fertigstellen, Mitarbeiter sperren und Rollen ändern.`,
+                      knopf: r.schluessel === "chef" ? "Ja, Chef" : `Ja, ${r.name}`,
+                      aktion: () => aendern(p, daten, `${name(p)} ist jetzt ${r.name}`),
+                    });
+                  }} />
                 </div>
                 {saetze.length > 0 && (
+                  <div className="space-y-1">
+                  <p className="text-xs font-medium">Stundensatz</p>
                   <div className="flex h-9 overflow-hidden rounded-md border text-sm" role="group" aria-label={`Stundensatz ${p.vorname}`}>
                     {[null, ...saetze.map((l) => l.name)].map((n, i) => (
                       <button key={n ?? "standard"} type="button" onClick={() => aendern(p, { lohnart: n })} aria-pressed={(p.lohnart ?? null) === n}
@@ -500,6 +525,7 @@ function Mitarbeiter() {
                         {n ?? "Normal"}
                       </button>
                     ))}
+                  </div>
                   </div>
                 )}
                 <PersonalFelder p={p} onAendern={(daten) => aendern(p, daten)} />
@@ -516,7 +542,7 @@ function Mitarbeiter() {
                   ))}
                 </div>
                 <div className="ml-auto flex flex-wrap gap-1">
-                {p.id !== ich?.id && (
+                {p.id !== ich?.id && (istVollerChef || rolleVon(p, rollen)?.schluessel !== "chef") && (
                   <>
                     <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground" onClick={() => setPasswort({ p, neu: null })}>
                       <KeyRound className="h-4 w-4" /> Passwort vergeben

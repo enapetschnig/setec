@@ -9,6 +9,7 @@ import { TerminDialog } from "@/components/dialoge/TerminDialog";
 import { ZeitDialog } from "@/components/dialoge/ZeitDialog";
 import { AufgabeDialog } from "@/components/aufgaben/AufgabeDialog";
 import { KundeDialog } from "@/components/stamm/KundeDialog";
+import type { Recht } from "@/lib/rechte";
 import { useSitzung } from "@/hooks/useSitzung";
 import { cn } from "@/lib/utils";
 
@@ -29,25 +30,26 @@ interface NeuAktion {
   /** Ziel-Adresse; ohne Ziel öffnet der Rahmen einen Dialog */
   ziel?: string;
   nurChef?: boolean;
+  recht?: Recht;
 }
 
 const ALLE: NeuAktion[] = [
-  { art: "projekt", titel: "Projekt", text: "Neue Baustelle, Nummer kommt von selbst", icon: FolderPlus },
+  { art: "projekt", titel: "Projekt", text: "Neue Baustelle, Nummer kommt von selbst", icon: FolderPlus, recht: "projekte_anlegen" },
   { art: "erstaufnahme", titel: "Erstaufnahme", text: "Besichtigung: Wunsch, Fotos, Skizze — vor dem Angebot", icon: ClipboardList, ziel: "/erstaufnahmen/neu" },
-  { art: "angebot", titel: "Angebot", text: "Am PC schreiben, mit Katalog und KI", icon: FileText, ziel: "/belege/neu?typ=angebot", nurChef: true },
-  { art: "sprache", titel: "Angebot vor Ort", text: "„3 Steckdosen, 2 Schalter, 1 FI“ — sprechen, fertig", icon: Mic, ziel: "/belege/neu?typ=angebot&sprache=1", nurChef: true },
-  { art: "rechnung", titel: "Rechnung", text: "Leer oder aus dem Projekt übernehmen", icon: FilePlus2, ziel: "/belege/neu?typ=rechnung", nurChef: true },
+  { art: "angebot", titel: "Angebot", text: "Am PC schreiben, mit Katalog und KI", icon: FileText, ziel: "/belege/neu?typ=angebot", nurChef: true, recht: "rechnungen" },
+  { art: "sprache", titel: "Angebot vor Ort", text: "„3 Steckdosen, 2 Schalter, 1 FI“ — sprechen, fertig", icon: Mic, ziel: "/belege/neu?typ=angebot&sprache=1", nurChef: true, recht: "rechnungen" },
+  { art: "rechnung", titel: "Rechnung", text: "Leer oder aus dem Projekt übernehmen", icon: FilePlus2, ziel: "/belege/neu?typ=rechnung", nurChef: true, recht: "rechnungen" },
   { art: "termin", titel: "Termin", text: "Montage, Besichtigung, Service in den Kalender", icon: CalendarPlus, nurChef: true },
   { art: "aufgabe", titel: "Aufgabe", text: "Wer muss was bis wann erledigen", icon: ListTodo },
   { art: "kontakt", titel: "Kontakt", text: "Kunde, Lieferant oder Partner", icon: UserPlus },
   { art: "zeit", titel: "Stunden", text: "Stunden auf ein Projekt buchen", icon: Clock },
-  { art: "regie", titel: "Regiebericht", text: "Mit Unterschrift des Kunden", icon: ClipboardSignature, ziel: "/regie/neu" },
+  { art: "regie", titel: "Regiebericht", text: "Mit Unterschrift des Kunden", icon: ClipboardSignature, ziel: "/regie/neu", recht: "regie" },
   { art: "foto", titel: "Foto", text: "Zum Projekt fotografieren", icon: Camera },
 ];
 
 export function useNeuAktionen(): NeuAktion[] {
-  const { istChef } = useSitzung();
-  return ALLE.filter((a) => istChef || !a.nurChef);
+  const { istChef, darf } = useSitzung();
+  return ALLE.filter((a) => (istChef || !a.nurChef) && (!a.recht || darf(a.recht)));
 }
 
 const EREIGNIS = "setec:neu";

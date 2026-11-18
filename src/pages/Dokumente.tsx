@@ -28,12 +28,13 @@ type Bereich = "firma" | "meine" | "mitarbeiter";
  * für jeden und — nur der Chef — die Ablage je Mitarbeiter.
  */
 export default function Dokumente() {
-  const { profil, istChef } = useSitzung();
+  const { profil, istChef, darf } = useSitzung();
+  const alleSehen = istChef && darf("personal");
   const [params, setParams] = useSearchParams();
   const bereiche: { wert: Bereich; text: string; icon: typeof User }[] = [
     { wert: "firma", text: "Firma", icon: Building2 },
     { wert: "meine", text: "Meine Dokumente", icon: User },
-    ...(istChef ? [{ wert: "mitarbeiter" as Bereich, text: "Mitarbeiter", icon: Users }] : []),
+    ...(alleSehen ? [{ wert: "mitarbeiter" as Bereich, text: "Mitarbeiter", icon: Users }] : []),
   ];
   const bereich = (bereiche.find((b) => b.wert === params.get("bereich"))?.wert ?? "firma") as Bereich;
 
@@ -51,7 +52,7 @@ export default function Dokumente() {
       </div>
       {bereich === "firma" && <FirmenAblage />}
       {bereich === "meine" && profil && <PersonAblage userId={profil.id} personName={name(profil)} eigene />}
-      {bereich === "mitarbeiter" && istChef && <MitarbeiterAblage person={params.get("person")} setPerson={(id) => setParams(id ? { bereich: "mitarbeiter", person: id } : { bereich: "mitarbeiter" }, { replace: true })} />}
+      {bereich === "mitarbeiter" && alleSehen && <MitarbeiterAblage person={params.get("person")} setPerson={(id) => setParams(id ? { bereich: "mitarbeiter", person: id } : { bereich: "mitarbeiter" }, { replace: true })} />}
     </Seite>
   );
 }

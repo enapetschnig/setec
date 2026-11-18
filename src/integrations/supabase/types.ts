@@ -2973,6 +2973,7 @@ export type Database = {
           nachname: string
           passwort_neu: boolean
           rolle: string
+          rolle_id: string | null
           telefon: string | null
           urlaub_tage: number
           versteckt: boolean
@@ -2992,6 +2993,7 @@ export type Database = {
           nachname?: string
           passwort_neu?: boolean
           rolle?: string
+          rolle_id?: string | null
           telefon?: string | null
           urlaub_tage?: number
           versteckt?: boolean
@@ -3011,6 +3013,7 @@ export type Database = {
           nachname?: string
           passwort_neu?: boolean
           rolle?: string
+          rolle_id?: string | null
           telefon?: string | null
           urlaub_tage?: number
           versteckt?: boolean
@@ -3328,6 +3331,36 @@ export type Database = {
           rabatt?: number
           rabattgruppe?: string | null
           updated_at?: string
+        }
+        Relationships: []
+      }
+      rollen: {
+        Row: {
+          basis: string
+          created_at: string
+          id: string
+          name: string
+          rechte: string[]
+          reihenfolge: number
+          schluessel: string | null
+        }
+        Insert: {
+          basis: string
+          created_at?: string
+          id?: string
+          name: string
+          rechte?: string[]
+          reihenfolge?: number
+          schluessel?: string | null
+        }
+        Update: {
+          basis?: string
+          created_at?: string
+          id?: string
+          name?: string
+          rechte?: string[]
+          reihenfolge?: number
+          schluessel?: string | null
         }
         Relationships: []
       }
@@ -4101,6 +4134,8 @@ export type Database = {
       }
       ist_aktiv: { Args: never; Returns: boolean }
       ist_chef: { Args: never; Returns: boolean }
+      ist_voller_chef: { Args: never; Returns: boolean }
+      hat_recht: { Args: { p_recht: string }; Returns: boolean }
       kunden_lieferschein_abschliessen: {
         Args: { p_id: string }
         Returns: string

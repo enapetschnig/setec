@@ -38,6 +38,8 @@ Deno.serve(async (req) => {
     if (!user) return antwort({ error: "Bitte anmelden." }, 401);
     const { data: ich } = await dienst.from("profiles").select("rolle, aktiv").eq("id", user.id).maybeSingle();
     if (ich?.rolle !== "chef" || !ich.aktiv) return antwort({ error: "Einladen per SMS kann nur der Chef." }, 403);
+    const { data: darf } = await dienst.rpc("hat_recht_von", { p_user: user.id, p_recht: "mitarbeiter" });
+    if (!darf) return antwort({ error: "Einladen ist für deine Rolle nicht freigegeben." }, 403);
 
     const { nummer } = await req.json();
     const an = typeof nummer === "string" ? e164(nummer) : null;

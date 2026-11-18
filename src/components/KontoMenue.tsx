@@ -11,6 +11,7 @@ import ChangePasswordDialog from "@/components/ChangePasswordDialog";
 import { InstallAnleitung } from "@/components/Installieren";
 import { pushBeimAbmelden } from "@/lib/push";
 import { Avatar } from "@/components/Bausteine";
+import { rollenName } from "@/lib/rechte";
 import { useSitzung } from "@/hooks/useSitzung";
 import { name } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -22,7 +23,8 @@ import { KUNDE } from "@/kunde.config";
  */
 export function KontoMenue({ mitName, leiste }: { mitName?: boolean; leiste?: boolean } = {}) {
   const navigate = useNavigate();
-  const { profil, istChef } = useSitzung();
+  const { profil, rollen } = useSitzung();
+  const rolle = profil ? rollenName(profil, rollen) : "";
   const [installOffen, setInstallOffen] = useState(false);
 
   const abmelden = async () => {
@@ -43,7 +45,7 @@ export function KontoMenue({ mitName, leiste }: { mitName?: boolean; leiste?: bo
               {mitName && (
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium text-sidebar-foreground">{name(profil)}</span>
-                  <span className="block truncate text-xs text-sidebar-foreground/55">{istChef ? "Chef" : "Monteur"}</span>
+                  <span className="block truncate text-xs text-sidebar-foreground/55">{rolle}</span>
                 </span>
               )}
             </button>
@@ -56,7 +58,7 @@ export function KontoMenue({ mitName, leiste }: { mitName?: boolean; leiste?: bo
         <DropdownMenuContent align={leiste ? "start" : "end"} side={leiste ? "top" : "bottom"} className="w-64">
           <DropdownMenuLabel className="font-normal">
             <span className="block font-semibold">{name(profil)}</span>
-            <span className="block text-xs text-muted-foreground">{istChef ? "Chef" : "Monteur"}</span>
+            <span className="block text-xs text-muted-foreground">{rolle}</span>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => navigate("/einstellungen")}>

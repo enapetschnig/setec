@@ -18,6 +18,7 @@ import { KontaktPersonen } from "@/components/kontakte/KontaktPersonen";
 import { istFestnetz, waNummer } from "@/lib/whatsapp";
 import { KundeLieferscheine } from "@/components/kundenlieferschein/KundeLieferscheine";
 import { KundeAufgaben } from "@/components/aufgaben/KundeAufgaben";
+import { useSitzung } from "@/hooks/useSitzung";
 
 const adresse = (k: Pick<Kunde, "strasse" | "plz" | "ort">) =>
   [k.strasse, [k.plz, k.ort].filter(Boolean).join(" ")].filter(Boolean).join(", ");
@@ -50,7 +51,9 @@ export function KundeDetail({
 }) {
   const art = kontaktArt(kunde.art);
   const lieferant = art === "lieferant";
-  const { data: belege = [], isLoading: belegeLaden } = useKundeBelege(kunde.id, istChef && !lieferant);
+  const { darf } = useSitzung();
+  const dRech = istChef && darf("rechnungen");
+  const { data: belege = [], isLoading: belegeLaden } = useKundeBelege(kunde.id, dRech && !lieferant);
   const { data: kreditor } = useKreditor([kunde.name, ...(kunde.namen ?? [])], istChef && art !== "kunde");
   const heute = isoTag();
   // Jahresansicht wie Rechnungen: Liste und „Bezahlt“ im gewählten Jahr, „Offen“ über alle Jahre
@@ -85,7 +88,7 @@ export function KundeDetail({
           </div>
         )}
         {!mitKopf && art !== "kunde" && <StatusPille eintrag={KONTAKT_ART[art]} />}
-        {istChef && !lieferant && (
+        {dRech && !lieferant && (
           <div className="grid grid-cols-2 gap-2 sm:flex">
             <Button asChild className="h-11"><Link to={`/belege/neu?typ=angebot&kunde=${kunde.id}`}><FileText className="h-4 w-4" /> Neues Angebot</Link></Button>
             <Button asChild variant="outline" className="h-11"><Link to={`/belege/neu?typ=rechnung&kunde=${kunde.id}`}><Receipt className="h-4 w-4" /> Neue Rechnung</Link></Button>
@@ -124,7 +127,7 @@ export function KundeDetail({
 
       <KundeAufgaben kundeId={kunde.id} projektIds={projekte.map((p) => p.id)} />
 
-      {art !== "kunde" && <LieferantBelege kontakt={kunde} istChef={istChef} />}
+      {art !== "kunde" && <LieferantBelege kontakt={kunde} istChef={istChef && darf("eingang")} />}
 
       {!lieferant && (<>
       <Karte titel={`Projekte${projekte.length ? ` · ${zahl(projekte.length)}` : ""}`} ohnePolster>
@@ -153,7 +156,7 @@ export function KundeDetail({
 
       {istChef && !lieferant && <KundeLieferscheine kundeId={kunde.id} />}
 
-      {istChef && !lieferant && (
+      {dRech && !lieferant && (
         <Karte titel="Angebote & Rechnungen" ohnePolster
           aktion={belege.length > 0 ? <JahrWahl jahre={jahre} jahr={jahr} onWahl={setJahr} className="flex-nowrap justify-end" /> : undefined}>
           {belegeLaden ? (

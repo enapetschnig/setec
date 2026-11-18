@@ -43,7 +43,7 @@ const reihung = (a: Termin, b: Termin) => Number(b.dringend) - Number(a.dringend
 /** Wo muss ich heute hin? Einsätze von heute und vom nächsten Arbeitstag, Erledigt mit einem Tipp. */
 export function EinsatzBereich({ onStunden }: { onStunden: (projektId?: string) => void }) {
   const neuLaden = useNeuLaden();
-  const { profil } = useSitzung();
+  const { profil, darf } = useSitzung();
   const heute = isoTag();
   const naechster = useMemo(() => {
     let t = tageDazu(heute, 1);
@@ -172,8 +172,8 @@ export function EinsatzBereich({ onStunden }: { onStunden: (projektId?: string) 
                 {t.projekt_id && (
                   <>
                     <Button variant="outline" className="h-11" onClick={() => onStunden(t.projekt_id ?? undefined)}><Clock className="h-4 w-4" /> Stunden</Button>
-                    <Button asChild variant="outline" className="h-11"><Link to={`/scan?projekt=${t.projekt_id}`}><ScanBarcode className="h-4 w-4" /> Material</Link></Button>
-                    <Button asChild variant="outline" className="h-11"><Link to={`/regie/neu?projekt=${t.projekt_id}`}><ClipboardSignature className="h-4 w-4" /> Regie</Link></Button>
+                    {darf("material") && <Button asChild variant="outline" className="h-11"><Link to={`/scan?projekt=${t.projekt_id}`}><ScanBarcode className="h-4 w-4" /> Material</Link></Button>}
+                    {darf("regie") && <Button asChild variant="outline" className="h-11"><Link to={`/regie/neu?projekt=${t.projekt_id}`}><ClipboardSignature className="h-4 w-4" /> Regie</Link></Button>}
                     <Button asChild variant="outline" className="h-11"><Link to={`/projekte/${t.projekt_id}`}><FolderKanban className="h-4 w-4" /> Projekt</Link></Button>
                   </>
                 )}

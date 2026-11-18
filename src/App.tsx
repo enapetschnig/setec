@@ -8,6 +8,7 @@ import { UpdateHinweis } from "@/components/UpdateHinweis";
 import { PushKlick } from "@/components/Mitteilungen";
 import { WunschMelden } from "@/components/wunsch/WunschMelden";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import type { Recht } from "@/lib/rechte";
 import { AppLayout } from "@/components/AppLayout";
 import { SitzungProvider } from "@/hooks/useSitzung";
 import { InstallHinweis } from "@/components/Installieren";
@@ -74,8 +75,8 @@ function RegieSeite() {
 }
 
 const Laedt = () => <div className="flex min-h-screen items-center justify-center text-muted-foreground">Lädt…</div>;
-const S = ({ children, chef = false }: { children: React.ReactNode; chef?: boolean }) => (
-  <ProtectedRoute nurChef={chef}><Suspense fallback={<Laedt />}>{children}</Suspense></ProtectedRoute>
+const S = ({ children, chef = false, recht }: { children: React.ReactNode; chef?: boolean; recht?: Recht }) => (
+  <ProtectedRoute nurChef={chef} recht={recht}><Suspense fallback={<Laedt />}>{children}</Suspense></ProtectedRoute>
 );
 
 const App = () => (
@@ -107,10 +108,10 @@ const App = () => (
                 <Route path="/kunden-lieferscheine" element={<S chef><KundenLieferscheine /></S>} />
                 <Route path="/kunden-lieferscheine/neu" element={<S chef><KundenLieferscheinSeite /></S>} />
                 <Route path="/kunden-lieferscheine/:id" element={<S chef><KundenLieferscheinSeite /></S>} />
-                <Route path="/scan" element={<S><Scan /></S>} />
+                <Route path="/scan" element={<S recht="material"><Scan /></S>} />
                 <Route path="/lager" element={<S><Lager /></S>} />
-                <Route path="/bestellungen" element={<S chef><Bestellungen /></S>} />
-                <Route path="/bestellungen/:id" element={<S chef><BestellungDetail /></S>} />
+                <Route path="/bestellungen" element={<S chef recht="eingang"><Bestellungen /></S>} />
+                <Route path="/bestellungen/:id" element={<S chef recht="eingang"><BestellungDetail /></S>} />
                 <Route path="/anlagen" element={<S><Anlagen /></S>} />
                 <Route path="/anlagen/:id" element={<S><AnlageDetail /></S>} />
                 <Route path="/pruefungen/:id" element={<S><PruefungSeite /></S>} />
@@ -118,23 +119,23 @@ const App = () => (
                 <Route path="/erstaufnahmen/neu" element={<S><ErstaufnahmeDetail /></S>} />
                 <Route path="/erstaufnahmen/:id" element={<S><ErstaufnahmeDetail /></S>} />
                 <Route path="/regie" element={<S><Regieberichte /></S>} />
-                <Route path="/regie/neu" element={<S><RegieSeite /></S>} />
+                <Route path="/regie/neu" element={<S recht="regie"><RegieSeite /></S>} />
                 <Route path="/regie/:id" element={<S><RegieSeite /></S>} />
-                <Route path="/angebote" element={<S chef><Belege typ="angebot" /></S>} />
-                <Route path="/rechnungen" element={<S chef><Belege typ="rechnung" /></S>} />
-                <Route path="/belege" element={<S chef><BelegeWeiter /></S>} />
-                <Route path="/belege/neu" element={<S chef><BelegSeite /></S>} />
-                <Route path="/belege/:id" element={<S chef><BelegSeite /></S>} />
-                <Route path="/eingang" element={<S chef><Eingang /></S>} />
-                <Route path="/offene-posten" element={<S chef><OffenePosten /></S>} />
-                <Route path="/buchhaltung" element={<S chef><Buchhaltung /></S>} />
+                <Route path="/angebote" element={<S chef recht="rechnungen"><Belege typ="angebot" /></S>} />
+                <Route path="/rechnungen" element={<S chef recht="rechnungen"><Belege typ="rechnung" /></S>} />
+                <Route path="/belege" element={<S chef recht="rechnungen"><BelegeWeiter /></S>} />
+                <Route path="/belege/neu" element={<S chef recht="rechnungen"><BelegSeite /></S>} />
+                <Route path="/belege/:id" element={<S chef recht="rechnungen"><BelegSeite /></S>} />
+                <Route path="/eingang" element={<S chef recht="eingang"><Eingang /></S>} />
+                <Route path="/offene-posten" element={<S chef recht="rechnungen"><OffenePosten /></S>} />
+                <Route path="/buchhaltung" element={<S chef recht="buchhaltung"><Buchhaltung /></S>} />
                 <Route path="/kunden" element={<S><Kunden /></S>} />
                 <Route path="/artikel" element={<S><ArtikelSeite /></S>} />
                 <Route path="/artikel/:id" element={<S><ArtikelDetail /></S>} />
                 <Route path="/leistungen" element={<S chef><Leistungen /></S>} />
                 <Route path="/auswertung" element={<S chef><Auswertung /></S>} />
                 <Route path="/einstellungen" element={<S><Einstellungen /></S>} />
-                <Route path="/mitarbeiter" element={<S chef><MitarbeiterSeite /></S>} />
+                <Route path="/mitarbeiter" element={<S chef recht="mitarbeiter"><MitarbeiterSeite /></S>} />
                 <Route path="/wuensche" element={<S><Wuensche /></S>} />
                 <Route path="/handyansicht" element={<S><Handyansicht /></S>} />
               </Route>

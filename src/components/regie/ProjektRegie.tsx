@@ -6,6 +6,7 @@ import type { ProjektMitKunde } from "@/hooks/useDaten";
 import { stunden } from "@/lib/format";
 import { RegieListe } from "./RegieListe";
 import { stundenSumme, useRegieberichte } from "./regieDaten";
+import { useSitzung } from "@/hooks/useSitzung";
 
 /**
  * Ordner „Regie“ im Projekt: die Regieberichte dieses Projekts und der
@@ -14,6 +15,7 @@ import { stundenSumme, useRegieberichte } from "./regieDaten";
 export function ProjektRegie({ projekt }: { projekt: ProjektMitKunde }) {
   const { data: liste = [], isLoading, error } = useRegieberichte(projekt.id);
   const neu = `/regie/neu?projekt=${projekt.id}`;
+  const darfNeu = useSitzung().darf("regie") && projekt.status !== "abgeschlossen";
   const offen = liste.filter((r) => r.status === "unterschrieben" && !r.rechnung_id).length;
   const entwuerfe = liste.filter((r) => r.status === "entwurf").length;
   const summe = liste.reduce((s, r) => s + stundenSumme(r), 0);
@@ -30,7 +32,7 @@ export function ProjektRegie({ projekt }: { projekt: ProjektMitKunde }) {
             </>
           )}
         </p>
-        {projekt.status !== "abgeschlossen" && liste.length > 0 && (
+        {darfNeu && liste.length > 0 && (
           <Button asChild className="h-11 shrink-0 gap-1.5">
             <Link to={neu}><Plus className="h-4 w-4" /> Neuer Regiebericht</Link>
           </Button>
@@ -43,7 +45,7 @@ export function ProjektRegie({ projekt }: { projekt: ProjektMitKunde }) {
         <p className="py-6 text-center text-sm text-destructive">Konnte nicht geladen werden: {(error as Error).message}</p>
       ) : liste.length === 0 ? (
         <Leer icon={ClipboardSignature} text="Arbeiten, Stunden der Partie und Material festhalten und gleich vom Kunden unterschreiben lassen.">
-          {projekt.status !== "abgeschlossen" && (
+          {darfNeu && (
             <Button asChild className="h-11 gap-1.5">
               <Link to={neu}><Plus className="h-4 w-4" /> Neuer Regiebericht</Link>
             </Button>

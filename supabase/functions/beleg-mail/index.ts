@@ -92,6 +92,11 @@ Deno.serve(async (req) => {
     if (!text || text.length > 10_000) return antwort({ error: "Text fehlt oder ist zu lang." }, 400);
     const lsId = typeof ein.kunden_lieferschein_id === "string" ? ein.kunden_lieferschein_id : null;
     if (!lsId && typeof ein.beleg_id !== "string") return antwort({ error: "Beleg fehlt." }, 400);
+    // Rollen & Rechte: Angebote/Rechnungen nur mit diesem Recht (Lieferscheine darf jede Büro-Rolle)
+    if (!lsId) {
+      const { data: darf } = await dienst.rpc("hat_recht_von", { p_user: user.id, p_recht: "rechnungen" });
+      if (!darf) return antwort({ error: "Angebote und Rechnungen sind für deine Rolle nicht freigegeben." }, 403);
+    }
 
     let b: { id: string; typ: string; status: string; nummer: string | null; archiv_stand: number | null };
     if (lsId) {

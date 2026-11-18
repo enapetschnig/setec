@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useSitzung } from "@/hooks/useSitzung";
 import { KUNDE } from "@/kunde.config";
+import { RECHTE, type Recht } from "@/lib/rechte";
 
 /**
  * Hürden vor jeder Seite: angemeldet, freigeschaltet — und bei
@@ -13,8 +14,8 @@ import { KUNDE } from "@/kunde.config";
  * dieselben Dinge per RLS; das hier ist nur die freundliche Seite davon.
  * Nach einem vorläufigen Passwort vom Chef zuerst ein eigenes festlegen.
  */
-export function ProtectedRoute({ children, nurChef = false }: { children: ReactNode; nurChef?: boolean }) {
-  const { laden, session, profil, istChef, ohneVerbindung, neuLaden } = useSitzung();
+export function ProtectedRoute({ children, nurChef = false, recht }: { children: ReactNode; nurChef?: boolean; recht?: Recht }) {
+  const { laden, session, profil, istChef, darf, ohneVerbindung, neuLaden } = useSitzung();
 
   if (laden) {
     return (
@@ -83,6 +84,18 @@ export function ProtectedRoute({ children, nurChef = false }: { children: ReactN
         icon={<ShieldAlert className="h-8 w-8 text-amber-600" />}
         titel="Nur für den Chef"
         text="Dieser Bereich ist dem Büro vorbehalten."
+      >
+        <Button asChild><Link to="/">Zur Startseite</Link></Button>
+      </Hinweis>
+    );
+  }
+
+  if (recht && !darf(recht)) {
+    return (
+      <Hinweis
+        icon={<ShieldAlert className="h-8 w-8 text-amber-600" />}
+        titel="Für deine Rolle nicht freigegeben"
+        text={`„${RECHTE.find((r) => r.recht === recht)?.titel ?? "Dieser Bereich"}“ schaltet der Chef unter Mitarbeiter & Zugänge → Rollen & Rechte frei.`}
       >
         <Button asChild><Link to="/">Zur Startseite</Link></Button>
       </Hinweis>

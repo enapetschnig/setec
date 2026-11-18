@@ -1,0 +1,6 @@
+# Rollen & Rechte
+
+- 2026-11-18 · Stefan: „weitere Rollen neben Chef und Monteur — Büro, Lehrling; Melanie soll die Buchhaltung sehen, Klaus nicht; selbst festlegen.“ → Tabelle `rollen` + `profiles.rolle_id`, Editor auf `/mitarbeiter` (nur der volle Chef). `profiles.rolle` bleibt die Grundstufe (chef/monteur), damit die ~240 `ist_chef()`-Regeln und alte App-Fassungen weiter stimmen; `rolle_id` leer = eingebaute Chef/Monteur-Rolle. Klaus/Melanie sind beim Einbau beide noch Chef — umstellen macht Stefan selbst.
+- Ein Recht nur anbieten, wenn die Datenbank es auch sperrt (RESTRICTIVE-Regel `hat_recht()`, RPC-Prüfung, Edge Function `hat_recht_von`). Geteilte Tabellen (`mitarbeiter_saetze` liest die Rechnung, `firma` speichern viele Seiten) nur beim Schreiben bzw. spaltenweise per Trigger sperren. „Auswertung“ ist kein eigenes Recht (liest dieselben Belege).
+- Neuer Bereich später: Recht in `lib/rechte.ts`, im check von `rollen.rechte` und in den Regeln ergänzen — eigene Rollen bekommen es erst, wenn der Chef es anhakt (Chef-Rolle hat immer alles). Test `tests/roboter/2026-11-18-rollen-rechte.mjs`.
+- Büro-Rollen dürfen nie Rollen vergeben, sich befördern oder den vollen Chef sperren/Passwort setzen (`profil_schutz`, `passwort_setzen`).

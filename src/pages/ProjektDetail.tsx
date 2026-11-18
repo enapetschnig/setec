@@ -101,14 +101,16 @@ export default function ProjektDetail() {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const neuLaden = useNeuLaden();
-  const { istChef } = useSitzung();
+  const { istChef, darf } = useSitzung();
+  // Ordner „Belege“ nur mit Angebote & Rechnungen (Rollen & Rechte)
+  const ordnerDa = (o: { wert: Ordner; nurChef?: boolean }) => !o.nurChef || (istChef && (o.wert !== "belege" || darf("rechnungen")));
   const { data: projekt, isLoading } = useProjekt(id);
   const [dialog, setDialog] = useState<null | "bearbeiten" | "zeit" | "foto" | "termin" | "loeschen" | "foerderung" | "whatsapp">(null);
   const [zeit, setZeit] = useState<ZeitMitInfo | null>(null);
   const [termin, setTermin] = useState<Termin | null>(null);
   const zaehler = useZaehler(id, istChef);
   const ordnerParam = params.get("ordner") as Ordner | null;
-  const ordner: Ordner = ordnerParam && ORDNER.some((o) => o.wert === ordnerParam && (!o.nurChef || istChef)) ? ordnerParam : "uebersicht";
+  const ordner: Ordner = ordnerParam && ORDNER.some((o) => o.wert === ordnerParam && ordnerDa(o)) ? ordnerParam : "uebersicht";
 
   if (isLoading) return <div className="flex min-h-screen items-center justify-center text-muted-foreground">Lädt…</div>;
   if (!projekt) {
@@ -255,13 +257,13 @@ export default function ProjektDetail() {
       <div className="grid grid-cols-4 gap-2">
         <AktionsKnopf icon={Camera} text="Foto" primaer onClick={() => setDialog("foto")} />
         <AktionsKnopf icon={Clock} text="Stunden" gesperrt={!buchbar} onClick={buchen(() => setDialog("zeit"))} />
-        <AktionsKnopf icon={ScanBarcode} text="Material" gesperrt={!buchbar} onClick={buchen(() => navigate(`/scan?projekt=${projekt.id}&modus=ausfassung`))} />
-        <AktionsKnopf icon={ClipboardSignature} text="Regie" gesperrt={!buchbar} onClick={buchen(() => navigate(`/regie/neu?projekt=${projekt.id}`))} />
+        {darf("material") && <AktionsKnopf icon={ScanBarcode} text="Material" gesperrt={!buchbar} onClick={buchen(() => navigate(`/scan?projekt=${projekt.id}&modus=ausfassung`))} />}
+        {darf("regie") && <AktionsKnopf icon={ClipboardSignature} text="Regie" gesperrt={!buchbar} onClick={buchen(() => navigate(`/regie/neu?projekt=${projekt.id}`))} />}
       </div>
 
       {/* Projektordner als Kacheln: alles auf einen Blick, mit Anzahl */}
       <nav className="grid grid-cols-4 gap-2 sm:grid-cols-8" aria-label="Projektordner">
-        {ORDNER.filter((o) => !o.nurChef || istChef).map(({ wert, text, icon: I }) => {
+        {ORDNER.filter(ordnerDa).map(({ wert, text, icon: I }) => {
           const aktiv = ordner === wert;
           const n = zaehler[wert];
           return (

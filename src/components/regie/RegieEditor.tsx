@@ -77,7 +77,7 @@ function mitLeerenZeilen(db: Entwurf, alt: Entwurf): Entwurf {
  *   /regie/neu?ohne=1                       ohne Projekt, Kunde noch offen
  */
 export function RegieEditor({ voll }: { voll: RegieVoll | null }) {
-  const { profil, istChef } = useSitzung();
+  const { profil, istChef, darf } = useSitzung();
   const ich = profil?.id ?? "";
   const navigate = useNavigate();
   const location = useLocation();
@@ -624,7 +624,7 @@ export function RegieEditor({ voll }: { voll: RegieVoll | null }) {
                 ich={ich}
                 istChef={istChef}
                 person={person}
-                mitarbeiter={mitarbeiter}
+                mitarbeiter={darf("stunden_andere") ? mitarbeiter : mitarbeiter.filter((m) => m.id === ich)}
                 vorschlaege={vorschlaege}
                 modusStandard={modusStandard}
                 onModus={modusMerken}
@@ -632,6 +632,7 @@ export function RegieEditor({ voll }: { voll: RegieVoll | null }) {
               />
             </Karte>
 
+            {(darf("material") || entwurf.material.length > 0) && (
             <Karte titel="Material">
               <MaterialListe
                 entwurf={entwurf}
@@ -643,6 +644,7 @@ export function RegieEditor({ voll }: { voll: RegieVoll | null }) {
                 namen={namen}
               />
             </Karte>
+            )}
 
             <Karte titel="Fotos">
               <RegieFotos

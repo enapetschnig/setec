@@ -14,6 +14,7 @@ import { foerderPille } from "@/lib/foerderung";
 import { projektPasst } from "@/lib/projektSuche";
 import { FOERDER_STATUS, type FoerderStatus, type ProjektZahlen } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { useSitzung } from "@/hooks/useSitzung";
 
 type Ansicht = "kacheln" | "liste";
 const ANSICHT_KEY = "elektro.projekte.ansicht";
@@ -42,6 +43,7 @@ function passt(p: ProjektMitKunde, f: Filter, z: ProjektZahlen | undefined): boo
 }
 
 export default function Projekte() {
+  const darfNeu = useSitzung().darf("projekte_anlegen");
   const navigate = useNavigate();
   const pc = useIstPc();
   const [params, setParams] = useSearchParams();
@@ -84,7 +86,7 @@ export default function Projekte() {
 
   return (
     <Seite titel="Projekte" zurueckPfad="/" breit
-      aktionen={<Button onClick={() => setNeuOffen(true)} className="gap-1.5"><FolderPlus className="h-4 w-4" /> <span className="hidden sm:inline">Neues</span> Projekt</Button>}>
+      aktionen={darfNeu ? <Button onClick={() => setNeuOffen(true)} className="gap-1.5"><FolderPlus className="h-4 w-4" /> <span className="hidden sm:inline">Neues</span> Projekt</Button> : undefined}>
       <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
         {FILTER.map((f) => {
           const n = anzahl(f.wert);
@@ -138,7 +140,7 @@ export default function Projekte() {
       ) : liste.length === 0 ? (
         <Leer icon={FolderKanban} text={suche ? `Unter „${FILTER.find((f) => f.wert === filter)!.text}“ nichts gefunden.` : "Keine Projekte in dieser Ansicht."}>
           {woanders && <Button variant="outline" className="h-11" onClick={() => filterSetzen(woanders.wert)}>{woanders.n} unter „{woanders.text}“ zeigen</Button>}
-          {!suche && <Button onClick={() => setNeuOffen(true)}>Projekt anlegen</Button>}
+          {!suche && darfNeu && <Button onClick={() => setNeuOffen(true)}>Projekt anlegen</Button>}
         </Leer>
       ) : !pc || ansicht === "kacheln" ? (
         <div className="grid grid-cols-1 gap-2.5 min-[480px]:grid-cols-2 md:grid-cols-3 2xl:grid-cols-4" data-projekt-kacheln>

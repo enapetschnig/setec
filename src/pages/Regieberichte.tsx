@@ -11,6 +11,7 @@ import { stundenSumme, useRegieberichte } from "@/components/regie/regieDaten";
 import { REGIE_FILTER, filterAusUrl, passtFilter, passtSuche, type RegieFilter } from "@/components/regie/regieLogik";
 import { stunden } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { useSitzung } from "@/hooks/useSitzung";
 
 const LEER_TEXT: Record<RegieFilter, string> = {
   alle: "Noch kein Regiebericht. Auf der Baustelle anlegen, vom Kunden unterschreiben lassen — fertig.",
@@ -21,6 +22,7 @@ const LEER_TEXT: Record<RegieFilter, string> = {
 
 /** /regie — alle Regieberichte, Filter über ?filter= (Startseite verlinkt ?filter=offen) */
 export default function Regieberichte() {
+  const darfNeu = useSitzung().darf("regie");
   const pc = useIstPc();
   const [params, setParams] = useSearchParams();
   const filter = filterAusUrl(params.get("filter"));
@@ -51,11 +53,11 @@ export default function Regieberichte() {
       titel="Regieberichte"
       untertitel={isLoading ? undefined : `${alle.length} ${alle.length === 1 ? "Bericht" : "Berichte"}`}
       breit
-      aktionen={
+      aktionen={darfNeu ? (
         <Button asChild className="h-11 gap-1.5 px-3 sm:px-4">
           <Link to="/regie/neu"><Plus className="h-4 w-4" />{pc ? "Neuer Regiebericht" : "Neu"}</Link>
         </Button>
-      }
+      ) : undefined}
     >
       <div className="space-y-3">
         <div className="flex flex-wrap gap-2">
@@ -102,7 +104,7 @@ export default function Regieberichte() {
         </Leer>
       ) : liste.length === 0 ? (
         <Leer icon={ClipboardSignature} text={suche.trim() ? "Nichts gefunden." : LEER_TEXT[filter]}>
-          {!suche.trim() && (filter === "alle" || filter === "entwurf") && (
+          {darfNeu && !suche.trim() && (filter === "alle" || filter === "entwurf") && (
             <Button asChild className="h-11 gap-1.5">
               <Link to="/regie/neu"><Plus className="h-4 w-4" /> Neuer Regiebericht</Link>
             </Button>

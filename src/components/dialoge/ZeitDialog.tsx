@@ -64,7 +64,7 @@ export function ZeitDialog({
   datum?: string;
 }) {
   const neuLaden = useNeuLaden();
-  const { profil, istChef, firma } = useSitzung();
+  const { profil, istChef, firma, darf } = useSitzung();
   const { data: projekte = [] } = useProjekte();
   const { data: mitarbeiter = [] } = useMitarbeiter();
   const { data: teams = [] } = useTeams();
@@ -143,7 +143,8 @@ export function ZeitDialog({
   const gesperrt = !!eintrag?.rechnung_id;
   // Wen ich buchen darf: Chef alle, Teamleitung ihr Team (Trigger zeit_person_schutz)
   const meineTeams = teams.filter((t) => t.leiter_id === profil?.id);
-  const waehlbar = istChef ? mitarbeiter
+  const waehlbar = !darf("stunden_andere") ? mitarbeiter.filter((m) => m.id === profil?.id)
+    : istChef ? mitarbeiter
     : mitarbeiter.filter((m) => m.id === profil?.id || meineTeams.some((t) => t.mitglieder.includes(m.id)));
   // Andere Person einer Buchung zuordnen darf nur der Chef
   const werWaehlbar = waehlbar.length > 1 && (!eintrag || istChef);

@@ -34,13 +34,13 @@ const SCHNELL: Record<string, NeuArt> = {
  */
 export function Seitenleiste({ festSchmal }: { festSchmal?: boolean }) {
   const { pathname } = useLocation();
-  const { firma, istChef } = useSitzung();
+  const { firma, istChef, darf } = useSitzung();
   const { state, toggleSidebar } = useSidebar();
   const schmal = festSchmal || state === "collapsed";
   const neuErlaubt = new Set(useNeuAktionen().map((a) => a.art));
   const { istZu, umschalten } = useZugeklappt();
 
-  const alle = sichtbareNavigation(istChef, !festSchmal);
+  const alle = sichtbareNavigation(istChef, !festSchmal, darf);
   // Der Chef sitzt am PC fürs Büro — Büro vor Baustelle, damit Eingangsrechnungen &
   // Co. auch am Laptop (768 px hoch) ohne Scrollen in der Leiste zu sehen sind
   const gruppen = (istChef ? ["haupt", "buero", "baustelle"] as const : ["haupt", "baustelle", "buero"] as const)

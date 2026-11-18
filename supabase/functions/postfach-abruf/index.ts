@@ -93,6 +93,12 @@ Deno.serve(async (req) => {
       if (!user) return antwort({ error: "Bitte anmelden." }, 401);
       const { data: ich } = await sb.from("profiles").select("rolle, aktiv").eq("id", user.id).maybeSingle();
       if (ich?.rolle !== "chef" || !ich.aktiv) return antwort({ error: "Das Postfach richtet nur der Chef ein." }, 403);
+      // Rollen & Rechte: abrufen gehört zu den Eingangsrechnungen, einrichten zu den Einstellungen
+      const [{ data: eing }, { data: einst }] = await Promise.all([
+        sb.rpc("hat_recht_von", { p_user: user.id, p_recht: "eingang" }),
+        sb.rpc("hat_recht_von", { p_user: user.id, p_recht: "einstellungen" }),
+      ]);
+      if (!eing && !einst) return antwort({ error: "Das Postfach ist für deine Rolle nicht freigegeben." }, 403);
     }
 
     let sa: Dienstkonto;

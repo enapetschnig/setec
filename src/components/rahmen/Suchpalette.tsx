@@ -37,7 +37,8 @@ const LEER: DbTreffer = { kunden: [], belege: [] };
 export function Suchpalette() {
   const navigate = useNavigate();
   const pc = useIstPc();
-  const { istChef } = useSitzung();
+  const { istChef, darf } = useSitzung();
+  const belegeSuchen = istChef && darf("rechnungen");
   const neuAktionen = useNeuAktionen();
   const { data: projekte = [] } = useProjekte();
   const [offen, setOffen] = useState(false);
@@ -75,7 +76,7 @@ export function Suchpalette() {
       const [k, b, pe] = await Promise.all([
         supabase.from("kunden").select("id, name, ort, ansprechpartner")
           .or(`name.ilike.${m},ort.ilike.${m},ansprechpartner.ilike.${m}`).order("name").limit(5),
-        istChef
+        belegeSuchen
           ? supabase.from("belege").select("id, typ, nummer, betreff, empf_name")
             .or(`nummer.ilike.${m},betreff.ilike.${m},empf_name.ilike.${m}`).order("datum", { ascending: false }).limit(5)
           : Promise.resolve({ data: [] as { id: string; typ: string; nummer: string | null; betreff: string | null; empf_name: string | null }[] }),
@@ -102,7 +103,7 @@ export function Suchpalette() {
     }, 200);
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [text, offen, istChef]);
+  }, [text, offen, belegeSuchen]);
 
   // Seiten (Titel und Stichworte: „Plantafel“ → Kalender, „Lohnzettel“ → Dokumente) und Neu-Aktionen per Teilwort
   const q = sauber(text).toLowerCase();
@@ -119,7 +120,7 @@ export function Suchpalette() {
     { titel: "Belege", treffer: db.belege },
     {
       titel: "Seiten",
-      treffer: sichtbareNavigation(istChef, pc).filter((s) => navPasst(s, q)).map((s) => ({
+      treffer: sichtbareNavigation(istChef, pc, darf).filter((s) => navPasst(s, q)).map((s) => ({
         schluessel: `s-${s.pfad}`, titel: s.titel, icon: s.icon, los: () => gehe(s.pfad),
       })),
     },
@@ -131,7 +132,7 @@ export function Suchpalette() {
       })),
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  ].filter((g) => g.treffer.length > 0), [db, projektTreffer, q, istChef, pc, neuAktionen]);
+  ].filter((g) => g.treffer.length > 0), [db, projektTreffer, q, istChef, pc, neuAktionen, darf]);
   const alle = gruppen.flatMap((g) => g.treffer);
 
   useEffect(() => { setMarkiert(0); }, [text, db]);
@@ -156,7 +157,7 @@ export function Suchpalette() {
         <div className="flex items-center gap-2 border-b px-4" style={{ paddingTop: "env(safe-area-inset-top)" }}>
           <Search className="h-5 w-5 shrink-0 text-muted-foreground" />
           <input autoFocus value={text} onChange={(e) => setText(e.target.value)} onKeyDown={taste}
-            placeholder={istChef ? "Projekte, Kontakte, Belege, Seiten …" : "Projekte, Kontakte, Seiten …"}
+            placeholder={belegeSuchen ? "Projekte, Kontakte, Belege, Seiten …" : "Projekte, Kontakte, Seiten …"}
             aria-label="Suchbegriff" role="combobox" aria-expanded aria-controls="suche-liste"
             className="h-14 min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-muted-foreground" />
           {laedt && <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" />}
