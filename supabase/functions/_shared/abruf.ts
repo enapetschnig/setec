@@ -157,7 +157,7 @@ async function mailVerarbeiten(u: Umfeld, g: Gmail, labelId: string | null, zeil
   return neu.length ? "rechnung" : doppelt.length ? "doppelt" : "andere";
 }
 
-async function postfachAbrufen(u: Umfeld, sa: Dienstkonto, p: Postfach, bilanz: Bilanz) {
+async function postfachAbrufen(u: Umfeld, sa: Dienstkonto, p: Postfach, bilanz: Bilanz, grenze = LESEN_MAX) {
   let g: Gmail;
   try {
     g = await Gmail.oeffnen(sa, p.adresse);
@@ -196,7 +196,7 @@ async function postfachAbrufen(u: Umfeld, sa: Dienstkonto, p: Postfach, bilanz: 
 
   let i = 0;
   for (; i < offen.length; i++) {
-    if (u.gelesen >= LESEN_MAX || Date.now() - u.start > ZEIT_MAX) break;
+    if (u.gelesen >= grenze || Date.now() - u.start > ZEIT_MAX) break;
     const zeile = await beanspruchen(u.sb, p, offen[i], bekannt.get(offen[i]));
     if (!zeile) continue;
     try {
@@ -229,8 +229,13 @@ export async function abrufen(o: { sb: SupabaseClient; sa: Dienstkonto; lesen: L
     kontakte: (kontakte ?? []) as LieferantKontakt[], bisher: [...new Set((bisher ?? []).map((r) => r.lieferant as string))],
     start: Date.now(), gelesen: 0,
   };
-  for (const p of liste as Postfach[]) {
-    try { await postfachAbrufen(u, sa, p, bilanz); } catch (e) {
+  // Jedes Postfach bekommt seinen Anteil an den Lesungen — sonst verbraucht das erste mit
+  // Rückstand alles und das zweite kommt nie dran (18.11.2026: office@ vor s.sattler@).
+  // Was eines nicht braucht, bekommen die nächsten.
+  const postfaecher = liste as Postfach[];
+  for (const [k, p] of postfaecher.entries()) {
+    const grenze = u.gelesen + Math.ceil((LESEN_MAX - u.gelesen) / (postfaecher.length - k));
+    try { await postfachAbrufen(u, sa, p, bilanz, grenze); } catch (e) {
       console.error("Postfach", p.adresse, e);
       bilanz.meldungen.push(`${p.adresse}: ${(e as Error).message}`);
       await sb.from("postfaecher").update({ letzter_fehler: (e as Error).message.slice(0, 500) }).eq("id", p.id);
