@@ -13,7 +13,7 @@ import {
 import { DokumentDialog } from "@/components/dokumente/DokumentDialog";
 import { dateiHerunterladen, dateiOeffnen, useFirmenDokumente, usePersonalDokumente } from "@/components/dokumente/dokumentDaten";
 import { fehlerText } from "@/components/stamm/stammDaten";
-import { useMitarbeiter, useNeuLaden } from "@/hooks/useDaten";
+import { useFahrzeuge, useMitarbeiter, useNeuLaden } from "@/hooks/useDaten";
 import { useSitzung } from "@/hooks/useSitzung";
 import { ablauf, groesseText, nachOrdner, passt, PERSONAL_ART, PERSONAL_ARTEN, personalTitel, type PersonalArt } from "@/lib/dokumente";
 import { datum, isoTag } from "@/lib/format";
@@ -64,11 +64,14 @@ function FirmenAblage() {
   const { istChef } = useSitzung();
   const neuLaden = useNeuLaden();
   const { data: dokumente = [], isLoading } = useFirmenDokumente();
+  // Dokumente am Fahrzeug / an der Maschine (Fuhrpark): Name dazu, auch suchbar
+  const { data: fahrzeuge = [] } = useFahrzeuge(true);
+  const fzName = (id: string | null) => (id ? fahrzeuge.find((f) => f.id === id)?.name ?? null : null);
   const [suche, setSuche] = useState("");
   const [neu, setNeu] = useState<string | null>(null);
   const [weg, setWeg] = useState<FirmenDokument | null>(null);
   const heute = isoTag();
-  const gefunden = useMemo(() => dokumente.filter((d) => passt(suche, d.titel, d.name, d.ordner, d.beschreibung)), [dokumente, suche]);
+  const gefunden = useMemo(() => dokumente.filter((d) => passt(suche, d.titel, d.name, d.ordner, d.beschreibung, fzName(d.fahrzeug_id))), [dokumente, suche, fahrzeuge]); // eslint-disable-line react-hooks/exhaustive-deps
   const ordner = nachOrdner(gefunden);
   const alleOrdner = [...new Set(dokumente.map((d) => d.ordner))];
 
@@ -114,6 +117,7 @@ function FirmenAblage() {
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-sm font-medium">{d.titel}</span>
                           <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                            {fzName(d.fahrzeug_id) && <span className="font-medium text-foreground">{fzName(d.fahrzeug_id)} ·</span>}
                             <span className="truncate">{d.name}</span>
                             {d.groesse ? <span>· {groesseText(d.groesse)}</span> : null}
                             {g && <StatusPille eintrag={{ ton: g.stufe === "abgelaufen" ? "rot" : g.stufe === "bald" ? "gelb" : "grau", text: g.text }} />}

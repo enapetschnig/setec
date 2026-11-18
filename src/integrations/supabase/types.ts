@@ -1992,6 +1992,7 @@ export type Database = {
       firmen_dokumente: {
         Row: {
           beschreibung: string | null
+          fahrzeug_id: string | null
           created_at: string
           groesse: number | null
           gueltig_bis: string | null
@@ -2006,6 +2007,7 @@ export type Database = {
         }
         Insert: {
           beschreibung?: string | null
+          fahrzeug_id?: string | null
           created_at?: string
           groesse?: number | null
           gueltig_bis?: string | null
@@ -2020,6 +2022,7 @@ export type Database = {
         }
         Update: {
           beschreibung?: string | null
+          fahrzeug_id?: string | null
           created_at?: string
           groesse?: number | null
           gueltig_bis?: string | null

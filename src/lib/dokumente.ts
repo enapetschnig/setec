@@ -21,7 +21,7 @@ export const PERSONAL_ART: Record<PersonalArt, { text: string; mehrzahl: string;
 export const PERSONAL_ARTEN = Object.keys(PERSONAL_ART) as PersonalArt[];
 
 /** Vorschläge für neue Ordner der Firmendokumente */
-export const ORDNER_VORSCHLAG = ["Vorlagen", "Zertifikate", "Versicherungen", "Prüfberichte", "Verträge", "Sicherheit", "Allgemein"];
+export const ORDNER_VORSCHLAG = ["Vorlagen", "Zertifikate", "Versicherungen", "Prüfberichte", "Verträge", "Fuhrpark", "Sicherheit", "Allgemein"];
 
 const MONATE = ["Jänner", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"];
 

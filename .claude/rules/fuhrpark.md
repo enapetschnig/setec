@@ -1,0 +1,3 @@
+# Fuhrpark
+
+- 2026-11-18 · Stefan: Dokumente und Fotos an Fahrzeugen/Maschinen (Leasingvertrag, Polizze, Rechnung für die Garantie, Foto vom Typenschild). Gebaut als Verknüpfung in den bestehenden Firmendokumenten (`firmen_dokumente.fahrzeug_id`, Ordner „Fuhrpark“) statt eigener Ablage — eine Ablage, gleiche Regeln (Chef/Büro legt ab, „Nur für den Chef“ verbirgt vor Monteuren). Im Fahrzeug-Dialog `FahrzeugDokumente` mit Vorschaubild; unter Dokumente mit Maschinenname und danach suchbar. Fahrzeug gelöscht → Dokument bleibt (`on delete set null`). Test `tests/roboter/2026-11-18-fahrzeug-dokumente.mjs`.

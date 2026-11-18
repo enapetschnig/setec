@@ -14,6 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Feld, leerNull, useBeimOeffnen, zahlFeld, Zusatz } from "@/components/stamm/Felder";
 import { fehlerText } from "@/components/stamm/stammDaten";
+import { FahrzeugDokumente } from "@/components/fuhrpark/FahrzeugDokumente";
 import { useLagerorte, useMitarbeiter, useNeuLaden } from "@/hooks/useDaten";
 import { useSitzung } from "@/hooks/useSitzung";
 import { datum, dezimalLesen, euro, isoTag } from "@/lib/format";
@@ -241,6 +242,8 @@ export function FahrzeugDialog({
             <Textarea id="f-notiz" rows={2} value={w.notiz} onChange={(e) => setz({ notiz: e.target.value })} />
           </Feld>
         </fieldset>
+
+        {fahrzeug && <FahrzeugDokumente fahrzeug={fahrzeug} />}
 
         {fahrzeug && (
           <section className="space-y-2">

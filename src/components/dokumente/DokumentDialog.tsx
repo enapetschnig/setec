@@ -25,7 +25,7 @@ export function DokumentDialog({
   open: boolean;
   onOpenChange: (o: boolean) => void;
   /** firma = Firmendokument, sonst die Person, der das Dokument gehört */
-  ziel: { art: "firma"; ordner?: string } | { art: "personal"; userId: string; name: string };
+  ziel: { art: "firma"; ordner?: string; fahrzeug?: { id: string; name: string } } | { art: "personal"; userId: string; name: string };
   ordnerListe?: string[];
 }) {
   const neuLaden = useNeuLaden();
@@ -66,6 +66,7 @@ export function DokumentDialog({
       const { error } = firma
         ? await supabase.from("firmen_dokumente").insert({
           ordner: ordner.trim(), titel: titel.trim() || datei.name.replace(/\.\w+$/, ""), gueltig_bis: gueltig || null, nur_chef: nurChef,
+          fahrzeug_id: ziel.fahrzeug?.id ?? null,
           pfad: d.pfad, name: d.name, mime: d.mime, groesse: d.groesse,
         })
         : await supabase.from("personal_dokumente").insert({
@@ -90,7 +91,7 @@ export function DokumentDialog({
 
   return (
     <FormularDialog open={open} onOpenChange={onOpenChange} gesperrt={laeuft} ungespeichert={!!datei}
-      titel={firma ? "Firmendokument ablegen" : eigene ? "Dokument hochladen" : `Dokument für ${ziel.name}`}
+      titel={firma && ziel.fahrzeug ? `Dokument oder Foto zu ${ziel.fahrzeug.name}` : firma ? "Firmendokument ablegen" : eigene ? "Dokument hochladen" : `Dokument für ${ziel.name}`}
       fuss={
         <>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={laeuft}>Abbrechen</Button>
@@ -145,7 +146,7 @@ export function DokumentDialog({
         <div className="space-y-2">
           <Label htmlFor="d-titel">Titel <span className="font-normal text-muted-foreground">{firma ? "(sonst der Dateiname)" : "(optional)"}</span></Label>
           <Input id="d-titel" className="h-12" value={titel} onChange={(e) => setTitel(e.target.value)}
-            placeholder={firma ? "z. B. Betriebshaftpflicht 2026" : "z. B. Krankenstand 10.–12.11."} />
+            placeholder={firma && ziel.fahrzeug ? "z. B. Leasingvertrag, Versicherungspolizze, Typenschild" : firma ? "z. B. Betriebshaftpflicht 2026" : "z. B. Krankenstand 10.–12.11."} />
         </div>
 
         {firma && (
