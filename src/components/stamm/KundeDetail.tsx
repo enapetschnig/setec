@@ -5,7 +5,7 @@ import { Karte, Kennzahl, ProjektStatusBadge, StatusBadge, StatusPille } from "@
 import { Button } from "@/components/ui/button";
 import type { ProjektMitKunde } from "@/hooks/useDaten";
 import { euro, isoTag, zahl } from "@/lib/format";
-import { imJahr, jahreAus } from "@/lib/jahre";
+import { bezahltImJahr, imJahr, jahreAus } from "@/lib/jahre";
 import { BelegZeile, JahrWahl, MonatsListe, useJahrWahl } from "@/components/JahrWahl";
 import { belegStatus, type Kunde } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -56,7 +56,7 @@ export function KundeDetail({
   const { data: belege = [], isLoading: belegeLaden } = useKundeBelege(kunde.id, dRech && !lieferant);
   const { data: kreditor } = useKreditor([kunde.name, ...(kunde.namen ?? [])], istChef && art !== "kunde");
   const heute = isoTag();
-  // Jahresansicht wie Rechnungen: Liste und „Bezahlt“ im gewählten Jahr, „Offen“ über alle Jahre
+  // Jahresansicht wie Rechnungen: Liste im gewählten Jahr, „Bezahlt“ nach dem Zahltag im Jahr, „Offen“ über alle Jahre
   const [jahr, setJahr] = useJahrWahl("kontakt-kunde");
   const jahre = useMemo(() => jahreAus(belege.map((b) => b.datum), new Date().getFullYear()), [belege]);
   const sichtbar = useMemo(() => belege.filter((b) => imJahr(b.datum, jahr)), [belege, jahr]);
@@ -64,7 +64,7 @@ export function KundeDetail({
   const offen = rechnungen.filter((b) => b.status === "offen");
   const ueberfaellig = offen.filter((b) => belegStatus(b, heute) === "ueberfaellig");
   const summe = (l: typeof belege) => l.reduce((s, b) => s + Number(b.brutto ?? 0), 0);
-  const bezahlt = sichtbar.filter((b) => b.typ === "rechnung" && b.status === "bezahlt");
+  const bezahlt = rechnungen.filter((b) => b.status === "bezahlt" && bezahltImJahr(b, jahr));
   const adr = adresse(kunde);
   // WhatsApp nur bei einer Handynummer (Vorlagen gibt es im Projekt)
   const waRoh = waNummer(kunde.telefon);

@@ -10,10 +10,10 @@ import { Input } from "@/components/ui/input";
 import { useIstPc } from "@/components/AppLayout";
 import { BelegZeile, JahrWahl, MonatsListe, useJahrWahl } from "@/components/JahrWahl";
 import { useOdooZeilen } from "@/hooks/useOdooZeilen";
-import { imJahr, jahreAus } from "@/lib/jahre";
+import { bezahltImJahr, imJahr, jahreAus, nachZahlDatum, zahlDatum } from "@/lib/jahre";
 import { EingangDialog } from "@/components/eingang/EingangDialog";
 import { ueberwiesen, useEingangsrechnungen, type EingangMitAnteilen } from "@/components/eingang/eingangDaten";
-import { ablauf, bezahltText, kategorieText, lastschriftBetrag, zahlung, zahlweg, ZAHLWEGE, zuordnung, zuZahlen, type Zahlweg } from "@/components/eingang/eingangLogik";
+import { ablauf, bezahltText, kategorieText, lastschriftBetrag, skontoLaeuftAb, zahlung, zahlweg, ZAHLWEGE, zuordnung, zuZahlen, type Zahlweg } from "@/components/eingang/eingangLogik";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useKunden, useNeuLaden } from "@/hooks/useDaten";
 import { useSitzung } from "@/hooks/useSitzung";
@@ -24,12 +24,13 @@ import { EINGANG_STATUS, FREIGABE_STATUS } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useKategorien } from "@/components/buchhaltung/buchhaltungDaten";
 
-type Filter = "alle" | "pruefen" | "freigegeben" | "lastschrift" | "bezahlt" | "abgelehnt" | "zuzuordnen";
+type Filter = "alle" | "pruefen" | "freigegeben" | "skonto" | "lastschrift" | "bezahlt" | "abgelehnt" | "zuzuordnen";
 
 /** Der Ablauf von links nach rechts: prüfen → freigeben → überweisen */
 const FILTER: { wert: Filter; text: string }[] = [
   { wert: "pruefen", text: "Zu prüfen" },
   { wert: "freigegeben", text: "Zu überweisen" },
+  { wert: "skonto", text: "Skonto läuft ab" },
   { wert: "lastschrift", text: "Lastschrift" },
   { wert: "bezahlt", text: "Bezahlt" },
   { wert: "abgelehnt", text: "Abgelehnt" },
@@ -41,25 +42,31 @@ const LEER_TEXT: Record<Filter, string> = {
   alle: "Noch keine Eingangsrechnung. Rechnung vom Großhändler fotografieren, „Mit KI ausfüllen“, Projekt wählen — fertig.",
   pruefen: "Nichts zu prüfen.",
   freigegeben: "Nichts zu überweisen.",
+  skonto: "Bei keiner offenen Rechnung läuft in den nächsten 3 Tagen das Skonto ab.",
   lastschrift: "Keine offene Lastschrift. Bucht ein Händler selbst ab (SEPA-Mandat), in der Rechnung „Händler bucht per Lastschrift ab“ einschalten.",
   bezahlt: "Noch nichts bezahlt.",
   abgelehnt: "Keine abgelehnten Rechnungen.",
   zuzuordnen: "Alles zugeordnet.",
 };
 
-/** Noch zu tun — zeigt alle Jahre; Bezahltes, Abgelehntes, „Alle“ nur das gewählte Jahr */
-const OFFENES: Filter[] = ["pruefen", "freigegeben", "lastschrift"];
+/**
+ * Noch zu tun — zeigt alle Jahre (so viele wie die Zahl auf der Startseite);
+ * „Bezahlt“ das gewählte Jahr nach dem Zahltag, Abgelehntes und „Alle“ nach dem Rechnungsdatum
+ */
+const OFFENES: Filter[] = ["pruefen", "freigegeben", "skonto", "lastschrift", "zuzuordnen"];
 
-const passt = (r: EingangMitAnteilen, f: Filter) =>
+const passt = (r: EingangMitAnteilen, f: Filter, heute: string) =>
   f === "alle" ? true
     : f === "zuzuordnen" ? zuordnung(r, r.eingang_anteile) !== "zugeordnet"
-      : f === "bezahlt" ? ablauf(r) === "ueberwiesen"
-        : ablauf(r) === f;
+      : f === "skonto" ? skontoLaeuftAb(r, heute)
+        : f === "bezahlt" ? ablauf(r) === "ueberwiesen"
+          : ablauf(r) === f;
 
 /**
  * /eingang — Eingangsrechnungen (nur Chef), Filter über ?filter=.
- * Jahresansicht wie Rechnungen (JahrWahl): Bezahltes nur im gewählten Jahr
- * (Odoo-Übernahme 2023–2025 im Archiv), Suche und Offenes über alle Jahre.
+ * Jahresansicht wie Rechnungen (JahrWahl): Bezahltes nur im gewählten Jahr,
+ * nach dem Zahltag (Odoo-Übernahme 2023–2025 im Archiv), Suche und Offenes
+ * über alle Jahre. Summen ohne Abgelehnte.
  */
 export default function Eingang() {
   const pc = useIstPc();
@@ -76,7 +83,7 @@ export default function Eingang() {
   const f = params.get("filter");
   // ohne Wahl „Zu prüfen“ — ist dort nichts, gleich die Rechnungen des Jahres statt einer leeren Liste
   const filter: Filter = FILTER.some((x) => x.wert === f) ? f as Filter : f === "unbezahlt" ? "freigegeben" : f === "ueberwiesen" ? "bezahlt"
-    : isLoading || alle.some((r) => passt(r, "pruefen")) ? "pruefen" : "alle";
+    : isLoading || alle.some((r) => passt(r, "pruefen", heute)) ? "pruefen" : "alle";
   /** Unter „Bezahlt“: nach Zahlweg (überwiesen, Lastschrift, bar) */
   const w = params.get("weg");
   const weg: Zahlweg | null = filter === "bezahlt" && ZAHLWEGE.some((x) => x.wert === w) ? w as Zahlweg : null;
@@ -85,6 +92,8 @@ export default function Eingang() {
   const jahre = useMemo(() => jahreAus(alle.map((r) => r.datum), new Date().getFullYear()), [alle]);
   const ueberAlle = suche.trim() ? "Suche in allen Jahren" : OFFENES.includes(filter) ? "Offenes aus allen Jahren" : null;
   const imZeitraum = useMemo(() => alle.filter((r) => imJahr(r.datum, jahr)), [alle, jahr]);
+  /** „Bezahlt {Jahr}“ = Zahltag im Jahr — Dezember-Rechnung, im Jänner bezahlt, steht im Jänner */
+  const bezahltImZeitraum = useMemo(() => alle.filter((r) => bezahltImJahr(r, jahr)), [alle, jahr]);
   const { data: kategorien = [] } = useKategorien();
   const katName = (r: EingangMitAnteilen) => kategorien.find((k) => k.id === r.kategorie_id)?.name ?? kategorieText(r.kategorie);
   const { data: kontakte = [] } = useKunden();
@@ -124,7 +133,7 @@ export default function Eingang() {
     else neu.delete("weg");
     setParams(neu, { replace: true });
   };
-  const bezahlte = useMemo(() => (suche.trim() ? alle : imZeitraum).filter((r) => passt(r, "bezahlt")), [alle, imZeitraum, suche]);
+  const bezahlte = useMemo(() => (suche.trim() ? alle : bezahltImZeitraum).filter((r) => passt(r, "bezahlt", heute)), [alle, bezahltImZeitraum, suche, heute]);
 
   const filterSetzen = (w: Filter) => {
     const neu = new URLSearchParams(params);
@@ -134,24 +143,36 @@ export default function Eingang() {
     setParams(neu, { replace: true });
   };
 
+  // Je Filter dieselbe Grundmenge für die Zahl am Filter und die Liste: Offenes alle Jahre, Bezahltes nach Zahltag
   const anzahl = useMemo(() => {
     const z = {} as Record<Filter, number>;
-    FILTER.forEach((x) => { z[x.wert] = (OFFENES.includes(x.wert) ? alle : imZeitraum).filter((r) => passt(r, x.wert)).length; });
+    FILTER.forEach((x) => {
+      const basis = OFFENES.includes(x.wert) ? alle : x.wert === "bezahlt" ? bezahltImZeitraum : imZeitraum;
+      z[x.wert] = basis.filter((r) => passt(r, x.wert, heute)).length;
+    });
     return z;
-  }, [alle, imZeitraum]);
+  }, [alle, imZeitraum, bezahltImZeitraum, heute]);
 
-  const liste = useMemo(() => (ueberAlle ? alle : imZeitraum).filter((r) => passt(r, filter) && (!weg || zahlweg(r) === weg) && passtSuche([
-    r.lieferant, r.nummer, r.notiz, katName(r), ...r.eingang_anteile.flatMap((a) => [a.text, a.projekte?.nummer, a.projekte?.name]),
-  ], suche)).sort((a, b) => (filter === "freigegeben" ? (zuZahlen(a, heute).bis ?? a.faellig_am ?? "9").localeCompare(zuZahlen(b, heute).bis ?? b.faellig_am ?? "9")
-    : filter === "lastschrift" ? (lastschriftBetrag(a).am ?? a.datum).localeCompare(lastschriftBetrag(b).am ?? b.datum) : 0)),
-  [alle, imZeitraum, ueberAlle, filter, weg, suche, heute]);
+  const liste = useMemo(() => {
+    const basis = ueberAlle ? alle : filter === "bezahlt" ? bezahltImZeitraum : imZeitraum;
+    const treffer = basis.filter((r) => passt(r, filter, heute) && (!weg || zahlweg(r) === weg) && passtSuche([
+      r.lieferant, r.nummer, r.notiz, katName(r), ...r.eingang_anteile.flatMap((a) => [a.text, a.projekte?.nummer, a.projekte?.name]),
+    ], suche));
+    // Bezahlt: neueste Zahlung zuerst (Monatsbänder nach dem Zahltag)
+    if (filter === "bezahlt") return nachZahlDatum(treffer);
+    return treffer.sort((a, b) => (filter === "freigegeben" ? (zuZahlen(a, heute).bis ?? a.faellig_am ?? "9").localeCompare(zuZahlen(b, heute).bis ?? b.faellig_am ?? "9")
+      : filter === "skonto" ? (a.skonto_bis ?? "9").localeCompare(b.skonto_bis ?? "9")
+        : filter === "lastschrift" ? (lastschriftBetrag(a).am ?? a.datum).localeCompare(lastschriftBetrag(b).am ?? b.datum) : 0));
+  }, [alle, imZeitraum, bezahltImZeitraum, ueberAlle, filter, weg, suche, heute]);
 
   // Vorschläge: bisherige Lieferanten und die Lieferanten-Kontakte
   const lieferanten = useMemo(() => [...new Set([
     ...alle.map((r) => r.lieferant.trim()),
     ...kontakte.filter((k) => k.art === "lieferant").map((k) => k.name.trim()),
   ])].sort((a, b) => a.localeCompare(b, "de")), [alle, kontakte]);
-  const summe = liste.reduce((s, r) => s + Number(r.brutto), 0);
+  // Abgelehnte zählen in keine Summe (wie die Monatsbänder)
+  const abgelehnteInListe = liste.filter((r) => ablauf(r) === "abgelehnt").length;
+  const summe = liste.reduce((s, r) => s + (ablauf(r) === "abgelehnt" ? 0 : Number(r.brutto)), 0);
 
   // ── Überweisen ──
   const ueberweisen = filter === "freigegeben";
@@ -274,7 +295,7 @@ export default function Eingang() {
         </Leer>
       ) : liste.length === 0 ? (
         <Leer icon={Inbox} text={suche.trim() ? "Nichts gefunden."
-          : !ueberAlle && jahr && alle.some((r) => passt(r, filter)) ? `${jahr} keine — ältere unter „Archiv“.` : LEER_TEXT[filter]}>
+          : !ueberAlle && jahr && alle.some((r) => passt(r, filter, heute)) ? `${jahr} keine — ältere unter „Archiv“.` : LEER_TEXT[filter]}>
           {!suche.trim() && (filter === "alle" || filter === "pruefen") && (
             <Button className="h-11 gap-1.5" onClick={() => setOffen("neu")}><Plus className="h-4 w-4" /> Rechnung erfassen</Button>
           )}
@@ -284,10 +305,11 @@ export default function Eingang() {
           <MonatsListe
             eintraege={liste}
             tabelle={pc}
-            // Zu überweisen / Lastschrift: nach Fälligkeit sortiert — dort keine Monate
-            gruppieren={!ueberweisen && !lastschrift}
+            // Zu überweisen / Lastschrift / Skonto: nach Fälligkeit sortiert — dort keine Monate
+            gruppieren={!ueberweisen && !lastschrift && filter !== "skonto"}
             schluessel={(r) => r.id}
-            datum={(r) => r.datum}
+            // Bezahlt: Monat der Zahlung
+            datum={(r) => (filter === "bezahlt" ? zahlDatum(r) : r.datum)}
             betrag={(r) => (ablauf(r) === "abgelehnt" ? null : Number(r.brutto))}
             kopf={{ name: "Lieferant · Kategorie, Projekt" }}
             // Häkchen vorne: 1rem + 1,25rem + 1rem
@@ -328,7 +350,7 @@ export default function Eingang() {
                     </>
                   )}
                   betrag={euro(ueberweisen ? zz.betrag : lastschrift ? ls.betrag : Number(r.brutto))}
-                  betragUnter={ueberweisen && zz.skonto ? `${euro(zz.skonto)} Skonto bis ${datum(zz.bis!)}`
+                  betragUnter={(ueberweisen || filter === "skonto") && zz.skonto ? `${euro(zz.skonto)} Skonto bis ${datum(zz.bis!)}`
                     : lastschrift && ls.skonto ? `− ${euro(ls.skonto)} Skonto`
                       : `${euro(Number(r.netto))} netto`}
                 />
@@ -367,7 +389,10 @@ export default function Eingang() {
             </section>
           ) : (
             <p className="px-1 text-right text-xs text-muted-foreground">
-              {liste.length} {liste.length === 1 ? "Rechnung" : "Rechnungen"} · <span className="zahl font-semibold text-foreground">{euro(summe)}</span> brutto
+              {liste.length} {liste.length === 1 ? "Rechnung" : "Rechnungen"} ·{" "}
+              {abgelehnteInListe === liste.length ? "abgelehnt, zählen in keine Summe" : (
+                <><span className="zahl font-semibold text-foreground">{euro(summe)}</span> brutto{abgelehnteInListe > 0 && " (ohne Abgelehnte)"}</>
+              )}
             </p>
           )}
         </div>

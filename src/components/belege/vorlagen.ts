@@ -108,10 +108,16 @@ export type Abweichung = { bezeichnung: string; alt: number; neu: number };
  * verknüpfter Positionen aus dem heutigen Artikelstamm bzw. Leistungskatalog
  * (Menge, Text und Einheit bleiben aus der Vorlage). Was es nicht mehr gibt,
  * behält den Preis der Vorlage und steht als `fehlt` im Ergebnis.
+ *
+ * Gelöschte Artikel/Leistungen: der Verweis fällt weg (sonst scheitert das
+ * Speichern am Fremdschlüssel), Text und Preis bleiben. `quellen.artikel`
+ * hat alle Artikel der Vorlage, die es gibt (auch inaktive); Leistungen gibt
+ * es, wenn sie im Katalog oder in `leistungIds` (auch inaktive) stehen —
+ * ohne `leistungIds` bleibt ein Verweis außerhalb des Katalogs stehen.
  */
 export function ausVorlage(
   vorlage: VorlagePosition[],
-  quellen: { artikel: Map<string, PreisArtikel>; leistungen: Map<string, KatalogLeistung> },
+  quellen: { artikel: Map<string, PreisArtikel>; leistungen: Map<string, KatalogLeistung>; leistungIds?: ReadonlySet<string> },
   firma: Pick<Firma, "material_aufschlag" | "stundensatz"> | null | undefined,
   stundensatz: number,
   nachziehen: boolean,
@@ -148,6 +154,8 @@ export function ausVorlage(
         }
       }
     }
+    const artikelGibtEs = !v.artikel_id || quellen.artikel.has(v.artikel_id);
+    const leistungGibtEs = !v.leistung_id || quellen.leistungen.has(v.leistung_id) || !quellen.leistungIds || quellen.leistungIds.has(v.leistung_id);
     return leerePosition(v.art, {
       bezeichnung: v.bezeichnung,
       langtext: v.langtext ?? "",
@@ -156,8 +164,8 @@ export function ausVorlage(
       einzelpreis: preisText(leer ? 0 : preis),
       ek_preis: ek,
       minuten,
-      artikel_id: v.artikel_id,
-      leistung_id: v.leistung_id,
+      artikel_id: artikelGibtEs ? v.artikel_id : null,
+      leistung_id: leistungGibtEs ? v.leistung_id : null,
     });
   });
   return { positionen, abweichungen, fehlt };

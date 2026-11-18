@@ -235,7 +235,12 @@ Rechnungen von Großhändlern und Subunternehmern, nur der Chef
   Rechnungen, neue Rechnungen werden wie seine letzte vorbelegt.
 - **Bezahlt** (Reiter, früher „Überwiesen“): Unterfilter Überwiesen /
   Lastschrift / Bar bezahlt (`bar_bezahlt`, ausgelegt und im Büro zurück —
-  Hinweis in der Belegliste für die Buchhaltung).
+  Hinweis in der Belegliste für die Buchhaltung). Im gewählten Jahr **nach dem
+  Zahltag** (`bezahlt_am`, Monatsbänder ebenso) — Liste, Zahl und Summe gleich.
+- **Skonto läuft ab** (`?filter=skonto`, `skontoLaeuftAb`): nicht bezahlt, nicht
+  abgelehnt, keine Lastschrift, Skonto in den nächsten 3 Tagen — dieselbe Regel
+  wie der Punkt auf der Startseite. Summen (Fuß, Monatsbänder, Lieferant,
+  Buchhaltung) zählen **abgelehnte Rechnungen nie** mit.
 - **Positionen** (`eingang_positionen`): die Zeilen der Rechnung, je Zeile ein
   Projekt; „Aufteilung aus den Positionen übernehmen“ macht daraus die
   Anteile (`anteileAusPositionen`, in Cent). „Mit KI ausfüllen“ liest Kopf,
@@ -470,6 +475,14 @@ Rechnung (`/belege/:id`) bzw. die Eingangsrechnung, das Symbol daneben das Origi
   aber nie storniert, nie zurück zur normalen Rechnung; Betrag geändert → Status aus den Zahlungen neu (nicht
   unter das Bezahlte); löschen geht (samt Zahlungen und Mahnungen). **Nie in der Übergabe**: der Export
   filtert sie, `fibu_uebergeben` lehnt sie ab, der Reiter Kanzlei nennt ihre Zahl.
+- **Eingangsrechnungen in der Übergabe** (seit 18.11.2026, `eingangAufteilen` in `lib/fibu.ts`): nur
+  **freigegebene** (bezahlte sind es immer). Zu prüfende warten — rote Warnung „x Eingangsrechnungen im
+  Zeitraum sind noch zu prüfen“; abgelehnte gehen nie (Hinweis). Aus Odoo übernommene (`odoo_import`, keine
+  eigene Spalte) sind wie Altrechnungen im alten Programm verbucht: nie im Export, Zeile „… aus Odoo gehen
+  nicht mit“ unter der Übergabe und im LIESMICH. `fibu_uebergeben` (security definer, prüft Chef-Zugang +
+  Recht „Buchhaltung“) lehnt Odoo- und nicht freigegebene Eingangsrechnungen ab (Migration `20261118160000`).
+  Offen: wird eine Rechnung erst nach der Übergabe ihres Monats freigegeben, steht sie nur in jenem Monat
+  wieder als „nicht übergeben“ — dort ein zweites Mal übergeben.
 - „Ausbuchen“ = `ZahlungDialog`: Zahlung (auch Teilzahlung), Skonto oder Ausbuchen (uneinbringlich). In den
   Listen heißt eine erledigte Rechnung mit Ausbuchung „Ausgebucht“ (`zahlStatus`).
 
@@ -489,8 +502,8 @@ Vorschlag. Kundenkonto = 20000 + Kundennummer.
   nennt die Fälle, die Kanzlei bucht bei Bedarf um.
 - **Einmal übergeben:** „Als übergeben merken“ nimmt die Belege aus dem nächsten Export. Eingangsrechnungen sind
   dann gesperrt (Trigger `eingang_uebergeben_schutz`), bis die Übergabe zurückgenommen ist.
-- **Kontrollliste** (`kontrolle`): warnt vor fehlendem Kunden, UID, Original, Rechnungsnummer und falschen Summen.
-  Sie sperrt nichts, der Mensch entscheidet.
+- **Kontrollliste** (`kontrolle`): warnt vor fehlendem Kunden, UID, Original, Rechnungsnummer und falschen Summen,
+  vor noch zu prüfenden Eingangsrechnungen im Monat. Sie sperrt nichts, der Mensch entscheidet.
 
 ### Bestellungen beim Großhändler (`components/bestellung/`, Seite `/bestellungen`, nur Chef)
 
@@ -606,9 +619,13 @@ Bewusst einfach, kein eigenes Kalkulationsblatt:
   Jahre“), gemerkt je Seite im Browser (`setec.jahr.<seite>`). **Suche und
   Noch-zu-Tun gehen über alle Jahre** (Offen, Überfällig, Entwürfe, Ohne
   Antwort, Nachfassen, Angenommen; im Eingang Zu prüfen/überweisen,
-  Lastschrift; „Nicht bezahlt“/„Offen“ im Kontakt) mit Hinweis „Suche in allen
-  Jahren“/„Offenes aus allen Jahren“; Bezahltes, Storniertes, „Alle“ und die
-  Kennzahl „Bezahlt <Jahr>“ (nach Rechnungsdatum) gelten fürs gewählte Jahr.
+  Lastschrift, Skonto läuft ab, Zuzuordnen; „Nicht bezahlt“/„Offen“ im Kontakt) mit Hinweis „Suche in allen
+  Jahren“/„Offenes aus allen Jahren“ — so stimmt die Zahl auf der Startseite mit der Liste; Storniertes,
+  Abgelehntes und „Alle“ gelten fürs gewählte Jahr nach Rechnungsdatum. **„Bezahlt“ und die Kennzahl
+  „Bezahlt <Jahr>“ zählen nach dem Zahltag** (`bezahlt_am`, ohne Zahltag das Rechnungsdatum;
+  `bezahltImJahr`/`zahlDatum`/`nachZahlDatum` in `lib/jahre.ts`, wieder wie vor 17.11.): eine
+  Dezember-Rechnung, im Jänner bezahlt, ist Jänner-Geld — Liste, Zahl am Filter, Kennzahl und Monatsbänder
+  (nach Zahlmonat) stimmen überein. Rechnungen, Kontakt (Kennzahl), Eingangsrechnungen.
   Offene Posten haben bewusst keinen Jahresfilter. Liste überall gleich
   (`MonatsListe`/`BelegZeile`): eine Karte, je Monat ein Band mit Anzahl und
   Monatssumme (ohne Entwurf/Storno/Abgelehnt), Zeile Name | Betrag, Nummer ·
@@ -711,7 +728,11 @@ Bewusst einfach, kein eigenes Kalkulationsblatt:
   Titel ein, gleichnamige Titel werden „X 2“). Beim Einfügen werden Artikel- und
   Leistungspreise aus Stamm/Katalog neu gerechnet; der Dialog zeigt, was sich seit dem
   Speichern geändert hat, und lässt die alten Preise wählen. Inaktive/gelöschte Artikel
-  behalten den Vorlagenpreis und werden gemeldet.
+  behalten den Vorlagenpreis und werden gemeldet. Gelöschte Artikel/Leistungen verlieren
+  dabei nur den Verweis (`ausVorlage`, Text und Preis bleiben) — sonst scheiterte das
+  Speichern am Fremdschlüssel. Dasselbe heilt `belegSpeichern`/`belegKopieren` beim
+  Speichern selbst (Fehler 23503 auf `…artikel_id_fkey`/`…leistung_id_fkey` → Verweis weg,
+  einmal neu schreiben; `verweiseBereinigen` in `editor.ts`).
 - **Kunde bestätigt online** (`AngebotVersand.tsx`, öffentliche Seite `/angebot/:token`
   = `AngebotBestaetigen.tsx`, außerhalb der Anmeldung): Chef erzeugt im offenen Angebot
   einen Link (`angebot_links`, 32 Zeichen Zufall, gilt bis Gültig-bis, einer je Angebot,
@@ -914,6 +935,15 @@ Schäden, zuzuordnen …), darunter „Laufende Projekte“ (ohne abgeschlossene
 dann Einsatz und Schnell festhalten. „Zu erledigen“ ordnet `lib/zuErledigen.ts`:
 erst `oben` (Angebot online angenommen), dann Rotes (`warn`), dann der Rest;
 sichtbar sind am Handy 5, am PC 9 Punkte, der Rest hinter „Alle N anzeigen“.
+Jede Zahl dort = die Zahl der Einträge in der verlinkten Liste (gleiche Regel,
+gleiche Daten, seit 18.11.2026): offene/überfällige Rechnungen aus den Offenen
+Posten (offener Rest nach Teilzahlungen), Angebote ohne die schon verrechneten,
+erledigte Einsätze wie „Noch nicht verrechnet“ (`erledigtNochOffen`, mehrere →
+`/rechnungen`), Skonto → `/eingang?filter=skonto`, Bestellungen →
+`?filter=unterwegs`, Förderfristen → `/projekte?filter=foerderung&frist=30`,
+wartende Mitarbeiter ohne versteckte Konten. Noch nicht gleich: Fuhrpark (zählt
+Termine/Schäden, die Seite Fahrzeuge) und „online angenommen“ (ungelesene
+Ereignisse statt der Liste „Angenommen“).
 
 Menü nach dem Vorbild Lengauer Stockner (`components/rahmen/`), alle Ziele in
 `lib/navigation.ts` (Gruppen haupt/baustelle/buero/system, `selten`, `stichworte`):

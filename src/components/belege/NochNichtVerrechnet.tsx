@@ -9,7 +9,7 @@ import { useProjekte, useProjektZahlen } from "@/hooks/useDaten";
 import { datumKurz, stunden } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import {
-  kurzText, rechnungAusLink, verrechnenGruppen, type OffenerBericht, type VerrechnenGruppe,
+  erledigtNochOffen, kurzText, rechnungAusLink, verrechnenGruppen, type OffenerBericht, type VerrechnenGruppe,
 } from "@/components/regie/regieLogik";
 
 type Zeile = {
@@ -47,10 +47,11 @@ export function useOffeneRegieberichte(aktiv = true) {
   });
 }
 
-/** Erledigte Einsätze, deren Projekt noch offene Stunden hat (wie auf der Startseite) */
-function useErledigteEinsaetze() {
+/** Erledigte Einsätze mit Projekt — welche davon noch offen sind, sagt `erledigtNochOffen` (auch für die Startseite) */
+export function useErledigteEinsaetze(aktiv = true) {
   return useQuery({
     queryKey: ["termine", "erledigt"],
+    enabled: aktiv,
     queryFn: async () => {
       return alleZeilen((von, bis) => supabase.from("termine").select("id, projekt_id")
         .eq("status", "erledigt").not("projekt_id", "is", null).order("id").range(von, bis));
@@ -74,13 +75,9 @@ export function NochNichtVerrechnet() {
   const gruppen = useMemo(() => verrechnenGruppen(berichte), [berichte]);
 
   // Erledigte Einsätze mit offenen Stunden — außer das Projekt steht schon oben (Regiebericht)
-  const einsaetze = useMemo(() => {
-    const schon = new Set(gruppen.filter((g) => g.art === "projekt").map((g) => g.id));
-    return [...new Set(erledigt.map((t) => t.projekt_id as string))]
-      .filter((id) => !schon.has(id) && Number(zahlen[id]?.stunden_offen ?? 0) > 0)
-      .map((id) => ({ p: projekte.find((x) => x.id === id), offen: Number(zahlen[id]?.stunden_offen ?? 0), id }))
-      .filter((x) => !!x.p);
-  }, [erledigt, zahlen, projekte, gruppen]);
+  const einsaetze = useMemo(() => erledigtNochOffen(erledigt, zahlen, berichte, new Set(projekte.map((p) => p.id)))
+    .map((id) => ({ p: projekte.find((x) => x.id === id), offen: Number(zahlen[id]?.stunden_offen ?? 0), id })),
+  [erledigt, zahlen, projekte, berichte]);
 
   if (!gruppen.length && !einsaetze.length) return null;
   const anzahl = berichte.length;

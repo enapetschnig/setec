@@ -24,6 +24,20 @@ export const imJahr = (iso: string | null | undefined, jahr: Jahr): boolean => {
   return j == null || j === jahr;
 };
 
+/**
+ * „Bezahlt {Jahr}“ zählt nach dem Zahltag, nicht nach dem Rechnungsdatum:
+ * Geld für eine Dezember-Rechnung, das im Jänner kommt, ist Jänner-Geld.
+ * Ohne Zahltag (alte Daten) das Rechnungsdatum. Gilt für Rechnungen, die
+ * Kennzahl beim Kunden und den Reiter „Bezahlt“ der Eingangsrechnungen.
+ */
+export const zahlDatum = (b: { bezahlt_am?: string | null; datum: string | null }): string | null => b.bezahlt_am || b.datum;
+
+export const bezahltImJahr = (b: { bezahlt_am?: string | null; datum: string | null }, jahr: Jahr): boolean => imJahr(zahlDatum(b), jahr);
+
+/** Neueste Zahlung zuerst — die Monatsbänder (monatsGruppen) folgen der Reihenfolge der Liste */
+export const nachZahlDatum = <T extends { bezahlt_am?: string | null; datum: string | null }>(liste: T[]): T[] =>
+  [...liste].sort((a, b) => (zahlDatum(b) ?? "").localeCompare(zahlDatum(a) ?? ""));
+
 /** Alle Jahre, die in den Daten vorkommen, plus das laufende — neueste zuerst */
 export function jahreAus(daten: (string | null | undefined)[], aktuell: number): number[] {
   const s = new Set<number>([aktuell]);

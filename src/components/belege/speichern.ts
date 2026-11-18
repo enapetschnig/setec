@@ -1,11 +1,12 @@
 import { supabase } from "@/integrations/supabase/client";
+import { inHaeppchen } from "@/lib/abfrage";
 import { datum as datumText } from "@/lib/format";
 import { belegSummen } from "@/lib/preise";
 import type { Beleg, Firma, Position } from "@/lib/types";
 import { fehlerText } from "@/components/stamm/stammDaten";
 import { abzugPosition, naechsteTeilNr, teilText, type TeilRechnung } from "./teilrechnung";
 import {
-  kopfZuDb, neueId, ohneUstFuer, positionZuDb, quelleJson, quellenIds, summen,
+  kopfZuDb, neueId, ohneUstFuer, positionZuDb, quelleJson, quellenIds, summen, verweiseBereinigen,
   type BelegTyp, type EditorPosition, type Kopf, type Quelle,
 } from "./editor";
 
@@ -25,6 +26,33 @@ import {
 
 const fehler = (text: string, e: { code?: string; message: string } | null | undefined) =>
   new Error(e?.message ? `${text}: ${fehlerText(e)}` : text);
+
+/**
+ * Fremdschlüssel auf Artikel oder Leistung verletzt: die Position zeigt auf
+ * etwas, das inzwischen gelöscht ist (Vorlage, Kopie, alter Stand im Editor).
+ */
+const verweisFehlt = (e: { code?: string; message?: string; details?: string } | null | undefined) =>
+  e?.code === "23503" && /(artikel|leistung)_id_fkey/.test(`${e.message ?? ""} ${e.details ?? ""}`);
+
+/**
+ * Positionen schreiben; zeigt eine auf einen gelöschten Artikel oder eine
+ * gelöschte Leistung, fällt nur dieser Verweis weg (Text, Menge, Preis
+ * bleiben) und es wird einmal neu geschrieben.
+ */
+async function mitGueltigenVerweisen<T extends { artikel_id: string | null; leistung_id: string | null }, E extends { code?: string; message: string }>(
+  zeilen: T[],
+  schreiben: (zeilen: T[]) => PromiseLike<{ error: E | null }>,
+): Promise<{ error: E | null }> {
+  const erst = await schreiben(zeilen);
+  if (!verweisFehlt(erst.error)) return erst;
+  const ids = (f: (z: T) => string | null) => [...new Set(zeilen.map(f).filter((x): x is string => !!x))];
+  const [artikel, leistungen] = await Promise.all([
+    inHaeppchen(ids((z) => z.artikel_id), (teil) => supabase.from("artikel").select("id").in("id", teil)),
+    inHaeppchen(ids((z) => z.leistung_id), (teil) => supabase.from("leistungen").select("id").in("id", teil)),
+  ]);
+  const b = verweiseBereinigen(zeilen, { artikel: new Set(artikel.map((a) => a.id)), leistungen: new Set(leistungen.map((l) => l.id)) });
+  return b.entfernt ? schreiben(b.zeilen) : erst;
+}
 
 /** Der Beleg wurde seit dem Laden anderswo gespeichert (zweites Fenster, anderes Gerät) */
 export class StandVeraltet extends Error {
@@ -92,12 +120,14 @@ export async function belegSpeichern({
 
   let gespeichert: Position[] = [];
   if (positionen.length) {
-    const { data, error } = await supabase
-      .from("beleg_positionen")
-      .upsert(positionen.map((p, i) => positionZuDb(p, id, i + 1)), { onConflict: "id" })
-      .select("*");
+    let zeilen: Position[] = [];
+    const { error } = await mitGueltigenVerweisen(positionen.map((p, i) => positionZuDb(p, id, i + 1)), async (liste) => {
+      const r = await supabase.from("beleg_positionen").upsert(liste, { onConflict: "id" }).select("*");
+      zeilen = r.data ?? [];
+      return r;
+    });
     if (error) throw fehler("Positionen konnten nicht gespeichert werden", error);
-    gespeichert = [...(data ?? [])].sort((a, b) => a.pos - b.pos);
+    gespeichert = [...zeilen].sort((a, b) => a.pos - b.pos);
   }
 
   let konflikte = 0;
@@ -322,7 +352,8 @@ export async function belegKopieren({
       quelle: mitHerkunft ? p.quelle : null,
       prozent: p.prozent,
     }));
-    const { error: e2 } = await supabase.from("beleg_positionen").insert(zeilen);
+    // gelöschter Artikel/Leistung in der Quelle: Verweis weg statt Abbruch (vor dem Aufräumen unten)
+    const { error: e2 } = await mitGueltigenVerweisen(zeilen, (liste) => supabase.from("beleg_positionen").insert(liste));
     if (e2) {
       await supabase.from("belege").delete().eq("id", id);
       throw fehler("Positionen konnten nicht übernommen werden", e2);

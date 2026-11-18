@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { imJahr, jahreAus, jahrVon, monatsGruppen, monatTitel } from "./jahre";
+import { bezahltImJahr, imJahr, jahreAus, jahrVon, monatsGruppen, monatTitel, nachZahlDatum, zahlDatum } from "./jahre";
 
 describe("Jahresansicht", () => {
   it("liest das Jahr aus dem ISO-Datum", () => {
@@ -34,6 +34,24 @@ describe("Jahresansicht", () => {
     expect(g[0].summe).toBe(150.1);
     expect(g[0].anzahl).toBe(3);
     expect(g[1].titel).toBe("Oktober 2026");
+  });
+
+  it("Bezahlt zählt nach dem Zahltag: Dezember-Rechnung, im Jänner bezahlt, ist Geld des neuen Jahres", () => {
+    const rechnungen = [
+      { id: "a", datum: "2025-12-15", bezahlt_am: "2026-01-08", brutto: 1200 },
+      { id: "b", datum: "2026-03-01", bezahlt_am: "2026-03-20", brutto: 300.5 },
+      { id: "c", datum: "2026-12-20", bezahlt_am: "2027-01-05", brutto: 99 },
+      { id: "d", datum: "2026-06-01", bezahlt_am: null, brutto: 10 },
+    ];
+    const bezahlt2026 = rechnungen.filter((r) => bezahltImJahr(r, 2026));
+    expect(bezahlt2026.map((r) => r.id)).toEqual(["a", "b", "d"]);
+    expect(bezahlt2026.reduce((s, r) => s + r.brutto, 0)).toBe(1510.5);
+    expect(rechnungen.filter((r) => bezahltImJahr(r, 2027)).map((r) => r.id)).toEqual(["c"]);
+    expect(rechnungen.filter((r) => bezahltImJahr(r, null))).toHaveLength(4);
+    expect(zahlDatum({ datum: "2026-06-01", bezahlt_am: null })).toBe("2026-06-01");
+    // Monatsbänder nach dem Zahltag: neueste Zahlung zuerst, Jänner-Zahlung der Dezember-Rechnung im Jänner
+    const g = monatsGruppen(nachZahlDatum(bezahlt2026), (r) => zahlDatum(r), (r) => r.brutto);
+    expect(g.map((x) => [x.schluessel, x.anzahl, x.summe])).toEqual([["2026-06", 1, 10], ["2026-03", 1, 300.5], ["2026-01", 1, 1200]]);
   });
 
   it("Monatstitel deutsch", () => {

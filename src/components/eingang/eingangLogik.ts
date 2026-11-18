@@ -1,4 +1,5 @@
 import type { EingangAnteil, Eingangsrechnung } from "@/lib/types";
+import { tageDazu } from "@/lib/format";
 
 /**
  * Eingangsrechnungen: Rechnen ohne Datenbank — Zuordnung, Rest, Status,
@@ -167,6 +168,21 @@ export function zuZahlen(r: Pick<Eingangsrechnung, "brutto" | "skonto_prozent" |
     return { betrag, skonto: runden2(brutto - betrag), bis: r.skonto_bis };
   }
   return { betrag: runden2(brutto), skonto: 0, bis: null as string | null };
+}
+
+/**
+ * Skonto läuft in den nächsten `tage` Tagen ab (auch noch ungeprüfte): nicht
+ * bezahlt, nicht abgelehnt, keine Lastschrift (der Händler zieht Skonto beim
+ * Abbuchen selbst ab). Eine Regel für die Startseite und den Filter
+ * `/eingang?filter=skonto` — Zahl und Liste gleich.
+ */
+export function skontoLaeuftAb(
+  r: Pick<Eingangsrechnung, "bezahlt_am" | "freigabe" | "skonto_bis" | "skonto_prozent"> & { lastschrift?: boolean | null },
+  heute: string,
+  tage = 3,
+): boolean {
+  return !r.bezahlt_am && !r.lastschrift && r.freigabe !== "abgelehnt" && Number(r.skonto_prozent ?? 0) > 0
+    && !!r.skonto_bis && r.skonto_bis >= heute && r.skonto_bis <= tageDazu(heute, tage);
 }
 
 // ── Positionen ───────────────────────────────────────────────────────────

@@ -25,10 +25,12 @@ export const belegZaehlt = (b: Pick<BelegListenEintrag, "typ" | "status">) =>
  * Angebote und Rechnungen — eine weiße Karte, am PC in Spalten
  * (MonatsListe/BelegZeile aus JahrWahl.tsx, gleich wie Eingangsrechnungen).
  * `monate`: nach Monat gruppiert mit Monatssumme (brutto). `mitProjekt =
- * false` in der Projektansicht (dort ist das Projekt klar).
+ * false` in der Projektansicht (dort ist das Projekt klar). `monatVon`:
+ * welches Datum den Monat bestimmt (Standard Rechnungsdatum; „Bezahlt“
+ * gruppiert nach dem Zahltag — die Liste kommt dann danach sortiert).
  */
 export function BelegListe({
-  belege, heute, pc, verrechneteAngebote, mitProjekt = true, monate = false,
+  belege, heute, pc, verrechneteAngebote, mitProjekt = true, monate = false, monatVon,
 }: {
   belege: BelegListenEintrag[];
   heute: string;
@@ -36,6 +38,7 @@ export function BelegListe({
   verrechneteAngebote: Set<string>;
   mitProjekt?: boolean;
   monate?: boolean;
+  monatVon?: (b: BelegListenEintrag) => string | null;
 }) {
   return (
     <MonatsListe
@@ -43,7 +46,7 @@ export function BelegListe({
       tabelle={pc}
       gruppieren={monate}
       schluessel={(b) => b.id}
-      datum={(b) => b.datum}
+      datum={monatVon ?? ((b) => b.datum)}
       betrag={(b) => (belegZaehlt(b) ? Number(b.brutto) : null)}
       kopf={{ name: "Empfänger · Betreff" }}
       zeile={(b) => {

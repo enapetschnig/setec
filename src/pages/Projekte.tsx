@@ -9,8 +9,8 @@ import { ProjektStatusWahl } from "@/components/ProjektStatusWahl";
 import { ProjektDialog } from "@/components/dialoge/ProjektDialog";
 import { useIstPc } from "@/components/AppLayout";
 import { useProjekte, useProjektZahlen, type ProjektMitKunde } from "@/hooks/useDaten";
-import { stunden } from "@/lib/format";
-import { foerderPille } from "@/lib/foerderung";
+import { isoTag, stunden } from "@/lib/format";
+import { foerderFrist, foerderPille } from "@/lib/foerderung";
 import { projektPasst } from "@/lib/projektSuche";
 import { FOERDER_STATUS, type FoerderStatus, type ProjektZahlen } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -62,6 +62,10 @@ export default function Projekte() {
   const filter = (FILTER.some((f) => f.wert === params.get("filter")) ? params.get("filter") : "laufend") as Filter;
   // Unterfilter Förderstatus (?filter=foerderung&foerder=zugesagt)
   const foerder = filter === "foerderung" && params.get("foerder") && params.get("foerder")! in FOERDER_STATUS ? params.get("foerder") as FoerderStatus : null;
+  // Unterfilter Frist (?filter=foerderung&frist=30): Frist in 30 Tagen oder vorbei — dieselben wie auf der Startseite
+  const heute = isoTag();
+  const frist = filter === "foerderung" && params.get("frist") === "30";
+  const fristZahl = useMemo(() => projekte.filter((p) => !!foerderFrist(p, heute)).length, [projekte, heute]);
 
   // ?neu=1 (z. B. von der Startseite am PC) öffnet gleich „Neues Projekt“
   useEffect(() => {
@@ -74,8 +78,9 @@ export default function Projekte() {
 
   const liste = useMemo(() => {
     // wie jede Projektwahl: alle Wörter, Umlaute egal („mueller kindberg“)
-    return projekte.filter((p) => passt(p, filter, zahlen[p.id]) && (!foerder || p.foerder_status === foerder) && projektPasst(p, suche));
-  }, [projekte, zahlen, filter, foerder, suche]);
+    return projekte.filter((p) => passt(p, filter, zahlen[p.id]) && (!foerder || p.foerder_status === foerder)
+      && (!frist || !!foerderFrist(p, heute)) && projektPasst(p, suche));
+  }, [projekte, zahlen, filter, foerder, frist, heute, suche]);
 
   // Suche ohne Treffer in dieser Ansicht: wo gäbe es welche? (meist „Abgeschlossen“)
   const woanders = suche.trim() && liste.length === 0
@@ -103,6 +108,14 @@ export default function Projekte() {
 
       {filter === "foerderung" && (
         <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1" aria-label="Förderstatus">
+          {(fristZahl > 0 || frist) && (
+            <button type="button" aria-pressed={frist}
+              onClick={() => setParams(frist ? { filter: "foerderung" } : { filter: "foerderung", frist: "30" }, { replace: true })}
+              className={cn("flex h-11 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-medium",
+                frist ? "border-primary bg-primary-soft text-primary" : "bg-card text-muted-foreground hover:bg-muted")}>
+              Frist in 30 Tagen <span className="zahl opacity-70">{fristZahl}</span>
+            </button>
+          )}
           {(Object.keys(FOERDER_STATUS) as FoerderStatus[]).filter((s) => s !== "keine").map((s) => {
             const n = projekte.filter((p) => p.foerder_status === s).length;
             if (!n && foerder !== s) return null;

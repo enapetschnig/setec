@@ -503,6 +503,23 @@ export function verrechnenGruppen(liste: OffenerBericht[]): VerrechnenGruppe[] {
 }
 
 /**
+ * Erledigte Einsätze, deren Projekt noch offene Stunden hat — außer das
+ * Projekt steht schon mit einem unterschriebenen Regiebericht oben (dort
+ * verrechnet man es). Eine Regel für „Noch nicht verrechnet“ (Rechnungen)
+ * und die Startseite: dieselbe Zahl hier wie dort. Gibt die Projekt-IDs.
+ */
+export function erledigtNochOffen(
+  erledigt: { projekt_id: string | null }[],
+  stundenOffen: Record<string, { stunden_offen: number | string | null } | undefined>,
+  berichte: Pick<OffenerBericht, "projektId">[],
+  projektIds: Set<string>,
+): string[] {
+  const schon = new Set(berichte.map((b) => b.projektId).filter((x): x is string => !!x));
+  return [...new Set(erledigt.map((t) => t.projekt_id).filter((x): x is string => !!x))]
+    .filter((id) => !schon.has(id) && projektIds.has(id) && Number(stundenOffen[id]?.stunden_offen ?? 0) > 0);
+}
+
+/**
  * „Rechnung daraus“: mit Projekt der Projekt-Import (alles Offene zum
  * Anhaken), ohne Projekt eine Rechnung an den Kunden mit genau diesen Berichten.
  */

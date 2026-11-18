@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
+import { inHaeppchen } from "@/lib/abfrage";
 import { fehlerText } from "@/components/stamm/stammDaten";
 import type { Firma } from "@/lib/types";
 import type { KatalogLeistung } from "./editor";
@@ -73,15 +74,27 @@ export async function artikelPreiseLaden(ids: string[]): Promise<Map<string, Pre
   return map;
 }
 
+/** Welche Leistungen es (noch) gibt — auch inaktive, die nicht im Katalog stehen */
+export async function leistungenVorhanden(ids: string[]): Promise<Set<string>> {
+  const gefunden = await inHaeppchen(ids, (teil) => supabase.from("leistungen").select("id").in("id", teil));
+  return new Set(gefunden.map((l) => l.id));
+}
+
 /**
  * Vorlage mit heutigen Preisen rechnen — beide Fassungen, damit die Auswahl
- * die Abweichungen zeigen und der Chef wählen kann.
+ * die Abweichungen zeigen und der Chef wählen kann. Verweise auf gelöschte
+ * Artikel/Leistungen fallen dabei weg (ausVorlage).
  */
 export async function vorlageBerechnen(
   v: Vorlage, katalog: KatalogLeistung[], firma: Firma | null, stundensatz: number,
 ) {
-  const artikel = await artikelPreiseLaden(v.positionen.flatMap((p) => (p.artikel_id ? [p.artikel_id] : [])));
-  const quellen = { artikel, leistungen: new Map(katalog.map((l) => [l.id, l])) };
+  const leistungen = new Map(katalog.map((l) => [l.id, l]));
+  const [artikel, leistungIds] = await Promise.all([
+    artikelPreiseLaden(v.positionen.flatMap((p) => (p.artikel_id ? [p.artikel_id] : []))),
+    // nur, was nicht im (aktiven) Katalog steht — meist nichts, dann keine Abfrage
+    leistungenVorhanden(v.positionen.flatMap((p) => (p.leistung_id && !leistungen.has(p.leistung_id) ? [p.leistung_id] : []))),
+  ]);
+  const quellen = { artikel, leistungen, leistungIds };
   return {
     heute: ausVorlage(v.positionen, quellen, firma, stundensatz, true),
     wieVorlage: ausVorlage(v.positionen, quellen, firma, stundensatz, false),

@@ -86,13 +86,13 @@ describe("PV-Anlage", () => {
 describe("Belege eines Lieferanten", () => {
   const b = (quelle: string, status: string, betrag: number | null): LieferantBeleg =>
     ({ quelle, status, betrag, id: "x", nummer: null, datum: "2026-11-01", projekt_id: null, projekt: null });
-  it("Summen: offen = weder bezahlt noch abgelehnt, stornierte Bestellungen zählen nicht", () => {
+  it("Summen: Abgelehnte zählen nirgends, offen = nicht bezahlt, stornierte Bestellungen zählen nicht", () => {
     const s = belegSummen([
       b("rechnung", "bezahlt", 100.1), b("rechnung", "offen", 50.2), b("rechnung", "freigegeben", 10), b("rechnung", "abgelehnt", 999),
       b("bestellung", "bestellt", 30), b("bestellung", "storniert", 500), b("lieferschein", "offen", null),
     ]);
     expect(s).toEqual({
-      rechnungen: 4, rechnungenSumme: 1159.3, offen: 2, offenSumme: 60.2, bestellungen: 1, bestellungenSumme: 30, lieferscheine: 1,
+      rechnungen: 3, rechnungenSumme: 160.3, abgelehnt: 1, offen: 2, offenSumme: 60.2, bestellungen: 1, bestellungenSumme: 30, lieferscheine: 1,
     });
   });
   it("Pillen je Belegart", () => {

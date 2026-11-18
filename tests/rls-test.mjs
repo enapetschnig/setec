@@ -732,6 +732,11 @@ console.log("\n— Buchhaltung —");
   ok(!!e4, "Übergeben kann nur der Chef" + abgelehnt(e4));
   const { error: e5 } = await chef.rpc("fibu_uebergeben", { ...ueber, p_eingaenge: [] });
   ok(!!e5, "Leere Übergabe gibt es nicht" + abgelehnt(e5));
+  // Seit 18.11.2026: nur freigegebene Eingangsrechnungen gehen an die Kanzlei
+  const { error: e5b } = await chef.rpc("fibu_uebergeben", { ...ueber, p_eingaenge: [er.id] });
+  ok(!!e5b && /freigegebene/.test(e5b.message), "Zu prüfende Eingangsrechnung geht nicht an die Kanzlei" + abgelehnt(e5b));
+  const { error: e5c } = await chef.from("eingangsrechnungen").update({ freigabe: "freigegeben" }).eq("id", er.id);
+  ok(!e5c, "Chef gibt sie frei" + (e5c ? abgelehnt(e5c) : ""));
   const { data: ue, error: e6 } = await chef.rpc("fibu_uebergeben", { ...ueber, p_eingaenge: [er.id] });
   ok(!e6 && !!ue, "Chef übergibt" + (e6 ? abgelehnt(e6) : ""));
   const { error: e7 } = await chef.rpc("fibu_uebergeben", { ...ueber, p_eingaenge: [er.id] });

@@ -232,12 +232,49 @@ export function windows1252(text: string): Uint8Array {
   return aus;
 }
 
+// ── Welche Eingangsrechnungen mitgehen ───────────────────────────────────
+
+/**
+ * Eingangsrechnungen eines Monats aufteilen. An die Kanzlei gehen nur
+ * freigegebene (bezahlte sind immer freigegeben). Zu prüfende warten auf die
+ * Freigabe, abgelehnte sind kein Aufwand und keine Vorsteuer. Aus Odoo
+ * übernommene (`odoo_import`) sind wie Altrechnungen (`belege.altbestand`) im
+ * alten Programm schon verbucht — sie gehen nie mit, egal wie sie stehen.
+ */
+export function eingangAufteilen<T extends { id: string; freigabe: string }>(eingaenge: T[], ausOdoo: ReadonlySet<string>) {
+  const teile = { mit: [] as T[], zuPruefen: [] as T[], abgelehnt: [] as T[], odoo: [] as T[] };
+  for (const e of eingaenge) {
+    if (ausOdoo.has(e.id)) teile.odoo.push(e);
+    else if (e.freigabe === "freigegeben") teile.mit.push(e);
+    else if (e.freigabe === "abgelehnt") teile.abgelehnt.push(e);
+    else teile.zuPruefen.push(e);
+  }
+  return teile;
+}
+
+/** Die Zeile unter der Übergabe: was aus dem alten Programm kommt, geht nicht mit (ohne beides: null) */
+export function altbestandText(altrechnungen: number, eingaengeOdoo: number): string | null {
+  const teile = [
+    altrechnungen ? `${altrechnungen} ${altrechnungen === 1 ? "Altrechnung" : "Altrechnungen"}` : null,
+    eingaengeOdoo ? `${eingaengeOdoo} ${eingaengeOdoo === 1 ? "Eingangsrechnung" : "Eingangsrechnungen"} aus Odoo` : null,
+  ].filter(Boolean);
+  if (!teile.length) return null;
+  const eins = altrechnungen + eingaengeOdoo === 1;
+  return `${teile.join(" und ")} ${eins ? "geht" : "gehen"} nicht mit, ${eins ? "die ist" : "die sind"} im alten Programm schon verbucht.`;
+}
+
 // ── Kontrollliste ────────────────────────────────────────────────────────
 
 export type FibuHinweis = { schwer: boolean; text: string };
 
-/** Was die Kanzlei sonst zurückschickt. Die Übergabe bleibt trotzdem möglich: der Mensch entscheidet */
-export function kontrolle(belege: FibuBeleg[], eingaenge: FibuEingang[], kleinunternehmer: boolean, entwuerfe = 0): FibuHinweis[] {
+/**
+ * Was die Kanzlei sonst zurückschickt. Die Übergabe bleibt trotzdem möglich: der Mensch entscheidet.
+ * `warten`: Eingangsrechnungen im Zeitraum, die (noch) nicht mitgehen — zu prüfen (Warnung), abgelehnt (Hinweis).
+ */
+export function kontrolle(
+  belege: FibuBeleg[], eingaenge: FibuEingang[], kleinunternehmer: boolean, entwuerfe = 0,
+  warten: { zuPruefen?: number; abgelehnt?: number } = {},
+): FibuHinweis[] {
   const h: FibuHinweis[] = [];
   const stimmt = (x: { netto: number; ust: number; brutto: number }) => Math.abs(Number(x.netto) + Number(x.ust) - Number(x.brutto)) < 0.005;
   for (const b of belege) {
@@ -256,6 +293,16 @@ export function kontrolle(belege: FibuBeleg[], eingaenge: FibuEingang[], kleinun
     if (!e.reverse_charge && !Number(e.ust) && Number(e.netto)) h.push({ schwer: false, text: `${name}: ohne Vorsteuer. Ist das Reverse Charge? Dann in der Rechnung ankreuzen.` });
   }
   if (entwuerfe) h.push({ schwer: false, text: `${entwuerfe} ${entwuerfe === 1 ? "Rechnung ist" : "Rechnungen sind"} noch Entwurf und ${entwuerfe === 1 ? "geht" : "gehen"} nicht mit.` });
+  const zuPruefen = warten.zuPruefen ?? 0, abgelehnt = warten.abgelehnt ?? 0;
+  if (zuPruefen) {
+    h.push({
+      schwer: true,
+      text: zuPruefen === 1
+        ? "1 Eingangsrechnung im Zeitraum ist noch zu prüfen — sie geht erst nach der Freigabe mit."
+        : `${zuPruefen} Eingangsrechnungen im Zeitraum sind noch zu prüfen — sie gehen erst nach der Freigabe mit.`,
+    });
+  }
+  if (abgelehnt) h.push({ schwer: false, text: `${abgelehnt} ${abgelehnt === 1 ? "abgelehnte Eingangsrechnung geht" : "abgelehnte Eingangsrechnungen gehen"} nicht mit.` });
   return h;
 }
 

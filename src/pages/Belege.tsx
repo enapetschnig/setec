@@ -12,12 +12,15 @@ import { NochNichtVerrechnet } from "@/components/belege/NochNichtVerrechnet";
 import { VorlagenDialog } from "@/components/belege/VorlagenDialog";
 import { listenStatus, useBelege, verrechneteAngeboteAus, type BelegListenEintrag } from "@/components/belege/daten";
 import { euro, isoTag } from "@/lib/format";
-import { imJahr, jahreAus } from "@/lib/jahre";
+import { bezahltImJahr, imJahr, jahreAus, nachZahlDatum, zahlDatum } from "@/lib/jahre";
 import { cn } from "@/lib/utils";
 
 type Typ = "angebot" | "rechnung";
-/** `offenes`: Noch-zu-Tun zeigt alle Jahre (ein offenes Angebot vom Dezember verschwindet nicht im Jänner) */
-type Filter = { wert: string; text: string; passt: (status: string, b: BelegListenEintrag, heute: string) => boolean; offenes?: boolean };
+/**
+ * `offenes`: Noch-zu-Tun zeigt alle Jahre (ein offenes Angebot vom Dezember verschwindet nicht im Jänner).
+ * `zahlJahr`: „Bezahlt“ zählt nach dem Zahltag (Dezember-Rechnung, im Jänner bezahlt = Jänner-Geld).
+ */
+type Filter = { wert: string; text: string; passt: (status: string, b: BelegListenEintrag, heute: string) => boolean; offenes?: boolean; zahlJahr?: boolean };
 
 /** Nachfassen: offen und nicht mehr gültig — oder in den nächsten 7 Tagen abgelaufen */
 const nachfassen = (status: string, b: BelegListenEintrag, heute: string) =>
@@ -43,7 +46,7 @@ const FILTER: Record<Typ, Filter[]> = {
     { wert: "offen", text: "Offen", passt: (s) => s === "offen" || s === "ueberfaellig", offenes: true },
     { wert: "ueberfaellig", text: "Überfällig", passt: (s) => s === "ueberfaellig", offenes: true },
     { wert: "entwurf", text: "Entwürfe", passt: (s) => s === "entwurf", offenes: true },
-    { wert: "bezahlt", text: "Bezahlt", passt: (s) => s === "bezahlt" },
+    { wert: "bezahlt", text: "Bezahlt", passt: (s) => s === "bezahlt", zahlJahr: true },
     { wert: "storniert", text: "Storniert", passt: (s) => s === "storniert" || s === "storno" },
   ],
 };
@@ -95,24 +98,29 @@ export default function Belege({ typ }: { typ: Typ }) {
   const mitStatus = useMemo(() => belege.map((b) => ({ b, s: listenStatus(b, heute, verrechnet) })), [belege, heute, verrechnet]);
   const jahre = useMemo(() => jahreAus(belege.map((b) => b.datum), new Date().getFullYear()), [belege]);
   const imZeitraum = useMemo(() => mitStatus.filter(({ b }) => imJahr(b.datum, jahr)), [mitStatus, jahr]);
+  /** Bezahlt im gewählten Jahr = Zahltag im Jahr (ohne Zahltag das Rechnungsdatum) */
+  const bezahltImZeitraum = useMemo(() => mitStatus.filter(({ b }) => bezahltImJahr(b, jahr)), [mitStatus, jahr]);
+  // Offenes zählt über alle Jahre, Bezahltes nach dem Zahltag, sonst das Rechnungsdatum — Liste, Zahl am Filter und Kennzahl gleich
+  const basisFuer = (f: Filter) => (f.offenes ? mitStatus : f.zahlJahr ? bezahltImZeitraum : imZeitraum);
 
   const liste = useMemo(() => {
     const woerter = normal(suche).split(/\s+/).filter(Boolean);
-    return (ueberAlle ? mitStatus : imZeitraum).filter(({ b, s }) => {
+    const treffer = (ueberAlle ? mitStatus : filter.offenes ? mitStatus : filter.zahlJahr ? bezahltImZeitraum : imZeitraum).filter(({ b, s }) => {
       if (!filter.passt(s, b, heute)) return false;
       if (!woerter.length) return true;
       const text = normal([b.nummer, b.empf_name, b.betreff, b.projekte?.nummer, b.projekte?.name].filter(Boolean).join(" "));
       return woerter.every((w) => text.includes(w));
     }).map(({ b }) => b);
-  }, [mitStatus, imZeitraum, ueberAlle, filter, suche, heute]);
+    // „Bezahlt“: neueste Zahlung zuerst, Monatsbänder nach dem Zahltag
+    return filter.zahlJahr ? nachZahlDatum(treffer) : treffer;
+  }, [mitStatus, imZeitraum, bezahltImZeitraum, ueberAlle, filter, suche, heute]);
 
-  // Offenes zählt über alle Jahre, Erledigtes im gewählten Jahr — wie die Liste beim Antippen
-  const anzahl = (f: Filter) => (f.offenes ? mitStatus : imZeitraum).filter(({ b, s }) => f.passt(s, b, heute)).length;
+  const anzahl = (f: Filter) => basisFuer(f).filter(({ b, s }) => f.passt(s, b, heute)).length;
   const summe = (f: (s: string, b: BelegListenEintrag) => boolean, feld: "netto" | "brutto", basis = mitStatus) =>
     basis.filter(({ b, s }) => f(s, b)).reduce((x, { b }) => x + Number(b[feld]), 0);
   const zaehlen = (f: (s: string, b: BelegListenEintrag) => boolean, basis = mitStatus) => basis.filter(({ b, s }) => f(s, b)).length;
   const n = (k: number, eins: string, viele: string) => `${k} ${k === 1 ? eins : viele}`;
-  const bezahltZahl = zaehlen((s) => s === "bezahlt", imZeitraum);
+  const bezahltZahl = zaehlen((s) => s === "bezahlt", bezahltImZeitraum);
 
   // Kennzahlen = Abkürzungen in den Filter
   const kacheln = angebot
@@ -126,7 +134,7 @@ export default function Belege({ typ }: { typ: Typ }) {
       { titel: "Offen", icon: Receipt, wert: euro(summe((s) => s === "offen" || s === "ueberfaellig", "brutto")), unter: n(zaehlen((s) => s === "offen" || s === "ueberfaellig"), "Rechnung", "Rechnungen"), filter: "offen" },
       { titel: "Überfällig", icon: AlertTriangle, wert: euro(summe((s) => s === "ueberfaellig", "brutto")), unter: zaehlen((s) => s === "ueberfaellig") ? `${n(zaehlen((s) => s === "ueberfaellig"), "Rechnung", "Rechnungen")} — mahnen` : "nichts überfällig", filter: "ueberfaellig" },
       { titel: "Entwürfe", icon: FileText, wert: String(zaehlen((s) => s === "entwurf")), unter: "noch nicht fertig", filter: "entwurf" },
-      { titel: jahr ? `Bezahlt ${jahr}` : "Bezahlt", icon: CheckCircle2, wert: euro(summe((s) => s === "bezahlt", "brutto", imZeitraum)), unter: `${n(bezahltZahl, "Rechnung", "Rechnungen")} · brutto`, filter: "bezahlt" },
+      { titel: jahr ? `Bezahlt ${jahr}` : "Bezahlt", icon: CheckCircle2, wert: euro(summe((s) => s === "bezahlt", "brutto", bezahltImZeitraum)), unter: `${n(bezahltZahl, "Rechnung", "Rechnungen")} · brutto`, filter: "bezahlt" },
     ];
 
   // Es zählen nur fertige: keine Entwürfe, kein Storno, keine abgelehnten Angebote
@@ -222,7 +230,7 @@ export default function Belege({ typ }: { typ: Typ }) {
         </Leer>
       ) : (
         <div className="space-y-2">
-          <BelegListe belege={liste} heute={heute} pc={pc} verrechneteAngebote={verrechnet} monate />
+          <BelegListe belege={liste} heute={heute} pc={pc} verrechneteAngebote={verrechnet} monate monatVon={filter.zahlJahr ? zahlDatum : undefined} />
           <p className="px-1 text-right text-xs text-muted-foreground">
             {liste.length} {angebot ? (liste.length === 1 ? "Angebot" : "Angebote") : (liste.length === 1 ? "Rechnung" : "Rechnungen")}
             {listenSumme > 0 && <> · <span className="zahl font-semibold text-foreground">{euro(listenSumme)}</span> {angebot ? "netto" : "brutto"} (ohne Entwürfe{angebot ? ", Abgelehnte" : ", Storno"})</>}

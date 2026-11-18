@@ -147,14 +147,19 @@ export type LieferantBeleg = {
   projekt_id: string | null; projekt: string | null;
 };
 
-/** Summen über die Belege: Rechnungen gesamt und noch nicht bezahlt, Bestellungen */
+/**
+ * Summen über die Belege: Rechnungen gesamt und noch nicht bezahlt, Bestellungen.
+ * Abgelehnte Rechnungen zählen in keine Summe und keine Zahl (stehen aber in der Liste) —
+ * `abgelehnt` sagt, wie viele, für den Hinweis.
+ */
 export function belegSummen(belege: LieferantBeleg[]) {
-  const r = belege.filter((b) => b.quelle === "rechnung");
-  const offen = r.filter((b) => b.status !== "bezahlt" && b.status !== "abgelehnt");
+  const alleR = belege.filter((b) => b.quelle === "rechnung");
+  const r = alleR.filter((b) => b.status !== "abgelehnt");
+  const offen = r.filter((b) => b.status !== "bezahlt");
   const be = belege.filter((b) => b.quelle === "bestellung" && b.status !== "storniert");
   const summe = (l: LieferantBeleg[]) => Math.round(l.reduce((s, b) => s + (Number(b.betrag) || 0), 0) * 100) / 100;
   return {
-    rechnungen: r.length, rechnungenSumme: summe(r),
+    rechnungen: r.length, rechnungenSumme: summe(r), abgelehnt: alleR.length - r.length,
     offen: offen.length, offenSumme: summe(offen),
     bestellungen: be.length, bestellungenSumme: summe(be),
     lieferscheine: belege.filter((b) => b.quelle === "lieferschein").length,

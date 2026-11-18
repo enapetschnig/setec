@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  aufwandKonto, bmdAusgang, bmdEingang, buchungenText, erloesKonto, kontrolle, personenkontenText, rzlAusgang, rzlEingang, windows1252,
-  type FibuBeleg, type FibuEingang, type FibuKonten,
+  altbestandText, aufwandKonto, bmdAusgang, bmdEingang, buchungenText, eingangAufteilen, erloesKonto, kontrolle, personenkontenText,
+  rzlAusgang, rzlEingang, summen, windows1252, type FibuBeleg, type FibuEingang, type FibuKonten,
 } from "./fibu";
 
 const konten: FibuKonten = {
@@ -130,6 +130,41 @@ describe("Kontrollliste", () => {
     expect(t).toMatch(/kein Foto oder PDF/);
     expect(t).toMatch(/ohne Vorsteuer/);
     expect(t).toMatch(/2 Rechnungen sind noch Entwurf/);
+  });
+});
+
+describe("Welche Eingangsrechnungen mitgehen", () => {
+  const e = (id: string, freigabe: string, brutto: number) => ({ ...eingang({ id, brutto, netto: brutto / 1.2, ust: brutto - brutto / 1.2 }), freigabe });
+  const monat = [
+    e("frei", "freigegeben", 1200), e("bezahlt", "freigegeben", 600), e("neu", "offen", 240), e("neu2", "offen", 120),
+    e("weg", "abgelehnt", 999), e("odoo-frei", "freigegeben", 5000), e("odoo-offen", "offen", 70),
+  ];
+  const teile = eingangAufteilen(monat, new Set(["odoo-frei", "odoo-offen"]));
+
+  it("nur freigegebene, nicht aus Odoo — Summen nur über die", () => {
+    expect(teile.mit.map((x) => x.id)).toEqual(["frei", "bezahlt"]);
+    expect(teile.zuPruefen.map((x) => x.id)).toEqual(["neu", "neu2"]);
+    expect(teile.abgelehnt.map((x) => x.id)).toEqual(["weg"]);
+    // aus Odoo geht nie mit, auch wenn sie noch „offen“ ist (im alten Programm verbucht)
+    expect(teile.odoo.map((x) => x.id)).toEqual(["odoo-frei", "odoo-offen"]);
+    expect(summen(teile.mit)).toEqual({ anzahl: 2, netto: 1500, ust: 300, brutto: 1800 });
+  });
+
+  it("warnt vor zu prüfenden, sagt, dass abgelehnte nicht mitgehen", () => {
+    const h = kontrolle([], teile.mit, false, 0, { zuPruefen: teile.zuPruefen.length, abgelehnt: teile.abgelehnt.length });
+    expect(h).toEqual([
+      { schwer: true, text: "2 Eingangsrechnungen im Zeitraum sind noch zu prüfen — sie gehen erst nach der Freigabe mit." },
+      { schwer: false, text: "1 abgelehnte Eingangsrechnung geht nicht mit." },
+    ]);
+    expect(kontrolle([], [], false, 0, { zuPruefen: 1 })[0].text).toBe("1 Eingangsrechnung im Zeitraum ist noch zu prüfen — sie geht erst nach der Freigabe mit.");
+    expect(kontrolle([], [], false)).toEqual([]);
+  });
+
+  it("Hinweis zu Altrechnungen und Odoo-Eingangsrechnungen", () => {
+    expect(altbestandText(0, 0)).toBeNull();
+    expect(altbestandText(1, 0)).toBe("1 Altrechnung geht nicht mit, die ist im alten Programm schon verbucht.");
+    expect(altbestandText(0, 1)).toBe("1 Eingangsrechnung aus Odoo geht nicht mit, die ist im alten Programm schon verbucht.");
+    expect(altbestandText(3, 16)).toBe("3 Altrechnungen und 16 Eingangsrechnungen aus Odoo gehen nicht mit, die sind im alten Programm schon verbucht.");
   });
 });
 

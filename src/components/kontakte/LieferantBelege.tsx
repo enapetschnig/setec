@@ -45,7 +45,7 @@ export function LieferantBelege({ kontakt, istChef }: { kontakt: Kunde; istChef:
         <>
           {istChef && (
             <div className={cn("grid grid-cols-2 gap-2 px-4 pb-3 lg:px-5", s.bestellungen > 0 && "sm:grid-cols-3")}>
-              <Kennzahl titel={jahr ? `Rechnungen ${jahr}` : "Rechnungen"} wert={euro(s.rechnungenSumme)} unter={`${zahl(s.rechnungen)} Rechnung${s.rechnungen === 1 ? "" : "en"}, brutto`} />
+              <Kennzahl titel={jahr ? `Rechnungen ${jahr}` : "Rechnungen"} wert={euro(s.rechnungenSumme)} unter={`${zahl(s.rechnungen)} Rechnung${s.rechnungen === 1 ? "" : "en"}, brutto${s.abgelehnt ? ", ohne abgelehnte" : ""}`} />
               <Kennzahl titel="Nicht bezahlt" wert={euro(offen.offenSumme)} unter={offen.offen ? `${zahl(offen.offen)} Rechnung${offen.offen === 1 ? "" : "en"} · alle Jahre` : "alles bezahlt"} />
               {s.bestellungen > 0 && <Kennzahl titel="Bestellt" wert={euro(s.bestellungenSumme)} unter={`${zahl(s.bestellungen)} Bestellung${s.bestellungen === 1 ? "" : "en"} netto`} />}
             </div>
@@ -57,8 +57,8 @@ export function LieferantBelege({ kontakt, istChef }: { kontakt: Kunde; istChef:
             rahmen={false}
             schluessel={(b) => `${b.quelle}-${b.id}`}
             datum={(b) => b.datum}
-            // Monatssumme: nur Rechnungen (brutto) — Bestellungen sind netto
-            betrag={(b) => (b.quelle === "rechnung" && b.betrag != null ? Number(b.betrag) : null)}
+            // Monatssumme: nur Rechnungen (brutto) ohne abgelehnte — Bestellungen sind netto
+            betrag={(b) => (b.quelle === "rechnung" && b.betrag != null && b.status !== "abgelehnt" ? Number(b.betrag) : null)}
             zeile={(b) => {
               const art = ART[b.quelle as keyof typeof ART] ?? ART.rechnung;
               return (

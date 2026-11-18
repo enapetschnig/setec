@@ -13,11 +13,12 @@ import { useIstPc } from "@/components/AppLayout";
 import { datum, euro, isoTag } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-type Filter = "offen" | "alle";
+type Filter = "offen" | "unterwegs" | "alle";
 
 /**
  * /bestellungen — Bestellungen beim Großhändler. „Offen“: Entwürfe und
- * alles, was noch nicht (ganz) geliefert ist. `?neu=lager` öffnet gleich
+ * alles, was noch nicht (ganz) geliefert ist; „Unterwegs“ (`?filter=unterwegs`,
+ * von der Startseite): bestellt oder teilgeliefert, ohne Entwürfe. `?neu=lager` öffnet gleich
  * den Vorschlag aus dem Mindestbestand (Knopf auf der Lagerseite).
  */
 export default function Bestellungen() {
@@ -25,14 +26,14 @@ export default function Bestellungen() {
   const navigate = useNavigate();
   const heute = isoTag();
   const [params, setParams] = useSearchParams();
-  const filter: Filter = params.get("filter") === "alle" ? "alle" : "offen";
+  const filter: Filter = params.get("filter") === "alle" ? "alle" : params.get("filter") === "unterwegs" ? "unterwegs" : "offen";
   const neuParam = params.get("neu");
   const [neu, setNeu] = useState<NeuModus | null>(neuParam === "lager" || neuParam === "projekt" ? neuParam : null);
   const [suche, setSuche] = useState("");
   const { data: alle = [], isLoading, error } = useBestellungen();
 
-  const passt = (s: string, f: Filter) => f === "alle" || s === "entwurf" || istOffen(s);
-  const anzahl = { offen: alle.filter((b) => passt(b.status, "offen")).length, alle: alle.length };
+  const passt = (s: string, f: Filter) => f === "alle" || istOffen(s) || (f === "offen" && s === "entwurf");
+  const anzahl = { offen: alle.filter((b) => passt(b.status, "offen")).length, unterwegs: alle.filter((b) => passt(b.status, "unterwegs")).length, alle: alle.length };
   const liste = alle.filter((b) => passt(b.status, filter)
     && passtSuche([b.nummer, b.lieferant, b.projekte?.name, b.projekte?.nummer, b.lagerorte?.name, b.notiz], suche));
 
@@ -65,13 +66,13 @@ export default function Bestellungen() {
     >
       <div className="space-y-3">
         <div className="flex flex-wrap gap-2">
-          {(["offen", "alle"] as const).map((f) => (
-            <button key={f} type="button" onClick={() => filterSetzen(f)}
+          {(["offen", "unterwegs", "alle"] as const).filter((f) => f !== "unterwegs" || filter === f || (anzahl.unterwegs > 0 && anzahl.unterwegs !== anzahl.offen)).map((f) => (
+            <button key={f} type="button" onClick={() => filterSetzen(f)} aria-pressed={filter === f}
               className={cn(
                 "inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium transition-colors",
                 filter === f ? "border-primary bg-primary-soft text-primary" : "bg-card hover:bg-muted",
               )}>
-              {f === "offen" ? "Offen" : "Alle"}
+              {f === "offen" ? "Offen" : f === "unterwegs" ? "Unterwegs" : "Alle"}
               <span className={cn("zahl text-xs", filter === f ? "text-primary" : "text-muted-foreground")}>{anzahl[f]}</span>
             </button>
           ))}
@@ -95,7 +96,7 @@ export default function Bestellungen() {
         <Leer icon={ShoppingCart} text={`Konnte nicht geladen werden: ${(error as Error).message}`} />
       ) : liste.length === 0 ? (
         <Leer icon={ShoppingCart} text={suche.trim() ? "Nichts gefunden."
-          : filter === "offen" && alle.length ? "Nichts offen — alles geliefert."
+          : filter !== "alle" && alle.length ? (filter === "unterwegs" ? "Nichts unterwegs — alles geliefert." : "Nichts offen — alles geliefert.")
             : "Noch keine Bestellungen. Die App schlägt vor, was unter Mindestbestand ist oder was ein Projekt laut Angebot braucht."}>
           {filter === "offen" && !suche.trim() && <Button className="h-11" onClick={() => setNeu("lager")}><Plus className="h-4 w-4" /> Bestellung anlegen</Button>}
         </Leer>

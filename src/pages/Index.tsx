@@ -32,7 +32,7 @@ import { useSitzung } from "@/hooks/useSitzung";
 import { datumKurz, euro, isoTag, stunden, tageDazu } from "@/lib/format";
 import { sichtbareNavigation, type NavEintrag } from "@/lib/navigation";
 import { useEingangsrechnungen } from "@/components/eingang/eingangDaten";
-import { ablauf, zuordnung, zuZahlen } from "@/components/eingang/eingangLogik";
+import { ablauf, skontoLaeuftAb, zuordnung, zuZahlen } from "@/components/eingang/eingangLogik";
 import { useOffeneSchaeden } from "@/components/fuhrpark/fuhrparkDaten";
 import { useFahrzeuge } from "@/hooks/useDaten";
 import { faelligkeiten } from "@/lib/fuhrpark";
@@ -42,11 +42,11 @@ import { useBestellungen } from "@/components/bestellung/bestellDaten";
 import { istOffen } from "@/components/bestellung/bestellLogik";
 import { faelligkeit } from "@/components/anlagen/pruefLogik";
 import { foerderFrist, fristText } from "@/lib/foerderung";
-import { mahnFristAbgelaufen, mahnVorschlag } from "@/components/op/opLogik";
-import { belegStatus } from "@/lib/types";
+import { mahnFristAbgelaufen, mahnVorschlag, offenBetrag, verzugTage } from "@/components/op/opLogik";
 import { cn } from "@/lib/utils";
 import { ordneZuErledigen } from "@/lib/zuErledigen";
-import { useOffeneRegieberichte } from "@/components/belege/NochNichtVerrechnet";
+import { useErledigteEinsaetze, useOffeneRegieberichte } from "@/components/belege/NochNichtVerrechnet";
+import { erledigtNochOffen } from "@/components/regie/regieLogik";
 import { KUNDE } from "@/kunde.config";
 
 /** „Mittwoch, 11.11.2026“ */
@@ -129,28 +129,30 @@ export default function Index() {
   const dieseWoche = (woche ?? []).filter((z) => z.datum >= montag).reduce((s, z) => s + Number(z.stunden), 0);
   const heuteStunden = (woche ?? []).filter((z) => z.datum === heute).reduce((s, z) => s + Number(z.stunden), 0);
 
-  // Was für den Chef liegt: offene Rechnungen, Angebote, wartende Zugänge
+  // Was für den Chef liegt: Angebote, Entwürfe, wartende Zugänge (offene Rechnungen aus den Offenen Posten, unten)
   const { data: buero } = useQuery({
     queryKey: ["belege", "start"],
     enabled: istChef,
     queryFn: async () => {
-      // Summe offener Rechnungen über alle Seiten — nach dem Altbestand-Import weit über 1000
-      const [belege, { count: wartend }, { data: online }] = await Promise.all([
+      // über alle Seiten — nach dem Altbestand-Import weit über 1000 Belege
+      const [belege, mitAngebot, { count: wartend }, { data: online }] = await Promise.all([
         alleZeilen((von, bis) => supabase.from("belege").select("id, typ, status, brutto, faellig_am, gueltig_bis")
           .in("status", ["entwurf", "offen"]).order("id").range(von, bis)),
-        supabase.from("profiles").select("id", { count: "exact", head: true }).eq("aktiv", false).eq("gesperrt", false),
+        // Angebote, auf die schon eine (nicht stornierte) Rechnung zeigt, stehen dort unter „In Rechnung“, nicht „Ohne Antwort“
+        alleZeilen((von, bis) => supabase.from("belege").select("id, angebot_id")
+          .eq("typ", "rechnung").not("angebot_id", "is", null).neq("status", "storniert").order("id").range(von, bis)),
+        // wie die Liste unter Mitarbeiter: ohne versteckte Konten (ePower)
+        supabase.from("profiles").select("id", { count: "exact", head: true }).eq("aktiv", false).eq("gesperrt", false).eq("versteckt", false),
         // Kunde hat online angenommen oder nachgefragt — bis der Chef das Angebot öffnet
         supabase.from("angebot_verlauf").select("beleg_id, art, name, belege(nummer)").eq("gelesen", false).in("art", ["angenommen", "rueckfrage"]),
       ]);
       const liste = belege ?? [];
-      const rechnungen = liste.filter((b) => b.typ === "rechnung" && b.status === "offen");
+      const verrechnet = new Set(mitAngebot.map((r) => r.angebot_id));
+      const offeneAngebote = liste.filter((b) => b.typ === "angebot" && b.status === "offen" && !verrechnet.has(b.id));
       return {
-        offenSumme: rechnungen.reduce((s, b) => s + Number(b.brutto), 0),
-        offen: rechnungen.length,
-        ueberfaellig: rechnungen.filter((b) => belegStatus(b, heute) === "ueberfaellig").length,
-        angebote: liste.filter((b) => b.typ === "angebot" && b.status === "offen").length,
-        // Gültigkeit läuft in einer Woche ab oder ist vorbei — nachtelefonieren
-        nachfassen: liste.filter((b) => b.typ === "angebot" && b.status === "offen" && b.gueltig_bis && b.gueltig_bis <= tageDazu(heute, 7)).length,
+        angebote: offeneAngebote.length,
+        // Gültigkeit läuft in einer Woche ab oder ist vorbei — nachtelefonieren (wie der Filter „Nachfassen“)
+        nachfassen: offeneAngebote.filter((b) => b.gueltig_bis && b.gueltig_bis <= tageDazu(heute, 7)).length,
         entwuerfeAngebote: liste.filter((b) => b.typ === "angebot" && b.status === "entwurf").length,
         entwuerfeRechnungen: liste.filter((b) => b.typ === "rechnung" && b.status === "entwurf").length,
         wartend: wartend ?? 0,
@@ -185,8 +187,8 @@ export default function Index() {
   const eingangPruefen = eingang.filter((r) => ablauf(r) === "pruefen").length;
   const zuUeberweisen = eingang.filter((r) => ablauf(r) === "freigegeben");
   const ueberweisenSumme = zuUeberweisen.reduce((s, r) => s + zuZahlen(r, isoTag()).betrag, 0);
-  // Skonto läuft in den nächsten 3 Tagen ab (auch noch ungeprüfte)
-  const skontoBald = eingang.filter((r) => !r.bezahlt_am && !r.lastschrift && r.freigabe !== "abgelehnt" && r.skonto_bis && r.skonto_bis >= isoTag() && r.skonto_bis <= tageDazu(isoTag(), 3)).length;
+  // Skonto läuft in den nächsten 3 Tagen ab (auch noch ungeprüfte) — dieselbe Regel wie /eingang?filter=skonto
+  const skontoBald = eingang.filter((r) => skontoLaeuftAb(r, isoTag())).length;
   // Fuhrpark: Pickerl, Service, Prüfung fällig — und gemeldete Schäden
   const { data: fahrzeuge = [] } = useFahrzeuge();
   const { data: schaeden = {} } = useOffeneSchaeden();
@@ -197,6 +199,10 @@ export default function Index() {
   const { data: op = [] } = useOffenePosten(dRech);
   const heuteIso = isoTag();
   const zuMahnen = firma ? op.filter((b) => mahnVorschlag(b, b.zahlungen, b.mahnungen, firma, heuteIso) && mahnFristAbgelaufen(b.mahnungen, heuteIso)).length : 0;
+  // Offen und überfällig wie die Offenen Posten: offener Rest nach Teilzahlungen, Verzug ab dem Tag nach der Fälligkeit
+  const opOffen = op.length;
+  const opSumme = op.reduce((s, b) => s + offenBetrag(b.brutto, b.zahlungen), 0);
+  const opUeberfaellig = op.filter((b) => verzugTage(b.faellig_am, heuteIso) > 0).length;
 
   // Anlagen: überfällig oder in den nächsten 30 Tagen zu prüfen
   const { data: anlagen = [] } = useAnlagen();
@@ -212,20 +218,10 @@ export default function Index() {
   const unterwegs = bestellungen.filter((b) => istOffen(b.status));
   const spaet = unterwegs.filter((b) => b.liefertermin && b.liefertermin < heuteIso).length;
 
-  // Monteur meldet erledigt, im Projekt ist noch nicht alles verrechnet
+  // Monteur meldet erledigt, im Projekt ist noch nicht alles verrechnet — dieselben wie oben auf „Rechnungen“
   const { data: antraege = [] } = useAntraege(istChef);
-  const { data: erledigte = [] } = useQuery({
-    queryKey: ["termine", "erledigt"],
-    enabled: istChef,
-    queryFn: async () => {
-      return alleZeilen((von, bis) => supabase.from("termine").select("id, projekt_id")
-        .eq("status", "erledigt").not("projekt_id", "is", null).order("id").range(von, bis));
-    },
-  });
-  const erledigtOffen = [...new Set(erledigte.map((t) => t.projekt_id as string))].filter((id) => {
-    const z = zahlen[id];
-    return z && (Number(z.stunden_offen) > 0 || Number(z.regie_offen) > 0);
-  });
+  const { data: erledigte = [] } = useErledigteEinsaetze(dRech);
+  const erledigtOffen = erledigtNochOffen(erledigte, zahlen, offeneRegie, new Set(projekte.map((p) => p.id)));
 
   const aufgabenZahl = useAufgabenZaehler(istChef);
   const onlineAn = buero?.online.filter((o) => o.art === "angenommen") ?? [];
@@ -250,18 +246,18 @@ export default function Index() {
     dRech && erledigtOffen.length > 0 && {
       icon: CheckCircle2,
       text: `${erledigtOffen.length} ${erledigtOffen.length === 1 ? "Projekt" : "Projekte"} mit erledigtem Einsatz, noch nicht verrechnet`,
-      to: erledigtOffen.length === 1 ? `/projekte/${erledigtOffen[0]}` : "/projekte",
+      to: erledigtOffen.length === 1 ? `/projekte/${erledigtOffen[0]}` : "/rechnungen",
     },
     darf("mitarbeiter") && buero.wartend > 0 && { icon: UserCheck, text: `${buero.wartend} ${buero.wartend === 1 ? "Mitarbeiter wartet" : "Mitarbeiter warten"} auf Freischaltung`, to: "/mitarbeiter", warn: true },
-    buero.ueberfaellig > 0 && { icon: AlertTriangle, text: `${buero.ueberfaellig} ${buero.ueberfaellig === 1 ? "Rechnung ist" : "Rechnungen sind"} überfällig`, to: "/offene-posten?filter=ueberfaellig", warn: true },
+    opUeberfaellig > 0 && { icon: AlertTriangle, text: `${opUeberfaellig} ${opUeberfaellig === 1 ? "Rechnung ist" : "Rechnungen sind"} überfällig`, to: "/offene-posten?filter=ueberfaellig", warn: true },
     zuMahnen > 0 && { icon: BellRing, text: `${zuMahnen} ${zuMahnen === 1 ? "Rechnung" : "Rechnungen"} zu mahnen`, to: "/offene-posten", warn: true },
-    buero.offen > 0 && { icon: Receipt, text: `${buero.offen} offene ${buero.offen === 1 ? "Rechnung" : "Rechnungen"} · ${euro(buero.offenSumme)}`, to: "/offene-posten?filter=alle" },
+    opOffen > 0 && { icon: Receipt, text: `${opOffen} offene ${opOffen === 1 ? "Rechnung" : "Rechnungen"} · ${euro(opSumme)}`, to: "/offene-posten?filter=alle" },
     foerderFristen.length > 0 && {
       icon: Landmark,
       text: foerderFristen.length === 1
         ? `Förderfrist ${foerderFristen[0].p.name}: ${fristText(foerderFristen[0].inTagen)}`
         : `${foerderFristen.length} Förderfristen in 30 Tagen${foerderFristen.some((f) => f.ueberfaellig) ? " · vorbei" : ""}`,
-      to: foerderFristen.length === 1 ? `/projekte/${foerderFristen[0].p.id}` : "/projekte?filter=foerderung",
+      to: foerderFristen.length === 1 ? `/projekte/${foerderFristen[0].p.id}` : "/projekte?filter=foerderung&frist=30",
       warn: foerderFristen.some((f) => f.ueberfaellig || f.inTagen <= 7),
     },
     pruefFaellig.length > 0 && {
@@ -273,11 +269,11 @@ export default function Index() {
     unterwegs.length > 0 && {
       icon: ShoppingCart,
       text: `${unterwegs.length} ${unterwegs.length === 1 ? "Bestellung" : "Bestellungen"} unterwegs${spaet ? ` · ${spaet} Liefertermin vorbei` : ""}`,
-      to: "/bestellungen",
+      to: "/bestellungen?filter=unterwegs",
       warn: spaet > 0,
     },
     dRech && regieOffen > 0 && { icon: ClipboardSignature, text: `${regieOffen} ${regieOffen === 1 ? "Regiebericht" : "Regieberichte"} unterschrieben, nicht verrechnet`, to: "/rechnungen" },
-    skontoBald > 0 && { icon: Banknote, text: `${skontoBald} ${skontoBald === 1 ? "Rechnung" : "Rechnungen"}: Skonto läuft in 3 Tagen ab`, to: "/eingang?filter=freigegeben", warn: true },
+    skontoBald > 0 && { icon: Banknote, text: `${skontoBald} ${skontoBald === 1 ? "Rechnung" : "Rechnungen"}: Skonto läuft in 3 Tagen ab`, to: "/eingang?filter=skonto", warn: true },
     eingangPruefen > 0 && { icon: Inbox, text: `${eingangPruefen} ${eingangPruefen === 1 ? "Eingangsrechnung" : "Eingangsrechnungen"} prüfen und freigeben`, to: "/eingang" },
     zuUeberweisen.length > 0 && { icon: Banknote, text: `${zuUeberweisen.length} ${zuUeberweisen.length === 1 ? "Rechnung" : "Rechnungen"} überweisen · ${euro(ueberweisenSumme)}`, to: "/eingang?filter=freigegeben" },
     fuhrparkFaellig.length > 0 && {

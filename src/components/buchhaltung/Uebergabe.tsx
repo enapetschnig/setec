@@ -15,9 +15,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { alleZeilen, alsText, csvFeld, type CsvZelle } from "@/lib/abfrage";
 import { archivLaden } from "@/lib/belegArchiv";
 import {
-  aufwandKonto, buchungenText, debitorKonto, eingangNummer, erloesKonto, KONTEN_TEXT, kontrolle, personenkontenText, summen, windows1252,
-  type FibuBeleg, type FibuEingang, type FibuFormat, type FibuKonten,
+  altbestandText, aufwandKonto, buchungenText, debitorKonto, eingangAufteilen, eingangNummer, erloesKonto, KONTEN_TEXT, kontrolle,
+  personenkontenText, summen, windows1252, type FibuBeleg, type FibuEingang, type FibuFormat, type FibuKonten,
 } from "@/lib/fibu";
+import { odooZeilenVon } from "@/hooks/useOdooZeilen";
 import { datum, euro } from "@/lib/format";
 import { BUCKET } from "@/components/eingang/eingangDaten";
 import { fehlerText } from "@/components/stamm/stammDaten";
@@ -30,8 +31,10 @@ const FORMATE: Record<FibuFormat, string> = { bmd: "BMD", rzl: "RZL" };
 
 /**
  * Der Monat für die Kanzlei: ZIP mit Buchungen (BMD oder RZL), Personenkonten,
- * Belegliste und Originalen; danach „Als übergeben merken“. Altrechnungen
- * gehen nie mit — die sind im alten Programm schon verbucht.
+ * Belegliste und Originalen; danach „Als übergeben merken“. Altrechnungen und
+ * Eingangsrechnungen aus Odoo gehen nie mit — die sind im alten Programm schon
+ * verbucht. Eingangsrechnungen nur freigegeben: zu prüfende warten (Warnung),
+ * abgelehnte nie (eingangAufteilen in lib/fibu.ts; fibu_uebergeben prüft dasselbe).
  */
 export function Uebergabe({ zeitraum }: { zeitraum: Zeitraum }) {
   const { firma, neuLaden: firmaNeu } = useSitzung();
@@ -56,7 +59,7 @@ export function Uebergabe({ zeitraum }: { zeitraum: Zeitraum }) {
       const [bZeilen, eZeilen, uZeilen, d, alt] = await Promise.all([
         alleZeilen((a, z) => supabase.from("belege").select("id, nummer, datum, faellig_am, status, netto, ust, brutto, ust_satz, reverse_charge, empf_name, empf_uid, teil_nr, storno_von, kategorie_id, kunden(nummer, name, strasse, plz, ort, uid)")
           .eq("typ", "rechnung").eq("altbestand", false).neq("status", "entwurf").gte("datum", von).lte("datum", bis).order("datum").order("nummer").order("id").range(a, z)),
-        alleZeilen((a, z) => supabase.from("eingangsrechnungen").select("id, lieferant, nummer, datum, faellig_am, netto, ust, brutto, ust_satz, reverse_charge, kategorie, kategorie_id, datei_pfad, bezahlt_am, bar_bezahlt, lastschrift")
+        alleZeilen((a, z) => supabase.from("eingangsrechnungen").select("id, lieferant, nummer, datum, faellig_am, netto, ust, brutto, ust_satz, reverse_charge, kategorie, kategorie_id, datei_pfad, bezahlt_am, bar_bezahlt, lastschrift, freigabe")
           .gte("datum", von).lte("datum", bis).order("datum").order("lieferant").order("id").range(a, z)),
         alleZeilen((a, z) => supabase.from("fibu_uebergabe_belege").select("beleg_id, eingang_id").order("beleg_id").order("eingang_id").range(a, z)),
         supabase.from("belege").select("id", { count: "exact", head: true }).eq("typ", "rechnung").eq("status", "entwurf").gte("datum", von).lte("datum", bis),
@@ -64,7 +67,9 @@ export function Uebergabe({ zeitraum }: { zeitraum: Zeitraum }) {
       ]);
       const fehler = d.error ?? alt.error;
       if (fehler) throw fehler;
-      const b = { data: bZeilen }, e = { data: eZeilen }, u = { data: uZeilen };
+      const b = { data: bZeilen }, u = { data: uZeilen };
+      // Nur freigegebene, nicht aus Odoo — der Rest zählt nur für die Hinweise
+      const eTeile = eingangAufteilen(eZeilen, await odooZeilenVon("eingangsrechnungen", eZeilen.map((x) => x.id)));
       // Liegt das Original schon im Archiv? Besser jetzt wissen als im ZIP vermissen
       const imArchiv = await Promise.all((b.data ?? []).map(async (x) => {
         const { data: f } = await supabase.storage.from("beleg-archiv").list("", { search: x.id, limit: 1 });
@@ -72,7 +77,10 @@ export function Uebergabe({ zeitraum }: { zeitraum: Zeitraum }) {
       }));
       return {
         belege: (b.data ?? []).map(({ kunden, ...x }) => ({ ...x, kunde: kunden })) as unknown as (FibuBeleg & { kategorie_id: string | null })[],
-        eingaenge: (e.data ?? []) as (FibuEingang & { kategorie_id: string | null })[],
+        eingaenge: eTeile.mit as (FibuEingang & { kategorie_id: string | null })[],
+        eingangZuPruefen: eTeile.zuPruefen.length,
+        eingangAbgelehnt: eTeile.abgelehnt.length,
+        eingangOdoo: eTeile.odoo.length,
         uebergeben: new Set((u.data ?? []).flatMap((x) => [x.beleg_id, x.eingang_id]).filter(Boolean) as string[]),
         entwuerfe: d.count ?? 0,
         altrechnungen: alt.count ?? 0,
@@ -97,11 +105,14 @@ export function Uebergabe({ zeitraum }: { zeitraum: Zeitraum }) {
     .map((e) => ({ ...e, kategorie_konto: kontoVon.get(e.kategorie_id ?? "") ?? null })), [data, uebergeben, mitUebergebenen, kontoVon]);
   const hinweise = useMemo(() => [
     ...(data?.ohneArchiv ?? []).filter((n) => belege.some((b) => b.nummer === n)).map((n) => ({ schwer: true, text: `${n}: Original-PDF fehlt im Rechnungsarchiv. Rechnung einmal öffnen und als PDF laden.` })),
-    ...kontrolle(belege, eingaenge, klein, data?.entwuerfe),
-  ], [data?.ohneArchiv, belege, eingaenge, klein, data?.entwuerfe]);
+    ...kontrolle(belege, eingaenge, klein, data?.entwuerfe, { zuPruefen: data?.eingangZuPruefen, abgelehnt: data?.eingangAbgelehnt }),
+  ], [data?.ohneArchiv, belege, eingaenge, klein, data?.entwuerfe, data?.eingangZuPruefen, data?.eingangAbgelehnt]);
+  const altText = altbestandText(data?.altrechnungen ?? 0, data?.eingangOdoo ?? 0);
   const ar = summen(belege), er = summen(eingaenge);
+  // schon übergeben = was mitgehen dürfte, aber ausgeblendet ist (nur Freigegebene, ohne Odoo)
   const schonDa = (data?.belege ?? []).length + (data?.eingaenge ?? []).length - belege.length - eingaenge.length;
   const leer = !belege.length && !eingaenge.length;
+  const nichtsDa = leer && !schonDa;
   const offeneZumMerken = [...belege, ...eingaenge].filter((x) => !uebergeben.has(x.id));
 
   const formatSetzen = async (f: FibuFormat) => {
@@ -161,7 +172,8 @@ export function Uebergabe({ zeitraum }: { zeitraum: Zeitraum }) {
           ? "Buchungen: variabler Satzaufbau mit Kopfzeile, Verbuchkz A, Gegenbuchkz E. BMD macht Gegen- und Sammelbuchungen."
           : "Buchungen: Euro-Version mit Trennzeichen, je Beleg zwei Zeilen, Belegpfad in Feld 37. Bitte zuerst den Probelauf.",
         `Ausgangsrechnungen: ${ar.anzahl}, netto ${ar.netto.toFixed(2)}, USt ${ar.ust.toFixed(2)}`,
-        `Eingangsrechnungen: ${er.anzahl}, netto ${er.netto.toFixed(2)}, Vorsteuer ${er.ust.toFixed(2)}`, "",
+        `Eingangsrechnungen: ${er.anzahl}, netto ${er.netto.toFixed(2)}, Vorsteuer ${er.ust.toFixed(2)} (nur freigegebene)`,
+        ...(altText ? [altText] : []), "",
         "Debitoren: 20000 + Kundennummer. Kreditoren: ab 30001, fest je Lieferant.",
         "Teil- und Schlussrechnungen sind normale Rechnungen mit ihren eigenen Betraegen, siehe Belegliste.", "",
         "Konten:", ...Object.entries(KONTEN_TEXT).map(([s, t]) => `  ${konten[s as keyof FibuKonten]}  ${t}`),
@@ -231,10 +243,10 @@ export function Uebergabe({ zeitraum }: { zeitraum: Zeitraum }) {
         ))}
       </div>
 
-      {isLoading ? null : leer && !schonDa ? (
-        <Leer icon={FileArchive} text={`Im ${monatText} gibt es keine fertigen Belege.`} />
-      ) : (
+      {isLoading ? null : (
         <>
+          {nichtsDa && <Leer icon={FileArchive} text={`Im ${monatText} gibt es keine fertigen Belege.`} />}
+          {/* auch ohne fertige Belege: „noch zu prüfen“ soll man sehen */}
           {hinweise.length > 0 && (
             <Karte titel="Vor der Übergabe prüfen">
               <ul className="space-y-2">
@@ -248,29 +260,31 @@ export function Uebergabe({ zeitraum }: { zeitraum: Zeitraum }) {
             </Karte>
           )}
 
-          <div className="flex flex-wrap items-center gap-2">
-            <Button className="h-12 gap-2" disabled={leer || !!laeuft || !konten} onClick={() => void zipLaden()}>
-              {laeuft === "zip" ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileArchive className="h-4 w-4" />} ZIP herunterladen
-            </Button>
-            <Button variant="outline" className="h-12 gap-2" disabled={!offeneZumMerken.length || !!laeuft} onClick={() => void merken()}>
-              <CheckCircle2 className="h-4 w-4" /> Als übergeben merken
-            </Button>
-          </div>
+          {!nichtsDa && (<>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button className="h-12 gap-2" disabled={leer || !!laeuft || !konten} onClick={() => void zipLaden()}>
+                {laeuft === "zip" ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileArchive className="h-4 w-4" />} ZIP herunterladen
+              </Button>
+              <Button variant="outline" className="h-12 gap-2" disabled={!offeneZumMerken.length || !!laeuft} onClick={() => void merken()}>
+                <CheckCircle2 className="h-4 w-4" /> Als übergeben merken
+              </Button>
+            </div>
 
-          <div className="flex items-center gap-3">
-            <Switch id="mit-uebergebenen" checked={mitUebergebenen} onCheckedChange={setMitUebergebenen} />
-            <Label htmlFor="mit-uebergebenen" className="cursor-pointer text-sm font-normal">
-              Schon Übergebene noch einmal mitnehmen{schonDa > 0 && !mitUebergebenen ? ` (${schonDa})` : ""}
-            </Label>
-          </div>
+            <div className="flex items-center gap-3">
+              <Switch id="mit-uebergebenen" checked={mitUebergebenen} onCheckedChange={setMitUebergebenen} />
+              <Label htmlFor="mit-uebergebenen" className="cursor-pointer text-sm font-normal">
+                Schon Übergebene noch einmal mitnehmen{schonDa > 0 && !mitUebergebenen ? ` (${schonDa})` : ""}
+              </Label>
+            </div>
+          </>)}
 
-          {(data?.altrechnungen ?? 0) > 0 && (
+          {altText && (
             <p className="flex items-center gap-2 text-sm text-muted-foreground">
-              <History className="h-4 w-4 shrink-0" /> {data!.altrechnungen} {data!.altrechnungen === 1 ? "Altrechnung geht" : "Altrechnungen gehen"} nicht mit, die {data!.altrechnungen === 1 ? "ist" : "sind"} im alten Programm schon verbucht.
+              <History className="h-4 w-4 shrink-0" /> {altText}
             </p>
           )}
 
-          {leer ? (
+          {nichtsDa ? null : leer ? (
             <Leer icon={CheckCircle2} text={`${monatText} ist schon übergeben.`} />
           ) : (
             <Karte titel="Belege" ohnePolster>

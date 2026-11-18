@@ -32,6 +32,11 @@ export type UebersichtZeile = {
   status: StatusEintrag;
   /** bezahlt / erledigt für den Filter */
   erledigt: boolean;
+  /**
+   * Zählt in Summen, Kategorien und „Bezahlt“ — `false` bei abgelehnten
+   * Eingangsrechnungen: sie stehen nur unter „Alle“ (Standard: zählt)
+   */
+  zaehlt?: boolean;
   kategorie_id: string | null;
   vorschlag: string | null;
   zusatz?: StatusEintrag | null;
@@ -39,6 +44,8 @@ export type UebersichtZeile = {
 };
 
 type StatusFilter = "alle" | "offen" | "erledigt";
+
+const zaehlt = (z: UebersichtZeile) => z.zaehlt !== false;
 
 /**
  * Liste je Zeitraum mit Summen, Kategorien (Balken = Filter) und Status.
@@ -69,12 +76,16 @@ export function RechnungsUebersicht({
   const katVon = useMemo(() => new Map(kategorien.map((k) => [k.id, k])), [kategorien]);
   const eingang = richtung === "eingang";
 
-  const summenJe = useMemo(() => nachKategorie(zeilen, kategorien), [zeilen, kategorien]);
+  const gezaehlt = useMemo(() => zeilen.filter(zaehlt), [zeilen]);
+  const nichtGezaehlt = zeilen.length - gezaehlt.length;
+  const summenJe = useMemo(() => nachKategorie(gezaehlt, kategorien), [gezaehlt, kategorien]);
+  const passtStatus = (z: UebersichtZeile, f: StatusFilter) => f === "alle" || (f === "erledigt" ? z.erledigt && zaehlt(z) : !z.erledigt);
   const liste = zeilen.filter((z) =>
-    (statusFilter === "alle" || (statusFilter === "erledigt") === z.erledigt)
+    passtStatus(z, statusFilter)
     && (katFilter === undefined || (katFilter === null ? !z.kategorie_id || !katVon.has(z.kategorie_id) : z.kategorie_id === katFilter))
     && passtSuche([z.nummer, z.name, z.unter, z.kategorie_id ? katVon.get(z.kategorie_id)?.name : null], suche));
-  const summe = (l: UebersichtZeile[], f: "netto" | "ust" | "brutto" | "offen") => runden2(l.reduce((s, z) => s + Number(z[f]), 0));
+  // Summen nur über die Zeilen, die zählen (keine abgelehnten Eingangsrechnungen)
+  const summe = (l: UebersichtZeile[], f: "netto" | "ust" | "brutto" | "offen") => runden2(l.filter(zaehlt).reduce((s, z) => s + Number(z[f]), 0));
   const mitVorschlag = zeilen.filter((z) => !z.kategorie_id && z.vorschlag && katVon.has(z.vorschlag));
 
   const setzen = async (ids: string[], kategorieId: string | null) => {
@@ -120,7 +131,8 @@ export function RechnungsUebersicht({
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Kennzahl titel="Netto" wert={euro(summe(zeilen, "netto"))} unter={`${zeilen.length} ${zeilen.length === 1 ? "Rechnung" : "Rechnungen"}`} />
+        <Kennzahl titel="Netto" wert={euro(summe(zeilen, "netto"))}
+          unter={`${gezaehlt.length} ${gezaehlt.length === 1 ? "Rechnung" : "Rechnungen"}${nichtGezaehlt ? `, ohne ${nichtGezaehlt} abgelehnte` : ""}`} />
         <Kennzahl titel={eingang ? "Vorsteuer" : "USt"} wert={euro(summe(zeilen, "ust"))} />
         <Kennzahl titel="Brutto" wert={euro(summe(zeilen, "brutto"))} />
         <Kennzahl titel={eingang ? "Noch zu zahlen" : "Noch offen"} wert={euro(summe(zeilen, "offen"))}
@@ -148,7 +160,7 @@ export function RechnungsUebersicht({
             className={cn("inline-flex min-h-11 items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium transition-colors",
               statusFilter === f ? "border-primary bg-primary-soft text-primary" : "bg-card hover:bg-muted")}>
             {f === "alle" ? "Alle" : f === "offen" ? "Offen" : eingang ? "Bezahlt" : "Bezahlt"}
-            <span className="zahl text-xs text-muted-foreground">{f === "alle" ? zeilen.length : zeilen.filter((z) => (f === "erledigt") === z.erledigt).length}</span>
+            <span className="zahl text-xs text-muted-foreground">{zeilen.filter((z) => passtStatus(z, f)).length}</span>
           </button>
         ))}
         {katFilter !== undefined && (
@@ -208,7 +220,10 @@ export function RechnungsUebersicht({
             </tbody>
             <tfoot className="border-t bg-muted/40 text-sm">
               <tr>
-                <td colSpan={4} className="py-2.5 pl-4 text-muted-foreground">{liste.length} {liste.length === 1 ? "Rechnung" : "Rechnungen"}{liste.length !== zeilen.length ? " (gefiltert)" : ""}</td>
+                <td colSpan={4} className="py-2.5 pl-4 text-muted-foreground">
+                  {liste.length} {liste.length === 1 ? "Rechnung" : "Rechnungen"}{liste.length !== zeilen.length ? " (gefiltert)" : ""}
+                  {liste.some((z) => !zaehlt(z)) && " · Summen ohne Abgelehnte"}
+                </td>
                 <td className="zahl py-2.5 pr-3 text-right font-medium">{euro(summe(liste, "netto"))}</td>
                 <td className="zahl py-2.5 pr-3 text-right font-semibold">{euro(summe(liste, "brutto"))}</td>
                 <td colSpan={2} className="zahl py-2.5 pr-3 text-muted-foreground">offen {euro(summe(liste, "offen"))}</td>

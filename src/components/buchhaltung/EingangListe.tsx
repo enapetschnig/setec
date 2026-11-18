@@ -31,6 +31,8 @@ export function EingangListe({ zeitraum, onKategorien }: { zeitraum: Zeitraum; o
         status: !erledigt && !r.lastschrift && r.faellig_am && r.faellig_am < heute ? BELEG_STATUS.ueberfaellig
           : a === "ueberwiesen" ? { ton: "gruen", text: bezahltText(r) } : FREIGABE_STATUS[a],
         erledigt,
+        // abgelehnt: kein Aufwand, keine Vorsteuer — zählt in keine Summe
+        zaehlt: a !== "abgelehnt",
         kategorie_id: r.kategorie_id,
         vorschlag: r.kategorie_id ? null : eingangVorschlag(r.lieferant, r.eingang_positionen.map((p) => p.bezeichnung), jeLieferant, kategorien),
         datei: !!r.datei_pfad,

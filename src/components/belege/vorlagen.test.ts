@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { leerePosition, titelPosition, type EditorPosition, type KatalogLeistung } from "./editor";
+import { leerePosition, positionZuDb, titelPosition, verweiseBereinigen, type EditorPosition, type KatalogLeistung } from "./editor";
 import {
   ausVorlage, kategorienAus, vorlageAusEditor, vorlageEinfuegen, vorlageNetto, vorlagenFiltern, vorlagePositionenLesen, vorlageUmfang,
   type PreisArtikel, type VorlagePosition,
@@ -83,6 +83,49 @@ describe("Preise beim Einfügen nachziehen", () => {
   it("Stundensatz des Projekts zählt bei Leistungen", () => {
     const r = ausVorlage([vorlage[3]], quellen, firma, 100, true);
     expect(r.positionen[0].einzelpreis).toBe("126,00");
+  });
+
+  it("gelöschter Artikel / gelöschte Leistung: Verweis weg, Text und Preis bleiben", () => {
+    const mitGeloeschten = [
+      ...vorlage,
+      vp({ bezeichnung: "Gelöschter Speicher", menge: 2, einzelpreis: 4100, ek_preis: 3000, artikel_id: "geloescht" }),
+      vp({ art: "leistung", bezeichnung: "Alte Montage", menge: 1, einzelpreis: 150, leistung_id: "weg" }),
+      vp({ art: "leistung", bezeichnung: "Inaktive Leistung", menge: 1, einzelpreis: 80, leistung_id: "inaktiv" }),
+    ];
+    const q = { ...quellen, leistungIds: new Set(["inaktiv"]) };
+    for (const nachziehen of [true, false]) {
+      const r = ausVorlage(mitGeloeschten, q, firma, 72, nachziehen);
+      const [speicher, montage, inaktiv] = r.positionen.slice(5);
+      expect(speicher).toMatchObject({ bezeichnung: "Gelöschter Speicher", menge: "2", einzelpreis: "4100,00", ek_preis: 3000, artikel_id: null });
+      expect(montage).toMatchObject({ bezeichnung: "Alte Montage", einzelpreis: "150,00", leistung_id: null });
+      // inaktiv, aber da: der Verweis bleibt (Fremdschlüssel hält)
+      expect(inaktiv.leistung_id).toBe("inaktiv");
+      // inaktiver Artikel bleibt verknüpft, nur der Preis kommt aus der Vorlage
+      expect(r.positionen[2]).toMatchObject({ artikel_id: "alt", einzelpreis: "120,00" });
+      expect(r.positionen[1].artikel_id).toBe("wr");
+      expect(r.fehlt).toEqual(["Altes Modul", "Gelöschter Speicher", "Alte Montage", "Inaktive Leistung"]);
+    }
+    // ohne Wissen über Leistungen außerhalb des Katalogs: Verweis bleibt (alte Aufrufer)
+    expect(ausVorlage([mitGeloeschten[6]], quellen, firma, 72, true).positionen[0].leistung_id).toBe("weg");
+  });
+});
+
+describe("Verweise auf Gelöschtes beim Speichern", () => {
+  it("nimmt nur den toten Verweis weg, alles andere bleibt", () => {
+    const zeilen = [
+      leerePosition("artikel", { bezeichnung: "Kabel", menge: "12,5", einzelpreis: "2,40", artikel_id: "da" }),
+      leerePosition("artikel", { bezeichnung: "Gelöscht", menge: "3", einzelpreis: "99,00", artikel_id: "weg" }),
+      leerePosition("leistung", { bezeichnung: "Montage", einzelpreis: "80,00", leistung_id: "lweg", artikel_id: "da" }),
+      leerePosition("pauschale", { bezeichnung: "Anfahrt", einzelpreis: "45,00" }),
+    ];
+    const r = verweiseBereinigen(zeilen, { artikel: new Set(["da"]), leistungen: new Set() });
+    expect(r.entfernt).toBe(2);
+    expect(r.zeilen.map((z) => [z.artikel_id, z.leistung_id])).toEqual([["da", null], [null, null], ["da", null], [null, null]]);
+    expect(r.zeilen[1]).toMatchObject({ bezeichnung: "Gelöscht", menge: "3", einzelpreis: "99,00", id: zeilen[1].id });
+    expect(r.zeilen[0]).toBe(zeilen[0]);
+    // was in die Datenbank geht: Preis und Menge wie vorher
+    expect(positionZuDb(r.zeilen[1], "b", 2)).toMatchObject({ artikel_id: null, menge: 3, einzelpreis: 99, bezeichnung: "Gelöscht" });
+    expect(verweiseBereinigen(zeilen, { artikel: new Set(["da", "weg"]), leistungen: new Set(["lweg"]) }).entfernt).toBe(0);
   });
 });
 

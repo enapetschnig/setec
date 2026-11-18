@@ -186,6 +186,28 @@ export function positionZuDb(p: EditorPosition, belegId: string, pos: number) {
   };
 }
 
+/**
+ * Verweise auf Artikel und Leistungen, die es nicht mehr gibt (gelöscht,
+ * während eine Vorlage, eine Kopie oder ein alter Stand sie noch kannte),
+ * fallen weg — Text, Menge und Preis bleiben. Sonst scheitert das Speichern
+ * am Fremdschlüssel. `vorhanden`: die IDs, die es gibt. Gibt die bereinigten
+ * Zeilen und die Zahl der entfernten Verweise zurück.
+ */
+export function verweiseBereinigen<T extends { artikel_id: string | null; leistung_id: string | null }>(
+  zeilen: T[],
+  vorhanden: { artikel: ReadonlySet<string>; leistungen: ReadonlySet<string> },
+): { zeilen: T[]; entfernt: number } {
+  let entfernt = 0;
+  const neu = zeilen.map((z) => {
+    const artikelWeg = !!z.artikel_id && !vorhanden.artikel.has(z.artikel_id);
+    const leistungWeg = !!z.leistung_id && !vorhanden.leistungen.has(z.leistung_id);
+    if (!artikelWeg && !leistungWeg) return z;
+    entfernt += Number(artikelWeg) + Number(leistungWeg);
+    return { ...z, artikel_id: artikelWeg ? null : z.artikel_id, leistung_id: leistungWeg ? null : z.leistung_id };
+  });
+  return { zeilen: neu, entfernt };
+}
+
 // ── Neue Positionen ─────────────────────────────────────────────────────
 
 export function leerePosition(art: PositionsArt, werte: Partial<EditorPosition> = {}): EditorPosition {
