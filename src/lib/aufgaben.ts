@@ -48,6 +48,10 @@ export const meineFilter = (ich: string) => `zustaendig.cs.{${ich}},and(zustaend
 export const kundeFilter = (kundeId: string, projektIds: string[]) =>
   projektIds.length ? `kunde_id.eq.${kundeId},projekt_id.in.(${projektIds.join(",")})` : `kunde_id.eq.${kundeId}`;
 
+/** Mit Projekt hängt die Aufgabe am Projekt (und so an dessen Kunden) — ein ausgeblendeter, vorbelegter Kunde zählt dann nicht */
+export const aufgabeKunde = (projektId: string | null | undefined, kundeId: string | null | undefined) =>
+  (projektId ? null : kundeId ?? null);
+
 export const istErledigt = (a: Pick<AufgabeKurz, "status">) => a.status === "erledigt";
 
 export const istUeberfaellig = (a: Pick<AufgabeKurz, "status" | "faellig_am">, heute: string) =>

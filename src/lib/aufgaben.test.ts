@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { anzeigeStatus, faelligText, filtern, istMeine, istUeberfaellig, kundeFilter, meineFilter, sortieren, verlaufText, zaehlen, type AufgabeKurz } from "./aufgaben";
+import { anzeigeStatus, faelligText, filtern, aufgabeKunde, istMeine, istUeberfaellig, kundeFilter, meineFilter, sortieren, verlaufText, zaehlen, type AufgabeKurz } from "./aufgaben";
 
 const HEUTE = "2026-11-13";
 const a = (id: string, x: Partial<AufgabeKurz> = {}): AufgabeKurz => ({
@@ -11,6 +11,10 @@ describe("Aufgaben", () => {
   it("beim Kontakt: am Kunden oder an seinen Projekten (18.11.2026)", () => {
     expect(kundeFilter("k1", [])).toBe("kunde_id.eq.k1");
     expect(kundeFilter("k1", ["p1", "p2"])).toBe("kunde_id.eq.k1,projekt_id.in.(p1,p2)");
+    // „+ Aufgabe“ beim Kontakt, dann Projekt gewählt: kein (fremder) Kunde mitgespeichert
+    expect(aufgabeKunde("p9", "k1")).toBeNull();
+    expect(aufgabeKunde("", "k1")).toBe("k1");
+    expect(aufgabeKunde(null, null)).toBeNull();
   });
   it("meine: zugeteilt — oder ohne Zuständigen und von mir angelegt (Startseite, 18.11.2026)", () => {
     expect(istMeine(a("x", { zustaendig: ["ich"] }), "ich")).toBe(true);

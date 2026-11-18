@@ -15,7 +15,7 @@ import { fehlerText } from "@/components/stamm/stammDaten";
 import { useMitarbeiter, useNeuLaden, useTeams } from "@/hooks/useDaten";
 import { useSitzung } from "@/hooks/useSitzung";
 import { isoTag, tageDazu } from "@/lib/format";
-import { PRIORITAET, WIEDERHOLUNG } from "@/lib/aufgaben";
+import { aufgabeKunde, PRIORITAET, WIEDERHOLUNG } from "@/lib/aufgaben";
 import type { Aufgabe } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -75,7 +75,7 @@ export function AufgabeDialog({
       faellig_am: faellig || null,
       prioritaet: prio,
       projekt_id: projektId || null,
-      kunde_id: kundeId,
+      kunde_id: aufgabeKunde(projektId, kundeId),
       wiederholung: wiederholung || null,
     };
     const { data, error } = aufgabe
