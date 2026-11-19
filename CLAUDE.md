@@ -57,7 +57,7 @@ npm test             # vitest (Parser)
 
 **Achtung Echtbetrieb:** Die folgenden Tests legen echte Daten und Nummern in SETECs Datenbank an — nur noch nach Absprache, Durchklick-Tests brauchen dafür Testkonten (früher max/chef).
 
-Regeln in der Datenbank prüfen (388 Prüfungen: nicht freigeschaltet, Monteur,
+Regeln in der Datenbank prüfen (390 Prüfungen: nicht freigeschaltet, Monteur,
 Chef, Festschreiben und „Rechnung ändern“, Offene Posten, Stornorechnung, Korrektur, Eingangsrechnungen
 mit Freigabe und Positionen, Teil-/Schlussrechnung, Anlagen und Prüfprotokolle,
 Bestellungen, Regiebericht, Material, Konten, Rechnungsarchiv, Abwesenheiten,
