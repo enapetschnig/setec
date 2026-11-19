@@ -6,7 +6,8 @@
 //   „schaden“, offen, von ihm; 2 Zeilen in fahrzeug_eintrag_fotos; 2 Dateien im Bucket fahrzeug-fotos
 //   unter <eintrag_id>/ — das große Foto auf 2400 px verkleinert
 // - Chef am Handy: Fuhrpark → Bus „1 Schaden offen“ → Bordbuch mit 2 Vorschaubildern → groß ansehen;
-//   Chef am PC: Startseite „1 Schaden an Fahrzeugen gemeldet · 2 Fotos“
+//   Chef am PC: Startseite „1 Schaden an Fahrzeugen gemeldet · 2 Fotos“; im Fahrzeug „+ Eintrag“
+//   (Service mit km) zieht den km-Stand mit
 // - Rechte (Datenbank/Speicher direkt): ein anderer Monteur kann zum fremden Eintrag nichts hochladen,
 //   eintragen oder löschen; der Melder nicht zu einem Eintrag des Chefs, seine eingetragenen Fotos
 //   löscht er nicht (nur eine nicht eingetragene eigene Datei); ohne Anmeldung und gesperrt: nichts zu sehen
@@ -187,6 +188,19 @@ try {
   await chef.waitForTimeout(400);
   await chef.screenshot({ path: `${BILDER}/schaden-foto-gross.png` });
   await gross1.getByRole("button", { name: "Schließen" }).click();
+  // Der Chef trägt im offenen Fahrzeug selbst ein („+ Eintrag“, ausgelagerter Dialog): Service mit km zieht den km-Stand mit
+  await chef.getByRole("button", { name: "Eintrag", exact: true }).click();
+  const eintragDlg = chef.getByRole("dialog", { name: "Bordbuch-Eintrag" });
+  await eintragDlg.waitFor({ timeout: 10000 });
+  ok(await eintragDlg.getByRole("button", { name: "Service", exact: true }).getAttribute("aria-pressed") === "true", "Chef: „+ Eintrag“ mit Art Service");
+  await eintragDlg.locator("#b-text").fill("ZZ Ölwechsel");
+  await eintragDlg.locator("#b-km").fill("82000");
+  await eintragDlg.getByRole("button", { name: "Speichern" }).click();
+  await eintragDlg.waitFor({ state: "detached", timeout: 15000 }).catch(() => {});
+  const { data: service } = await admin.from("fahrzeug_eintraege").select("art, km, erledigt, erstellt_von").eq("text", "ZZ Ölwechsel");
+  const { data: busNeu } = await admin.from("fahrzeuge").select("km_stand").eq("id", fz.bus).single();
+  ok(service?.length === 1 && service[0].art === "service" && service[0].km === 82000 && service[0].erledigt === true
+    && service[0].erstellt_von === ids.chef && busNeu?.km_stand === 82000, "Chef: Service-Eintrag gespeichert, km-Stand des Busses auf 82.000");
   await chef.context().close();
 
   const chefPc = await anmelden("zz-sf-chef@test.local", { width: 1440, height: 1000 });
