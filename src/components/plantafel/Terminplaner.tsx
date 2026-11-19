@@ -24,13 +24,15 @@ import { cn } from "@/lib/utils";
  * den Stunden, in der Tageszeile die Geräte & Fahrzeuge des Tages. Termine als
  * Blöcke über die Zeit (Montage in Projektfarbe/orange, Besichtigung weiß,
  * Service blau, Büro grau), Urlaub/ZA grün, Krank rot, Schule gelb.
- * - PC: alle Leute nebeneinander; rechts „Noch nicht eingeplant“ und Monatskalender
+ * - PC: alle Leute nebeneinander; rechts der Monatskalender (auf Knopfdruck
+ *   „Noch nicht eingeplant“)
  * - Antippen = kleines Fenster; leere Zelle = schnell einplanen (Projekt oder
  *   Kunde tippen) oder Abwesenheit (auf einer Abwesenheit: bearbeiten/löschen);
  *   am PC leere Zellen aufziehen = Uhrzeit bzw. Zeitraum über mehrere Tage
  * - Ziehen = andere Uhrzeit, anderer Tag, andere Person; unterer Rand = länger
  * - Tageszeile: „+ Fahrzeug“ = zu einem Einsatz mitnehmen; doppelt belegt = rot
- * - Handy: ein Tag (Leute untereinander, Zeit quer) oder eine Person (Mo–Fr)
+ * - Handy: ein Tag (Leute untereinander, Zeit quer, darüber die Fahrzeuge)
+ *   oder eine Person (Mo–Fr)
  */
 
 const WT = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
@@ -604,11 +606,16 @@ export type HandyModus = "tag" | "person";
 /**
  * Handy: entweder ein Tag (Leute untereinander, Zeit quer — wer ist wann wo)
  * oder eine Person (Mo–Fr nebeneinander, Stunden nach unten). Wischen =
- * nächster Tag bzw. nächste Person; nie seitlich scrollen.
+ * nächster Tag bzw. nächste Person; nie seitlich scrollen. Im Tag darüber die
+ * Geräte & Fahrzeuge des Tages wie am PC (Chef: „+ Fahrzeug“).
  */
 export function TerminplanerHandy(p: Gemeinsam & {
   gruppen: Gruppe<Profil>[]; modus: HandyModus; tagIndex: number; onTagIndex: (i: number) => void;
   person: string; onPerson: (id: string) => void; onBlaettern: (r: number) => void;
+  /** Geräte & Fahrzeuge (schon sortiert, nur aktive), Konflikte der Woche, „Eigenen Termin für …“ */
+  geraete: Fahrzeug[];
+  konfliktListe: Konflikt[];
+  onGeraetLeer: (v: { fahrzeugId: string; datum: string }) => void;
 }) {
   const { tage, termine, gruppen, abwesend, projekte, heute, darf } = p;
   const { aendern, loeschen } = useAendern(p.termineKey);
@@ -658,8 +665,17 @@ export function TerminplanerHandy(p: Gemeinsam & {
   const anteil = (min: number) => `${((min - ab) / (bis - ab)) * 100}%`;
 
   let inhalt: ReactNode;
+  let fahrzeugZeile: ReactNode = null;
   if (p.modus === "tag") {
     const tag = tage[Math.max(0, Math.min(6, p.tagIndex))];
+    // Leer (nichts belegt und nur lesen) → die Zeile fällt weg
+    fahrzeugZeile = (
+      <div className="flex flex-wrap items-center gap-1.5 empty:hidden" data-fahrzeug-zeile={tag}>
+        <FahrzeugTag tag={tag} fahrzeuge={p.geraete} termine={termine} konfliktListe={p.konfliktListe} mitarbeiter={p.mitarbeiter} darf={darf} gross
+          aendern={aendern} onReservieren={(fahrzeugId, datum) => p.onGeraetLeer({ fahrzeugId, datum })}
+          onTermin={(t, x, y) => setInfo({ id: t.id, x: Math.min(x, 40), y })} />
+      </div>
+    );
     inhalt = (
       <div className="rounded-lg border bg-card">
         <div className="relative ml-[5.5rem] h-5 border-b text-[10px] text-muted-foreground">
@@ -776,6 +792,7 @@ export function TerminplanerHandy(p: Gemeinsam & {
           <button type="button" aria-label="Nächste Person" onClick={() => weiter(1)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border bg-card"><ChevronRight className="h-5 w-5" /></button>
         </div>
       )}
+      {fahrzeugZeile}
       {inhalt}
       <Legende />
       <p className="px-1 text-[11px] text-muted-foreground">Wischen = {p.modus === "tag" ? "nächster Tag" : "nächste Person"}{darf ? " · leer antippen = eintragen" : ""}</p>

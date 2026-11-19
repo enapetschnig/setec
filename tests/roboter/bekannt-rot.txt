@@ -1,2 +1,1 @@
-2026-11-17-erstaufnahme.mjs  # Termin „Erstaufnahme“-Knopf wird beim Klick abgehängt (Kalender-Umbau 18.11., 95c5269) — schon vor 19.11. rot
-2026-11-17-kalender.mjs  # sucht „Gerätespalte“ — Fahrzeuge stehen seit 95c5269 in der Tageszeile — schon vor 19.11. rot
+# Schon vor einer Änderung rote Tests, je Zeile „datei  # Grund“ — derzeit keine (19.11.2026: 2026-11-17-erstaufnahme und -kalender repariert).

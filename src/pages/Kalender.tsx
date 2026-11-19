@@ -45,7 +45,7 @@ const zeitText = (t: Termin) => (t.ganztags || !t.von ? "ganztägig" : `${uhrzei
  *   ziehen, Knopf „Nicht eingeplant“ = Projektliste statt Monatskalender
  * - Monteur: nur lesen, eigene Termine hervorgehoben; Abwesenheit anderer
  *   nur „abwesend“ (Sicht abwesenheit_kalender)
- * - Handy: Tag | Person | Woche (Liste, Monteur: „Meine“)
+ * - Handy: Tag (darüber die Fahrzeuge des Tages) | Person | Woche (Liste, Monteur: „Meine“)
  */
 export default function Kalender() {
   const pc = useIstPc();
@@ -139,6 +139,8 @@ export default function Kalender() {
     void neuLaden("abwesenheiten", "zeiten");
   };
   const neuerTermin = () => setDialog({ datum: tage.includes(heute) ? heute : von });
+  /** „Eigenen Termin für …“ aus dem Fahrzeug-Fenster: großes Formular mit dem Gerät */
+  const geraetLeer = (v: { fahrzeugId: string; datum: string; von?: string; bis?: string }) => setDialog({ datum: v.datum, von: v.von, bis: v.bis, fahrzeugId: v.fahrzeugId });
 
   /** Projekt aus „Noch nicht eingeplant“ auf eine Person gezogen */
   const projektAblegen = async (projektId: string, ziel: Ablage) => {
@@ -249,7 +251,8 @@ export default function Kalender() {
           </>
         ) : (
           <TerminplanerHandy {...planDaten} gruppen={handy === "tag" ? sichtbar : gruppen} modus={handy} tagIndex={tagIndex} onTagIndex={setTagIndex}
-            person={person} onPerson={(id) => { setPerson(id); setHandy("person"); }} onBlaettern={blaettern} />
+            person={person} onPerson={(id) => { setPerson(id); setHandy("person"); }} onBlaettern={blaettern}
+            geraete={geraete} konfliktListe={liste} onGeraetLeer={geraetLeer} />
         )}
         {dialoge}
       </Seite>
@@ -284,7 +287,7 @@ export default function Kalender() {
       </div>
 
       <Terminplaner className="flex-1" {...planDaten} gruppen={sichtbar} geraete={geraete} konfliktListe={liste}
-        onGeraetLeer={(v) => setDialog({ datum: v.datum, von: v.von, bis: v.bis, fahrzeugId: v.fahrzeugId })}
+        onGeraetLeer={geraetLeer}
         seite={istChef && projektListe ? (
           <NichtEingeplant projekte={projekte} eingeplant={eingeplant} onZu={() => setProjektListe(false)}
             onAblegen={(id, ziel) => void projektAblegen(id, ziel)}
@@ -427,7 +430,9 @@ function HandyListe({
                         {t.ort && <span className="flex items-center gap-1 text-sm text-muted-foreground"><MapPin className="h-3.5 w-3.5" />{t.ort}</span>}
                         {fz.length > 0 && <span className="flex items-center gap-1 text-sm text-muted-foreground"><Truck className="h-3.5 w-3.5" />{fz.join(", ")}</span>}
                         <span className="mt-1.5 flex -space-x-1.5">
-                          {t.mitarbeiter.map((id) => <Avatar key={id} profil={mitarbeiter.find((m) => m.id === id)} className="h-7 w-7 text-[10px] ring-2 ring-card" />)}
+                          {/* nur sichtbare Leute — versteckte Konten (ePower) ohne grauen Platzhalter */}
+                          {t.mitarbeiter.map((id) => mitarbeiter.find((m) => m.id === id)).filter((m): m is Profil => !!m)
+                            .map((m) => <Avatar key={m.id} profil={m} className="h-7 w-7 text-[10px] ring-2 ring-card" />)}
                         </span>
                       </button>
                     </li>

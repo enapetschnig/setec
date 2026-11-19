@@ -6,7 +6,12 @@
 // - Kunde nimmt online an (anon) → Projekt „In Arbeit“ mit Adresse, Fotos, Notizen; Termin hängt am Projekt
 // - Monteur sieht im Projekt den Block „Erstaufnahme“
 // - Chef „Angenommen“ → Projekt, andere Variante abgelehnt; „Gleich Projekt“ ohne Angebot
-// - Service-Termin: Knopf „Regiebericht“ → /regie/neu?kunde=…&termin=…
+// - Service-Termin: Knopf „Regiebericht“ → /regie/neu?kunde=…&termin=… (Handy-Woche und Tablet-Fenster)
+//
+// 19.11.2026: war ab Mittwoch rot („Knopf wird abgehängt“) — nicht wegen des Kalender-Umbaus
+// (95c5269), sondern weil „heute“ ab Mittwoch unter dem Bildrand liegt: click() rollt die Tafel
+// und klickt sofort, das Scroll-Ereignis kommt erst danach an und schließt das eben geöffnete
+// Fenster (Tafel rollt = Fenster zu). Darum `blockOeffnen`: erst ins Bild rollen, dann antippen.
 //
 // Läuft gegen die Testumgebung (testumgebung.mjs start), NIE gegen die echte Datenbank:
 //   APP_URL=http://127.0.0.1:55410 API_URL=http://127.0.0.1:55400 SERVICE_ROLE_KEY=… ANON_KEY=… \
@@ -52,8 +57,8 @@ const service = termine.find((t) => t.titel.includes("Service"));
 
 const fehler = [];
 let browser;
-async function anmelden(email, viewport) {
-  const ctx = await browser.newContext({ viewport, locale: "de-AT", timezoneId: "Europe/Vienna" });
+async function anmelden(email, viewport, touch = false) {
+  const ctx = await browser.newContext({ viewport, locale: "de-AT", timezoneId: "Europe/Vienna", hasTouch: touch });
   await ctx.addInitScript(() => localStorage.setItem("setec.installhinweis", "x"));
   const page = await ctx.newPage();
   page.on("pageerror", (e) => fehler.push(`[${email}] ${e.message}`));
@@ -74,6 +79,13 @@ async function strich(page, loc) {
   await page.mouse.move(b.x + b.width * 0.4, b.y + b.height * 0.7, { steps: 8 });
   await page.mouse.up();
 }
+/** Block im Kalender öffnen: erst ins Bild rollen und das Scroll-Ereignis abwarten, dann klicken bzw. tippen */
+async function blockOeffnen(page, id, tippen = false) {
+  const block = page.locator(`[data-block="${id}"]`).first();
+  await block.scrollIntoViewIfNeeded();
+  await page.waitForTimeout(300);
+  if (tippen) await block.tap(); else await block.click();
+}
 const projekteDesKunden = async () => (await admin.from("projekte").select("*").eq("kunde_id", kunde.id)).data ?? [];
 
 try {
@@ -82,8 +94,8 @@ try {
   const chef = await anmelden("zz-ea-chef@test.local", { width: 1180, height: 820 });
   await chef.goto(`${APP_URL}/kalender`);
   await chef.waitForTimeout(2500);
-  await chef.locator(`[data-block="${besichtigung.id}"]`).first().click();
-  await chef.locator('[data-termin-weiter="erstaufnahme"]').click();
+  await blockOeffnen(chef, besichtigung.id);
+  await chef.locator('[data-balken-info] [data-termin-weiter="erstaufnahme"]').click();
   await chef.waitForURL(/\/erstaufnahmen\/[0-9a-f-]{36}$/, { timeout: 15000 });
   const eaId = chef.url().split("/").pop();
   let { data: ea } = await admin.from("erstaufnahmen").select("*").eq("id", eaId).single();
@@ -203,6 +215,18 @@ try {
     await regieKnopf.first().click();
     await max.waitForURL(/\/regie\/neu\?kunde=/, { timeout: 10000 }).catch(() => {});
     ok(max.url().includes(`kunde=${kunde.id}`) && max.url().includes(`termin=${service.id}`), "Regiebericht öffnet mit Kunde und Termin");
+  }
+  // Derselbe Knopf im kleinen Fenster am Tablet (Finger): Service-Block antippen → „Regiebericht“
+  const maxTablet = await anmelden("zz-ea-monteur@test.local", { width: 1180, height: 820 }, true);
+  await maxTablet.goto(`${APP_URL}/kalender`);
+  await maxTablet.waitForTimeout(2500);
+  await blockOeffnen(maxTablet, service.id, true);
+  const regieFenster = maxTablet.locator('[data-balken-info] [data-termin-weiter="regie"]');
+  ok(await regieFenster.count() === 1, "Tablet: Service-Block antippen → kleines Fenster mit „Regiebericht“");
+  if (await regieFenster.count()) {
+    await regieFenster.tap();
+    await maxTablet.waitForURL(/\/regie\/neu\?kunde=/, { timeout: 10000 }).catch(() => {});
+    ok(maxTablet.url().includes(`kunde=${kunde.id}`) && maxTablet.url().includes(`termin=${service.id}`), "Tablet: Regiebericht öffnet mit Kunde und Termin");
   }
 
   // ── Chef „Angenommen“ (zweite Erstaufnahme mit zwei Varianten) ──

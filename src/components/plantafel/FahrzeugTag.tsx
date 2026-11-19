@@ -21,8 +21,9 @@ type Offen = { fahrzeugId: string | null; x: number; y: number };
  * „+ Fahrzeug“: Fahrzeug wählen → zu einem Einsatz des Tages mitnehmen oder
  * als eigenen Termin reservieren. Antippen eines Kärtchens: wo es dabei ist,
  * dort entfernen oder zu einem weiteren Einsatz mitnehmen.
+ * Am Handy (Tagesansicht) dieselben Kärtchen, nur größer zum Antippen.
  */
-export function FahrzeugTag({ tag, fahrzeuge, termine, konfliktListe, mitarbeiter, darf, aendern, onReservieren, onTermin }: {
+export function FahrzeugTag({ tag, fahrzeuge, termine, konfliktListe, mitarbeiter, darf, aendern, onReservieren, onTermin, gross = false }: {
   tag: string;
   /** aktive Geräte & Fahrzeuge, schon sortiert */
   fahrzeuge: Fahrzeug[];
@@ -33,6 +34,8 @@ export function FahrzeugTag({ tag, fahrzeuge, termine, konfliktListe, mitarbeite
   aendern: (t: Termin, neu: Partial<Termin>, text?: string) => Promise<boolean>;
   onReservieren: (fahrzeugId: string, tag: string) => void;
   onTermin: (t: Termin, x: number, y: number) => void;
+  /** Handy: Kärtchen in Fingergröße */
+  gross?: boolean;
 }) {
   const [offen, setOffen] = useState<Offen | null>(null);
   const amTage = termine.filter((t) => amTag(t, tag));
@@ -46,19 +49,19 @@ export function FahrzeugTag({ tag, fahrzeuge, termine, konfliktListe, mitarbeite
         const rot = geraetDoppelt(konfliktListe, f.id, tag).size > 0;
         const bei = amTage.filter((t) => t.fahrzeuge.includes(f.id)).map((t) => t.titel);
         return (
-          <button key={f.id} type="button" onClick={(e) => setOffen({ fahrzeugId: f.id, x: e.clientX, y: e.clientY })}
+          <button key={f.id} type="button" onClick={(e) => setOffen({ fahrzeugId: f.id, x: e.clientX, y: e.clientY })} data-fahrzeug-tag={f.id}
             title={`${f.name}${rot ? " — doppelt vergeben" : ""} · ${bei.join(", ")}`}
-            className={cn("flex h-5 max-w-40 items-center gap-1 rounded-full border px-1.5 text-[11px] font-medium",
+            className={cn("flex max-w-40 items-center rounded-full border font-medium", gross ? "h-9 gap-1.5 px-3 text-sm" : "h-5 gap-1 px-1.5 text-[11px]",
               rot ? "border-status-rot-fg/50 bg-status-rot text-status-rot-fg" : "bg-card hover:border-foreground/40")}>
-            <Icon className="h-3 w-3 shrink-0" /><span className="truncate">{rot ? "⚠ " : ""}{f.name}</span>
+            <Icon className={cn("shrink-0", gross ? "h-4 w-4" : "h-3 w-3")} /><span className="truncate">{rot ? "⚠ " : ""}{f.name}</span>
           </button>
         );
       })}
       {darf && fahrzeuge.length > 0 && (
         <button type="button" onClick={(e) => setOffen({ fahrzeugId: null, x: e.clientX, y: e.clientY })}
-          className="flex h-5 items-center gap-0.5 rounded-full px-1.5 text-[11px] font-semibold text-primary hover:bg-primary/10"
+          className={cn("flex items-center gap-0.5 rounded-full font-semibold text-primary hover:bg-primary/10", gross ? "h-9 px-2.5 text-sm" : "h-5 px-1.5 text-[11px]")}
           title="Fahrzeug oder Gerät für diesen Tag einteilen">
-          <Plus className="h-3 w-3" /> Fahrzeug
+          <Plus className={gross ? "h-4 w-4" : "h-3 w-3"} /> Fahrzeug
         </button>
       )}
       {/* Ins body — die Tageszeile klebt mit eigenem z-index, sonst lägen die nächsten Tage darüber */}
@@ -108,7 +111,8 @@ function FahrzeugFenster({ offen, tag, fahrzeuge, amTage, konfliktListe, mitarbe
   }, [onZu]);
 
   const f = fahrzeuge.find((x) => x.id === offen.fahrzeugId);
-  const leute = (t: Termin) => t.mitarbeiter.map((id) => mitarbeiter.find((m) => m.id === id)?.vorname ?? name(mitarbeiter.find((m) => m.id === id))).filter(Boolean).join(", ");
+  // Nur wer in der Liste steht — versteckte Konten (ePower) nicht als „–“
+  const leute = (t: Termin) => t.mitarbeiter.map((id) => mitarbeiter.find((m) => m.id === id)).filter((m): m is Profil => !!m).map((m) => m.vorname || name(m)).join(", ");
   const zeile = (t: Termin) => [zeitText(t), leute(t)].filter(Boolean).join(" · ");
 
   return (

@@ -1,7 +1,7 @@
 # Ablauf: Termin → Erstaufnahme → Angebot → Projekt → Einteilung → Regie/Rechnung
 
 Stand 17.11.2026, aus der Besprechung mit Stefan Sattler (`docs/SETEC-BESPRECHUNG-2026-11-17.md`)
-und Christophs Vorgaben. Grundsatz: **ein Projekt entsteht erst, wenn wirklich gearbeitet wird**
+und Christophs Vorgaben; Kalender (Abschnitt 1) nachgeführt am 19.11.2026 (Umbau vom 18.11.). Grundsatz: **ein Projekt entsteht erst, wenn wirklich gearbeitet wird**
 („sonst müllt man sich mit Projekten zu“), und **alles, was vorher erfasst wurde, ist dann schon drin**.
 
 ## Überblick
@@ -28,17 +28,24 @@ Anfrage (Telefon/Mail)
 - Der bestehende **Wochenplan** (Spalten = Leute nach Gruppen, Zeilen = Tage mit Stundenleiste,
   wie Stefans „Terminplaner“) wird **der Kalender**. Gantt, Monatsblatt und der Umschalter fallen
   weg; Menüpunkt „Kalender“ (Suche findet auch „Plantafel“, „Einteilung“). `/plantafel` leitet auf `/kalender`.
-- **Geräte & Fahrzeuge** als zuklappbare Spaltengruppe rechts (Steiger, Kernbohrgerät = Maschine,
-  Anhänger, Autos/Busse). Ein Gerät steckt in `termine.fahrzeuge[]`; in seiner Spalte erscheinen
-  alle Termine, die es nutzen. Doppelt belegt = rot markiert.
+- **Geräte & Fahrzeuge** (Steiger, Kernbohrgerät = Maschine, Anhänger, Autos/Busse) stehen seit
+  18.11.2026 **in der Tageszeile neben dem Datum** (keine eigenen Spalten mehr): je an dem Tag
+  belegtem Gerät ein Kärtchen, doppelt belegt = rot mit ⚠. Dahinter „+ Fahrzeug“ (Chef) → Gerät
+  wählen → „Mitnehmen zu“ einem Einsatz des Tages, „Dabei bei“ mit ✕ wieder abnehmen oder „Eigenen
+  Termin für …“ (großes Formular mit dem Gerät). Ein Gerät steckt in `termine.fahrzeuge[]`. Am Handy
+  in der Tagesansicht dieselben Kärtchen über den Leuten.
 - **Termin-Art** (neu `termine.art`): `montage` (orange/Projektfarbe), `besichtigung` (weiß mit
   Rand), `service` (blau), `buero` (grau, eigene Termine). Abwesenheiten bleiben eigene Einträge
   (Urlaub/ZA grün, Krank rot) und stehen im selben Raster.
-- **Neuer Termin: zuerst der Kunde** (Suche; „+ Neuer Kunde“ mit Adress-Vorschlägen), dann
+- **Neuer Termin: zuerst die Art, dann der Kunde** (Suche; „+ Neuer Kunde“ mit Adress-Vorschlägen), dann
   - Montage: nur **dessen** Projekte „In Arbeit“ zur Wahl, Ort = Projektadresse;
   - Besichtigung/Service: Adresse des Kunden oder eine seiner Projektadressen oder frei — **kein Projekt**;
   - Büro: ohne Kunde.
   Neu `termine.kunde_id`. Danach wie bisher Team, Leute, Geräte, Zeit.
+- **Schnell einplanen** (Chef): leere Stelle antippen oder am PC aufziehen = kleines Fenster —
+  Projekt tippen = Montage (nur Projekte „In Arbeit“, wie im Formular), Kunde tippen = Besichtigung;
+  „Mit Details …“ öffnet das große Formular. Rechts am PC der Monatskalender zum Springen; der Knopf
+  „Nicht eingeplant“ zeigt dort stattdessen die Projekte „In Arbeit“ ohne Einsatz zum Hineinziehen.
 - **Mitarbeiter**: sehen ihre Einteilung aus dem Kalender — am Handy „Heute / Morgen / Woche“
   (Startseite + Menüpunkt Kalender, nur lesen, Abwesenheiten anderer nur „abwesend“). Push bei
   Änderung bleibt; auch ein Gerätewechsel ist eine Änderung, die gemeldet wird.
@@ -110,9 +117,9 @@ Anfrage (Telefon/Mail)
 ## Stolpersteine beim Bau (aus der Bestandsaufnahme)
 
 - Kalender: Die Seitenliste **„Noch nicht eingeplant“** hing am Gantt — in den Kalender übernehmen
-  (Projekte „In Arbeit“ ohne Einsatz ab heute), nicht verlieren. Migration `termine.kunde_id`
-  aus `projekte.kunde_id` nachtragen, `art` für Bestand: `montage` mit Projekt, sonst `buero`.
-  `termine_push` auch bei Änderung von `fahrzeuge` auslösen.
+  (Projekte „In Arbeit“ ohne Einsatz ab heute), nicht verlieren (seit 18.11. hinter dem Knopf
+  „Nicht eingeplant“). Migration `termine.kunde_id` aus `projekte.kunde_id` nachtragen, `art` für
+  Bestand: `montage` mit Projekt, sonst `buero`. `termine_push` auch bei Änderung von `fahrzeuge` auslösen.
 - Regie ohne Projekt: `regieberichte.projekt_id not null`, CHECK `buchung_passt` (Material verlangt
   projekt_id), Trigger `regie_nur_in_arbeit` (bei projekt_id null durchlassen), RPC
   `regie_zeiten_zuordnen` (filtert aufs Projekt), Unterschrift-Pfad `<projekt_id>/unterschriften/`
@@ -127,7 +134,7 @@ Anfrage (Telefon/Mail)
 
 ## Reihenfolge der Umsetzung
 
-1. Kalender (Termin-Art, Kunde zuerst, Geräte-Spalten, nur noch Wochenplan, Mitarbeiter-Sicht) — umgesetzt 17.11.2026 (Knöpfe Erstaufnahme/Regiebericht am Termin mit Stufe 3).
+1. Kalender (Termin-Art, Kunde zuerst, Geräte-Spalten, nur noch Wochenplan, Mitarbeiter-Sicht) — umgesetzt 17.11.2026 (Knöpfe Erstaufnahme/Regiebericht am Termin mit Stufe 3); Umbau 18.11.: Geräte in der Tageszeile statt eigener Spalten, Schnell einplanen, Monatskalender.
 2. Regiebericht ohne Projekt + Material am Handy (Katalog/Sprache) + „Noch nicht verrechnet“ unter Rechnungen.
 3. Erstaufnahme + Angebot ohne Projekt + Annahme → Projekt mit allen Daten — umgesetzt 17.11.2026 (KONZEPT „Erstaufnahme, Angebot ohne Projekt, Annahme“).
 

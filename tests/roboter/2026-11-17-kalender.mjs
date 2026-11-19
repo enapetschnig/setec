@@ -2,8 +2,8 @@
 // - /plantafel leitet auf /kalender
 // - Termin „Service“: Kunde zuerst, Ort = Kundenadresse, kein Projekt
 // - Termin „Montage“: Kunde → sein einziges Projekt „In Arbeit“ vorgewählt, Ort = Projektadresse
-// - Geräte-Spalten: Steiger doppelt belegt = rot
-// - „Noch nicht eingeplant“: Projekt auf eine Person ziehen = Montage bis Freitag
+// - Geräte in der Tageszeile (seit 18.11., 95c5269 keine Gerätespalten mehr): Steiger doppelt belegt = rotes Kärtchen
+// - „Nicht eingeplant“ (Knopf in der Leiste): Projekt auf eine Person ziehen = Montage bis Freitag
 // - Monteur: Kalender nur lesen, am Handy „Woche“ mit seinen Terminen
 //
 // Läuft gegen die Testumgebung (testumgebung.mjs start), NIE gegen die echte Datenbank:
@@ -86,9 +86,9 @@ try {
   ok(true, "/plantafel leitet auf /kalender");
   await chef.waitForTimeout(2000);
   ok(await chef.getByRole("button", { name: /^Gantt$/ }).count() === 0, "kein Umschalter Gantt mehr");
-  const zelle = chef.locator(`[data-zelle="g:${steiger.id}"][data-tag="${tag}"]`);
-  ok(await zelle.count() === 1, "Gerätespalte ZZ Steiger da");
-  ok(/bg-status-rot/.test((await zelle.getAttribute("class")) ?? ""), "Steiger doppelt belegt = rot");
+  const kaertchen = chef.locator(`[data-tagzeile="${tag}"] [data-fahrzeug-tag="${steiger.id}"]`);
+  ok(await kaertchen.count() === 1 && await chef.locator(`[data-zelle="g:${steiger.id}"]`).count() === 0, "ZZ Steiger als Kärtchen in der Tageszeile, keine Gerätespalte");
+  ok(/bg-status-rot/.test((await kaertchen.getAttribute("class")) ?? "") && (await kaertchen.innerText()).includes("⚠"), "Steiger doppelt belegt = rot");
   await chef.screenshot({ path: `${BILDER}/kalender-pc.png` });
 
   // Service: Kunde zuerst, Ort = Kundenadresse, kein Projekt
@@ -119,10 +119,11 @@ try {
   const [montage] = await termineVon("ZZ Montage PV");
   ok(montage?.art === "montage" && montage.projekt_id === pv.id && montage.kunde_id === kunde.id, "Montage gespeichert: Projekt und Kunde");
 
-  // Noch nicht eingeplant: neues Projekt auf Max ziehen
+  // Noch nicht eingeplant (Knopf in der Leiste): neues Projekt auf Max ziehen
   const { data: neuP } = await admin.from("projekte").insert({ name: "ZZ Zählerkasten", status: "aktiv", kunde_id: kunde.id }).select("id").single();
   await chef.reload();
   await chef.waitForTimeout(2500);
+  await chef.getByRole("button", { name: /Nicht eingeplant/ }).click();
   const quelle = chef.locator(`[data-projekt-ziehen="${neuP.id}"]`);
   ok(await quelle.count() === 1, "„Noch nicht eingeplant“ zeigt das neue Projekt");
   const ziel = chef.locator(`[data-zelle="${monteurId}"][data-tag="${tag}"]`);

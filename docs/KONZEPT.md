@@ -870,7 +870,9 @@ Migrationen `20261110100000_fuhrpark_teams_plantafel.sql` und
   altem Terminplaner — bis 18.11.2026 erst ab 1536 px, daher „weg“).
   Versteckte Konten (`profiles.versteckt`, ePower-Zugang) stehen nirgends: weder in
   der Geschäftsführung noch in Listen, Auswertungen, Einstellungen (`useMitarbeiter`
-  und die eigenen Abfragen filtern `versteckt = false`).
+  und die eigenen Abfragen filtern `versteckt = false`). Der `TerminDialog` wählt so
+  ein Konto auch nicht sich selbst vor (bis 19.11. war es unsichtbar eingeteilt);
+  Wochenliste und Fahrzeug-Fenster lassen es weg statt grauem Platzhalter bzw. „–“.
 - **Geräte & Fahrzeuge** (seit 18.11.2026 keine eigenen Spalten mehr) in der
   Tageszeile neben dem Datum (`FahrzeugTag`): je an dem Tag belegtem Gerät ein
   Kärtchen (doppelt belegt = rot mit ⚠, `konflikte` → `geraetDoppelt`), dahinter
@@ -878,10 +880,15 @@ Migrationen `20261110100000_fuhrpark_teams_plantafel.sql` und
   `geraeteSpalten`, je „frei“ / „bei …“ / „doppelt“) → Gerät wählen → „Mitnehmen zu“
   einem Einsatz des Tages (mit Leuten), „Dabei bei“ mit ✕ abnehmen oder „Eigenen
   Termin für …“. Kärtchen antippen = dasselbe Fenster für dieses Gerät. Im
-  `BalkenInfo` weiter an-/abhaken.
+  `BalkenInfo` weiter an-/abhaken. Am Handy in der Tagesansicht dieselbe Zeile
+  über den Leuten (`gross`, Kärtchen in Fingergröße); ist nichts belegt und darf
+  man nur lesen, fällt sie weg.
 - **Chef**: leere Zelle antippen oder am PC aufziehen = kleines Fenster `ZellWahl`
   zum **schnell Einplanen** (kein großes Formular): Suche, ohne Suche zuerst die
-  noch nicht eingeplanten Projekte; Projekt antippen = Montage (angetippt: der Tag
+  noch nicht eingeplanten Projekte — nur „In Arbeit“ wie im Formular (ein Projekt im
+  Angebot wird erst mit der Annahme eines; bis 19.11. bot das Fenster sie an, das
+  Formular nicht). Kunde ohne Projekt „In Arbeit“: Hinweis, „Besichtigung bei …“
+  bleibt. Projekt antippen = Montage (angetippt: der Tag
   7:00–15:30, aufgezogen: genau der Zeitraum), Kunde = Besichtigung im angetippten
   2-h-Fenster mit Kundenadresse als Ort; Enter nimmt den ersten Treffer. Gibt es zum
   selben Projekt und Zeitraum schon einen Termin, kommt die Person dazu.
@@ -896,14 +903,15 @@ Migrationen `20261110100000_fuhrpark_teams_plantafel.sql` und
 - **„Nicht eingeplant (n)“** (PC, Chef) als Knopf in der Leiste — zeigt rechts statt
   des Monatskalenders die Liste (`components/plantafel/NichtEingeplant.tsx`, ✕ = wieder
   Monatskalender): Projekte „In Arbeit“ ohne Termin ab heute (`nichtEingeplant`; Suche
-  findet alle laufenden, auch im Angebot). Auf eine Person an einem Tag ziehen =
+  findet alle „In Arbeit“, auch schon eingeplante — keines im Angebot). Auf eine Person an einem Tag ziehen =
   Montage bis Freitag 7:00–15:30 mit Kunde (`einsatzAusProjekt`, Rückgängig im
   Hinweis), antippen = Formular mit dem Projekt.
 - **Monteur**: Menüpunkt Kalender nur lesend (`darf` = Chef): eigene Spalte und
   eigene Termine hervorgehoben, Abwesenheit anderer nur „abwesend“ (Sicht
   `abwesenheit_kalender`), Termin antippen → „Öffnen“ (Formular nur lesen, „Erledigt“,
   wenn er dabei ist). Dazu die Startseite „Heute/Morgen“ (`EinsatzBereich`).
-- **Handy**: „Tag“ (Leute untereinander, Zeit quer), „Person“ (Mo–Fr, Stunden nach
+- **Handy**: „Tag“ (Leute untereinander, Zeit quer, darüber die Fahrzeuge des Tages,
+  Chef mit „+ Fahrzeug“), „Person“ (Mo–Fr, Stunden nach
   unten; wischen = nächster Tag bzw. nächste Person) oder „Woche“ (Liste je Tag,
   Meine/Alle; Monteur startet mit Woche/Meine) — gemerkt in `elektro.kalender.handy`.
 - **Rechte** (Migration `20261116150000_termine_nur_chef.sql`): Termine legt nur der

@@ -13,7 +13,8 @@ export type Ablage = { spalte: string; tag: string };
  * Rechts im Kalender (PC, Chef) auf Knopfdruck statt des Monatskalenders:
  * Projekte „In Arbeit“ ohne Einsatz ab heute. Auf eine Person an einem Tag
  * ziehen = Montage bis Freitag, antippen = Formular mit dem Projekt. Die Suche
- * findet alle laufenden, auch die noch im Angebot.
+ * findet alle „In Arbeit“, auch schon eingeplante — eines im Angebot nicht
+ * (Montage erst nach der Annahme, wie im Termin-Formular).
  */
 export function NichtEingeplant({ projekte, eingeplant, onAblegen, onAntippen, onZu }: {
   projekte: ProjektMitKunde[];
@@ -29,7 +30,7 @@ export function NichtEingeplant({ projekte, eingeplant, onAblegen, onAntippen, o
   zugRef.current = zug;
   const ungeplant = nichtEingeplant(projekte, eingeplant);
   const q = suche.trim();
-  const liste = (q ? projekteSuchen(projekte.filter((p) => p.status === "aktiv" || p.status === "angebot"), q) : ungeplant).slice(0, 60);
+  const liste = (q ? projekteSuchen(projekte.filter((p) => p.status === "aktiv"), q) : ungeplant).slice(0, 60);
 
   useEffect(() => {
     if (!zug) return;
@@ -96,7 +97,7 @@ export function NichtEingeplant({ projekte, eingeplant, onAblegen, onAntippen, o
             className="h-10 w-full rounded-md border bg-background pl-8 pr-2 text-base [@media(pointer:fine)]:text-sm" />
         </label>
         <p className="px-3 pb-1 pt-2 text-[11px] text-muted-foreground">
-          {q ? "Laufende Projekte" : "In Arbeit, ohne Einsatz ab heute"} — auf eine Person ziehen oder antippen
+          {q ? "In Arbeit, auch eingeplante" : "In Arbeit, ohne Einsatz ab heute"} — auf eine Person ziehen oder antippen
         </p>
         <ul className="min-h-0 flex-1 space-y-1.5 overflow-y-auto px-3 pb-3">
           {liste.map((p) => {
@@ -111,7 +112,6 @@ export function NichtEingeplant({ projekte, eingeplant, onAblegen, onAntippen, o
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-1.5 text-xs">
                       <span className="font-mono font-semibold">{p.nummer}</span>
-                      {p.status === "angebot" && <span className="rounded-full bg-muted px-1.5 text-[10px] font-semibold text-muted-foreground">Angebot</span>}
                       {eingeplant.has(p.id) && <span className="text-[10px] text-muted-foreground">eingeplant</span>}
                     </span>
                     <span className="block truncate text-sm font-medium">{p.name}</span>
@@ -122,7 +122,7 @@ export function NichtEingeplant({ projekte, eingeplant, onAblegen, onAntippen, o
               </li>
             );
           })}
-          {!liste.length && <li className="py-4 text-center text-xs text-muted-foreground">{q ? "Kein Projekt gefunden." : "Alle Projekte in Arbeit sind eingeplant."}</li>}
+          {!liste.length && <li className="py-4 text-center text-xs text-muted-foreground">{q ? "Kein Projekt „In Arbeit“ gefunden." : "Alle Projekte in Arbeit sind eingeplant."}</li>}
         </ul>
       </aside>
       {gezogen && zug && (

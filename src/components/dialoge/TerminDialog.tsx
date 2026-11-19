@@ -134,7 +134,8 @@ export function TerminDialog({
         projektId: p?.id ?? "",
         kundeId: p?.kunde_id ?? "",
         ort: adresseZeile(p),
-        dabei: mitarbeiterId ? [mitarbeiterId] : profil && !teamId && !fahrzeugId ? [profil.id] : [],
+        // Sich selbst vorwählen — ein verstecktes Konto (ePower) nie: es steht nirgends zur Wahl und wäre unsichtbar eingeteilt
+        dabei: mitarbeiterId ? [mitarbeiterId] : profil && !profil.versteckt && !teamId && !fahrzeugId ? [profil.id] : [],
         fahrzeuge: fahrzeugId ? [fahrzeugId] : [],
         ...(vorVon ? { von: vorVon, bis: vorBisZeit && vorBisZeit > vorVon ? vorBisZeit : vorVon } : {}),
       };

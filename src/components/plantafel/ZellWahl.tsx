@@ -48,9 +48,10 @@ function kundenSuchen(kunden: Kunde[], q: string): Kunde[] {
  * Kleines Fenster an der angetippten Stelle (nur Chef) — schnell einplanen
  * ohne großes Formular (Christoph 18.11.2026): Projekt oder Kunde tippen,
  * antippen, fertig. Ohne Suche stehen die noch nicht eingeplanten Projekte
- * oben. Projekt = Montage, Kunde = Besichtigung. „Mit Details …“ öffnet das
- * große Formular, „Abwesenheit“ den Urlaub/Krank-Dialog; auf einer
- * Abwesenheit zusätzlich bearbeiten/löschen.
+ * oben. Projekt = Montage, nur „In Arbeit“ wie im Termin-Formular (ein
+ * Projekt im Angebot wird erst mit der Annahme eines) — Kunde = Besichtigung.
+ * „Mit Details …“ öffnet das große Formular, „Abwesenheit“ den
+ * Urlaub/Krank-Dialog; auf einer Abwesenheit zusätzlich bearbeiten/löschen.
  */
 export function ZellWahl({ wahl, projekte, kunden, eingeplant, onProjekt, onKunde, onMehr, onAbwesenheit, onAbwBearbeiten, onAbwLoeschen, onZu }: {
   wahl: LeerWahl;
@@ -95,9 +96,9 @@ export function ZellWahl({ wahl, projekte, kunden, eingeplant, onProjekt, onKund
   const q = suche.trim();
   const ungeplant = useMemo(() => nichtEingeplant(projekte, eingeplant), [projekte, eingeplant]);
   const projektListe = useMemo(() => {
-    if (q) return projekteSuchen(projekte.filter((p) => p.status === "aktiv" || p.status === "angebot"), q).slice(0, 6);
-    const rest = projekte.filter((p) => p.status === "aktiv" && !ungeplant.includes(p));
-    return [...ungeplant, ...rest].slice(0, 6);
+    const inArbeit = projekte.filter((p) => p.status === "aktiv");
+    if (q) return projekteSuchen(inArbeit, q).slice(0, 6);
+    return [...ungeplant, ...inArbeit.filter((p) => !ungeplant.includes(p))].slice(0, 6);
   }, [projekte, ungeplant, q]);
   const kundenListe = useMemo(() => kundenSuchen(kunden, q), [kunden, q]);
 
@@ -158,8 +159,7 @@ export function ZellWahl({ wahl, projekte, kunden, eingeplant, onProjekt, onKund
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-1.5 text-xs">
                       <span className="font-mono font-semibold">{p.nummer}</span>
-                      {!eingeplant.has(p.id) && p.status === "aktiv" && <span className="rounded-full bg-status-gelb px-1.5 text-[10px] font-semibold text-status-gelb-fg">nicht eingeplant</span>}
-                      {p.status === "angebot" && <span className="rounded-full bg-muted px-1.5 text-[10px] font-semibold text-muted-foreground">Angebot</span>}
+                      {!eingeplant.has(p.id) && <span className="rounded-full bg-status-gelb px-1.5 text-[10px] font-semibold text-status-gelb-fg">nicht eingeplant</span>}
                     </span>
                     <span className="block truncate font-medium">{p.name}</span>
                     {(p.kunden?.name || p.ort) && <span className="block truncate text-xs text-muted-foreground">{[p.kunden?.name, p.ort ?? p.kunden?.ort].filter(Boolean).join(" · ")}</span>}
@@ -172,6 +172,9 @@ export function ZellWahl({ wahl, projekte, kunden, eingeplant, onProjekt, onKund
 
         {kundenListe.length > 0 && (
           <ul className="space-y-0.5">
+            {!projektListe.length && (
+              <li className="px-1 pb-0.5 text-[11px] text-muted-foreground">Kein Projekt „In Arbeit“ — ein Projekt entsteht, wenn das Angebot angenommen ist.</li>
+            )}
             <li className="px-1 pt-0.5 text-[11px] text-muted-foreground">Besichtigung bei</li>
             {kundenListe.map((k) => (
               <li key={k.id}>
