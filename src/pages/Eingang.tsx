@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { useSearchParams } from "react-router-dom";
 import { Check, Download, Inbox, Loader2, MailOpen, Paperclip, Plus, Search, X } from "lucide-react";
 import { bilanzText, postfachAbrufen, usePostfaecher } from "@/lib/postfach";
+import { UngeleseneHinweis } from "@/components/postfach/Postfach";
 import { Seite } from "@/components/PageHeader";
 import { Leer, StatusPille } from "@/components/Bausteine";
 import { Button } from "@/components/ui/button";
@@ -235,6 +236,7 @@ export default function Eingang() {
       }
     >
       <div className="space-y-3">
+        {einlesen.length > 0 && <UngeleseneHinweis />}
         <JahrWahl jahre={jahre} jahr={jahr} onWahl={setJahr} ueberAlle={ueberAlle} />
         {/* eine Zeile zum Wischen wie bei Rechnungen; leere Filter nur, wenn gewählt */}
         <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 lg:pb-0" role="group" aria-label="Status">

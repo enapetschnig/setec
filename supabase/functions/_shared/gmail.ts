@@ -17,6 +17,20 @@ export class PostfachFehler extends Error {
   }
 }
 
+/**
+ * Lohnt ein neuer Versuch später? KI überlastet, Gmail 429/5xx, Netz weg — dann
+ * zählt der Versuch beim Abruf nicht und der Lauf hört auf (sonst stünden nach
+ * einer Störung alle Mails als „nicht lesbar“ da). PostfachFehler tragen immer
+ * 502 — bei ihnen zählt nur der Gmail-Status im Text.
+ */
+export function voruebergehend(e: unknown): boolean {
+  const x = e as { status?: unknown; message?: unknown } | null;
+  const text = String(x?.message ?? e ?? "");
+  if (/^Gmail \((408|429|5\d\d)\)/.test(text)) return true;
+  if (!(e instanceof PostfachFehler) && typeof x?.status === "number") return x.status === 408 || x.status === 429 || x.status >= 500;
+  return /overloaded|rate.?limit|ECONNRESET|ETIMEDOUT|fetch failed|network|connection error|timeout|timed out|nicht erreichbar/i.test(text);
+}
+
 /** base64 oder rohes JSON → Dienstkonto */
 export function dienstkontoLesen(roh: string | undefined | null): Dienstkonto {
   if (!roh) throw new PostfachFehler("dienstkonto", "Der Postfach-Zugang ist nicht eingerichtet (Secret GOOGLE_MAIL_DIENSTKONTO fehlt).", 503);

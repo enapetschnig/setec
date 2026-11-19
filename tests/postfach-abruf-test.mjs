@@ -8,6 +8,9 @@
  *   node ~/Developer/_baukasten/werkzeuge/roboter/testumgebung.mjs start
  *   TEST_URL=http://127.0.0.1:55200 TEST_SERVICE_KEY=… node tests/postfach-abruf-test.mjs ~/kundendaten/google-app-mail.json
  *
+ * Erlaubte Domains wie das Secret der Function: POSTFACH_DOMAINS (Standard hier
+ * „epowergmbh.at“ — die Testmails gehen nur an hallo@epowergmbh.at).
+ *
  * Schickt zwei ZZTEST-Mails an das Postfach (Rechnung + AGB), ruft ab, prüft Datenbank,
  * Label und gelesen, ruft nochmal ab (nichts doppelt), räumt die Testmails weg (Papierkorb).
  */
@@ -16,12 +19,15 @@ import { createClient } from "@supabase/supabase-js";
 import { abrufen } from "../supabase/functions/_shared/abruf.ts";
 import { dienstkontoLesen, Gmail } from "../supabase/functions/_shared/gmail.ts";
 import { mailBauen } from "../supabase/functions/_shared/mime.ts";
+import { domainsLesen } from "../supabase/functions/_shared/postfach.ts";
 
 const POSTFACH = "hallo@epowergmbh.at";
 const [datei] = process.argv.slice(2);
 const url = process.env.TEST_URL, key = process.env.TEST_SERVICE_KEY;
 if (!datei || !url || !key) { console.error("Aufruf: TEST_URL=… TEST_SERVICE_KEY=… node tests/postfach-abruf-test.mjs <dienstkonto.json>"); process.exit(1); }
 if (!/^http:\/\/(127\.0\.0\.1|localhost):/.test(url)) { console.error("Nur gegen die lokale Testumgebung!"); process.exit(1); }
+const domains = domainsLesen(process.env.POSTFACH_DOMAINS ?? "epowergmbh.at");
+if (!domains.includes(POSTFACH.split("@")[1])) { console.error(`POSTFACH_DOMAINS muss ${POSTFACH.split("@")[1]} enthalten.`); process.exit(1); }
 
 const sb = createClient(url, key, { auth: { persistSession: false } });
 const sa = dienstkontoLesen(fs.readFileSync(datei, "utf8"));
@@ -49,12 +55,12 @@ if (eP) throw eP;
 const { error: eK } = await sb.from("kunden").insert({ name: "Sonepar", art: "lieferant", namen: ["Sonepar Österreich GmbH"] });
 if (eK) console.log("Kontakt nicht angelegt (egal):", eK.message);
 
-// fester Leser statt Claude: „RECHNUNG“ im PDF → Rechnung von Sonepar
-const lesen = async (bytes) => {
-  const text = new TextDecoder().decode(bytes);
-  if (!text.includes("RECHNUNG")) return { art: "unklar", lieferant: null, nummer: null, datum: null, faellig_am: null, netto: null, ust_satz: null, brutto: null, iban: null, skonto_prozent: null, skonto_bis: null, lieferschein_nummern: [], positionen: [], hinweis: null };
+// fester Leser statt Claude: „RECHNUNG“ im PDF → Rechnung von Sonepar (der Anhang kommt base64 wie für die KI)
+const lesen = async (datei) => {
+  const text = Buffer.from(datei.base64, "base64").toString("latin1");
+  if (!text.includes("RECHNUNG")) return { art: "unklar", lieferant: null, lieferant_uid: null, nummer: null, datum: null, faellig_am: null, netto: null, ust_satz: null, brutto: null, iban: null, skonto_prozent: null, skonto_bis: null, lieferschein_nummern: [], positionen: [], hinweis: null };
   return {
-    art: "rechnung", lieferant: "Sonepar Österreich GmbH", nummer: kennung, datum: "2026-11-17", faellig_am: "2026-12-17",
+    art: "rechnung", lieferant: "Sonepar Österreich GmbH", lieferant_uid: null, nummer: kennung, datum: "2026-11-17", faellig_am: "2026-12-17",
     netto: 125, ust_satz: 20, brutto: 150, iban: "AT611904300234573201", skonto_prozent: 2, skonto_bis: "2026-11-27",
     lieferschein_nummern: ["LS-1"], hinweis: null,
     positionen: [
@@ -65,7 +71,7 @@ const lesen = async (bytes) => {
 };
 const suche = `subject:${kennung} has:attachment newer_than:1d`;
 
-const b1 = await abrufen({ sb, sa, lesen, suche });
+const b1 = await abrufen({ sb, sa, lesen, domains, suche });
 console.log("1. Abruf:", JSON.stringify(b1));
 pruef(b1.rechnungen === 1 && b1.andere === 1 && b1.fehler === 0, "1 Rechnung, 1 Mail ohne Rechnung");
 const { data: er } = await sb.from("eingangsrechnungen").select("*, eingang_positionen(*)").eq("nummer", kennung);
@@ -88,12 +94,12 @@ for (const [i, id] of ids.entries()) {
   if (i === 0) pruef(!l.includes("UNREAD"), "Rechnungs-Mail als gelesen markiert");
 }
 
-const b2 = await abrufen({ sb, sa, lesen, suche });
+const b2 = await abrufen({ sb, sa, lesen, domains, suche });
 pruef(b2.rechnungen + b2.andere + b2.doppelt + b2.fehler === 0, "2. Abruf: nichts doppelt verarbeitet");
 
 // gleiche Rechnung aus einer anderen Mail → doppelt
 await sb.from("postfach_mails").delete().eq("postfach", POSTFACH).ilike("betreff", `${kennung} Rechnung`);
-const b3 = await abrufen({ sb, sa, lesen, suche });
+const b3 = await abrufen({ sb, sa, lesen, domains, suche });
 const { count } = await sb.from("eingangsrechnungen").select("id", { count: "exact", head: true }).eq("nummer", kennung);
 pruef(b3.doppelt === 1 && count === 1, "gleiche Rechnung nochmal → „doppelt“, nicht neu angelegt");
 

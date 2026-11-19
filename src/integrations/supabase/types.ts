@@ -1429,6 +1429,8 @@ export type Database = {
           kategorie: string
           kategorie_id: string | null
           lieferant: string
+          lieferant_gelesen: string | null
+          lieferant_uid: string | null
           lieferschein_nummern: string[]
           lastschrift: boolean
           lastschrift_tag: number | null
@@ -1464,6 +1466,8 @@ export type Database = {
           kategorie?: string
           kategorie_id?: string | null
           lieferant: string
+          lieferant_gelesen?: string | null
+          lieferant_uid?: string | null
           lieferschein_nummern?: string[]
           lastschrift?: boolean
           lastschrift_tag?: number | null
@@ -1499,6 +1503,8 @@ export type Database = {
           kategorie?: string
           kategorie_id?: string | null
           lieferant?: string
+          lieferant_gelesen?: string | null
+          lieferant_uid?: string | null
           lieferschein_nummern?: string[]
           lastschrift?: boolean
           lastschrift_tag?: number | null
@@ -2816,6 +2822,7 @@ export type Database = {
         Row: {
           adresse: string
           aktiv: boolean
+          als_gelesen: boolean
           created_at: string
           geprueft_am: string | null
           id: string
@@ -2829,6 +2836,7 @@ export type Database = {
         Insert: {
           adresse: string
           aktiv?: boolean
+          als_gelesen?: boolean
           created_at?: string
           geprueft_am?: string | null
           id?: string
@@ -2842,6 +2850,7 @@ export type Database = {
         Update: {
           adresse?: string
           aktiv?: boolean
+          als_gelesen?: boolean
           created_at?: string
           geprueft_am?: string | null
           id?: string
@@ -2867,6 +2876,7 @@ export type Database = {
           postfach: string
           postfach_id: string | null
           updated_at: string
+          ungelesen: string | null
           versuche: number
           von: string | null
         }
@@ -2882,6 +2892,7 @@ export type Database = {
           postfach: string
           postfach_id?: string | null
           updated_at?: string
+          ungelesen?: string | null
           versuche?: number
           von?: string | null
         }
@@ -2897,6 +2908,7 @@ export type Database = {
           postfach?: string
           postfach_id?: string | null
           updated_at?: string
+          ungelesen?: string | null
           versuche?: number
           von?: string | null
         }

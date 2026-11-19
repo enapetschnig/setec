@@ -1240,21 +1240,43 @@ des JSON, nie im Browser). Die Freigabe macht der Admin der Firma **einmal** in
 der Google Admin-Konsole (Sicherheit → API-Steuerung → Domainweite
 Delegierung: Client-ID `110267341647112633213`, Bereiche
 `gmail.modify,gmail.send`); weitere Adressen derselben Domain brauchen keine
-neue Freigabe. Migration `20261117140000_postfach.sql`.
+neue Freigabe. Migrationen `20261117140000_postfach.sql`,
+`20261118161500_postfach_haerten.sql` (Prüfung 18.11.2026: Doppelte, große
+Anhänge, Domains, als gelesen, Zeitzone).
 
+- **Erlaubte Domains** (18.11.2026): Das Dienstkonto gehört ePower und gilt für
+  mehrere Kunden — ohne Sperre könnte ein Benutzer jedes freigegebene Postfach
+  einer anderen Firma eintragen. Gelesen, getestet und gesendet wird nur über
+  Postfächer der Domains im Secret `POSTFACH_DOMAINS` (mit Komma getrennt, z. B.
+  `setec-gmbh.at`). Fehlt das Secret, gilt die Tabelle `postfach_domains` (nur
+  per SQL, keine Policies — beim Einspielen aus Firmen-Mail und eingetragenen
+  Postfächern gefüllt, ohne Freemail). Beides leer → keines (fail closed).
+  Firmen-Mail und `postfaecher` zählen zur Laufzeit nie, die kann jeder Chef
+  ändern. Fremde Domain: „Verbindung testen“ fragt Google gar nicht erst
+  (Grund „domain“), der Abruf überspringt das Postfach (`letzter_fehler`),
+  `beleg-mail` sendet nicht (403). Logik `domainsLesen/domainErlaubt/
+  erlaubteDomains` in `_shared/postfach.ts`.
 - **Einstellungen → E-Mail** (nur Chef, `components/postfach/Postfach.tsx`):
   Liste `postfaecher` (Adresse, „Rechnungen einlesen“, „Senden“, höchstens ein
-  „Standard-Absender“, RLS nur Chef). „Verbindung testen“ ruft
-  `postfach-abruf {aktion:"testen"}`: Token + 3 neueste Betreffzeilen; Fehler
+  „Standard-Absender“, Haken „Eingelesene Rechnungen als gelesen markieren“ =
+  `als_gelesen`, Standard an; RLS nur Chef). „Verbindung testen“ ruft
+  `postfach-abruf {aktion:"testen"}` (Recht „Einstellungen“): Token + 3 neueste
+  Betreffzeilen; Fehler
   verständlich (`fehlerDeuten`: unauthorized_client → Freigabe fehlt, mit den
   3 Schritten, Client-ID und Bereichen zum Kopieren; invalid_grant → Adresse
-  prüfen; Gmail API aus). Startseite (Chef): Karte „E-Mail verbinden“, solange
+  prüfen; Gmail API aus; Domain nicht freigegeben). Karte **„Nicht gelesene
+  Mails“** (Recht „Eingangsrechnungen“, letzte 30 Tage): Mails mit
+  `postfach_mails.ungelesen` — nur Absender, Betreff, Datum (Wien), Grund und
+  „In Gmail öffnen“, nie Inhalt. Dieselbe Liste als aufklappbarer Hinweis auf
+  `/eingang` (14 Tage, ✕ bis eine neue dazukommt, localStorage).
+  Startseite (Chef): Karte „E-Mail verbinden“, solange
   kein Postfach erfolgreich getestet ist („Später“ = 3 Tage, localStorage).
 - **Senden** (`beleg-mail`): gibt es ein aktives Postfach mit „Senden“, geht die
   Mail über Gmail (`messages/send`, Upload als message/rfc822, bis 24 MB
   Anhang) von `von` aus dem Mail-Dialog (Auswahl „Senden von“ bei mehreren),
   sonst Standard-Absender, sonst das einzige — liegt danach in Gmail unter
-  „Gesendet“. Fehler → Meldung, **kein** stiller Rückfall auf Resend. Ohne
+  „Gesendet“. Fehler → Meldung, **kein** stiller Rückfall auf Resend; Postfach
+  einer nicht erlaubten Domain → 403, nichts gesendet. Ohne
   Postfach wie bisher Resend (noreply@handwerkapp.at, Antwort an Firmen-Mail).
   MIME in `_shared/mime.ts` (multipart/mixed + alternative, Betreff und
   Dateinamen RFC 2047/2231, vitest `src/lib/postfach.test.ts`).
@@ -1262,23 +1284,56 @@ neue Freigabe. Migration `20261117140000_postfach.sql`.
   je Postfach mit „Rechnungen einlesen“ Mails `has:attachment newer_than:14d
   -in:sent …` (gelesen oder nicht — die Tabelle merkt, was schon dran war).
   Je Mail zuerst eine Zeile in `postfach_mails` (unique Postfach + Message-ID,
-  `in_arbeit`) → Knopf und Cron nie doppelt; Fehler bis 3 Versuche. PDF- und
-  Bild-Anhänge (keine Logos < 30 KB, höchstens 4 je Mail, 6 KI-Lesungen je
-  Lauf) liest Claude (`_shared/beleg.ts`, dieselbe Logik wie `ki` →
-  beleg_lesen, Modus „email“: nur Rechnungen AN den Betrieb, eigene Rechnungen
-  zählen nicht). Rechnung → Eingangsrechnung „zu prüfen“ mit Datei im Bucket
-  `eingangsrechnungen`, Positionen, Lieferant zugeordnet (`lieferantZuordnen`:
-  Kontakt-Name/Schreibweisen, ohne Rechtsform, Absender-Domain, bisherige
-  Schreibweise), Lastschrift/IBAN wie zuletzt beim Händler,
-  `postfach_mail_id` (Pille „aus E-Mail“ auf `/eingang`). Gleicher Lieferant +
-  Nummer → „doppelt“, nicht neu. Gmail: Label „App: verarbeitet“ (wird
-  angelegt), als gelesen nur bei Rechnungen, nichts gelöscht/verschoben.
+  `in_arbeit`) → Knopf und Cron nie doppelt. PDF- und
+  Bild-Anhänge (keine Logos < 30 KB) liest Claude (`_shared/beleg.ts`, dieselbe
+  Logik wie `ki` → beleg_lesen, Modus „email“: nur Rechnungen AN den Betrieb,
+  eigene Rechnungen zählen nicht; liest auch die UID des Ausstellers).
+  Rechnung → Eingangsrechnung „zu prüfen“ mit Datei im Bucket
+  `eingangsrechnungen`, Positionen, Lastschrift/IBAN wie zuletzt beim Händler,
+  `postfach_mail_id` (Pille „aus E-Mail“ auf `/eingang`), dazu
+  `lieferant_gelesen`/`lieferant_uid` (wie die KI sie las — daraus lernt die
+  Zuordnung). Gmail: Label „App: verarbeitet“ (wird angelegt), als gelesen nur
+  bei Rechnungen und nur mit `als_gelesen`, nichts gelöscht/verschoben.
+  - **Lieferant zuordnen** (`lieferantFinden`, nur eindeutige Merkmale —
+    mehrdeutig = nicht zuordnen): UID (Kontakt oder frühere Rechnungen, nie die
+    eigene) → Name/Schreibweise am Kontakt → IBAN wie frühere Rechnungen oder
+    in der Kontakt-Notiz (nie die eigene) → dieselbe KI-Schreibweise wie früher
+    (→ Name, unter dem die Rechnung heute steht, lernt aus Korrekturen) → ohne
+    Rechtsform → Absender-Domain an Kontakt/Ansprechperson → Absender-Domain
+    früherer Mails, nur wenn ein Wort der Domain zum Namen passt (keine
+    Rechnungsplattformen; nie Freemail, nie die eigene Domain) → bisherige
+    Schreibweise → wie gelesen. Kein unscharfer Vergleich. Wie zugeordnet,
+    steht in der Notiz.
+  - **Doppelt** (`doppeltFinden`, Kandidaten per RPC `eingang_doppelt_kandidaten`,
+    nur Dienstrolle, unabhängig vom Namen): Nummern-Kern (nur Buchstaben und
+    Ziffern, klein: „RE-2026/0815“ = „re 2026 0815“) gleich und gleicher
+    Lieferant — oder gleiches Brutto und (las die KI ein Datum) gleiches Datum;
+    kurze Nummern (< 4 Zeichen) ohne Datum nur bei gleichem Absender. Ohne
+    Nummer: gleiches Datum + Brutto (≠ 0) + gleicher Lieferant oder Absender.
+    Suche und Anlegen nehmen dasselbe Datum (gelesen, sonst Tag der Mail **in
+    Wien**, `wienerTag` — die Function läuft in UTC).
+  - **Grenzen** (Prüfung H2): PDF bis 10 MB, Bild bis 3,5 MB, 4 Anhänge je
+    Mail (PDFs vor Fotos) — der Rest wird nie geladen, steht aber mit Grund in
+    `postfach_mails.ungelesen`; nur Übergroßes → `fehler`, endgültig. Je Lauf
+    6 KI-Lesungen, 30 MB, 110 s, gerecht auf die Postfächer verteilt (`anteil`;
+    Reihenfolge: am längsten nicht abgerufen zuerst, dann Adresse). Neue Mails
+    vor Wiederholungen. Base64 ohne Rückruf je Byte (`bytesBase64`,
+    `base64Standard` — der Anhang geht als base64 an Claude, Bytes erst fürs
+    Ablegen). 3 Versuche; hängt eine Mail nach dem 3. Versuch 10 Minuten in
+    `in_arbeit` (Absturz) oder scheitert sie 3×, wird sie `fehler` mit Text
+    in `ungelesen`. KI überlastet / Gmail 429/5xx / Netz (`voruebergehend`):
+    Versuch zählt nicht, der Lauf hört auf.
 - **Auslösen**: Knopf „Postfach abrufen“ auf `/eingang` (wenn ein Postfach
   einliest) und **pg_cron** alle 15 Minuten (`postfach_abruf_anstossen()` →
   pg_net mit Kopf `x-postfach-secret`; Adresse und Geheimnis in
   `postfach_verbindung`, nur per SQL eingetragen, nicht im Repo). Die Function
-  prüft sonst JWT + Chef (`verify_jwt = false` in `config.toml`).
+  prüft sonst JWT + Chef + Recht (`hat_recht_von`: testen = „Einstellungen“,
+  abrufen = „Eingangsrechnungen“; `verify_jwt = false` in `config.toml`).
 - **Tests**: `node tests/postfach-echttest.mjs <dienstkonto.json> <postfach> [an]`
   (Token, Lesen, Testmail — nur ePower-Postfach, ohne Datenbank);
   `tests/postfach-abruf-test.mjs` (Abruf gegen die Docker-Testumgebung des
-  Roboters, ZZTEST-Mails, räumt sie in den Papierkorb).
+  Roboters, ZZTEST-Mails, räumt sie in den Papierkorb; `POSTFACH_DOMAINS`,
+  Standard `epowergmbh.at`); `tests/roboter/2026-11-18-postfach-haerten.mjs`
+  (Gmail und KI nachgebaut, kein Netz: Doppelte, Zuordnung, Grenzen,
+  Versuche, Domains, Rechte, mit `APP_URL` auch die Oberfläche); vitest
+  `src/lib/postfach.test.ts`, `src/lib/postfachZuordnung.test.ts`.

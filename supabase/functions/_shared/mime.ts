@@ -22,16 +22,85 @@ export type MailDaten = {
 
 const enc = new TextEncoder();
 
-/** Bytes → base64 (in Häppchen, sonst sprengt String.fromCharCode den Stack) */
-export function bytesBase64(b: Uint8Array): string {
-  let s = "";
-  for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode(...b.subarray(i, i + 0x8000));
-  return btoa(s);
+// ── base64 ohne Rückruf je Byte ───────────────────────────────────────────
+// Anhänge von Gmail sind bis zu einige MB groß: `Uint8Array.from(atob(…), c => …)`
+// ruft je Byte eine Funktion auf und hält die Daten dreimal — das kostete die
+// Edge Function CPU-Zeit und Speicher (Prüfung 18.11.2026, H2). Hier eine
+// Schleife über eine Nachschlagetabelle, das Ergebnis genau einmal im Speicher.
+const ZEICHEN = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+const CODES = Uint8Array.from(ZEICHEN, (c) => c.charCodeAt(0));
+/** Zeichen → 6-Bit-Wert, 255 = überspringen (Leerraum, „=“, ungültig); base64 und base64url */
+const WERT = (() => {
+  const t = new Uint8Array(128).fill(255);
+  for (let i = 0; i < 64; i++) t[CODES[i]] = i;
+  t[45] = 62; // „-“ (base64url)
+  t[95] = 63; // „_“ (base64url)
+  return t;
+})();
+
+/** Bytes → base64 (Standard-Alphabet mit „=“), auf Wunsch in Zeilen zu 76 Zeichen (RFC 2045) */
+export function bytesBase64(b: Uint8Array, zeilen = false): string {
+  const n = b.length;
+  const laenge = Math.ceil(n / 3) * 4;
+  const umbrueche = zeilen && laenge > 76 ? Math.ceil(laenge / 76) - 1 : 0;
+  const aus = new Uint8Array(laenge + umbrueche * 2);
+  const voll = n - (n % 3);
+  let o = 0, spalte = 0;
+  for (let i = 0; i < voll; i += 3) {
+    if (zeilen && spalte === 76) { aus[o++] = 13; aus[o++] = 10; spalte = 0; }
+    const x = (b[i] << 16) | (b[i + 1] << 8) | b[i + 2];
+    aus[o++] = CODES[x >> 18];
+    aus[o++] = CODES[(x >> 12) & 63];
+    aus[o++] = CODES[(x >> 6) & 63];
+    aus[o++] = CODES[x & 63];
+    spalte += 4;
+  }
+  if (voll < n) {
+    if (zeilen && spalte === 76) { aus[o++] = 13; aus[o++] = 10; }
+    const zwei = n - voll === 2;
+    const x = (b[voll] << 16) | (zwei ? b[voll + 1] << 8 : 0);
+    aus[o++] = CODES[x >> 18];
+    aus[o++] = CODES[(x >> 12) & 63];
+    aus[o++] = zwei ? CODES[(x >> 6) & 63] : 61;
+    aus[o++] = 61;
+  }
+  return new TextDecoder().decode(aus);
 }
 
+/** base64 oder base64url (mit/ohne „=“, Leerraum egal) → Bytes */
 export function base64Bytes(s: string): Uint8Array {
-  return Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/").replace(/\s+/g, "")), (c) => c.charCodeAt(0));
+  const n = s.length;
+  let ende = n;
+  while (ende > 0 && s.charCodeAt(ende - 1) === 61) ende--;
+  const aus = new Uint8Array(Math.floor((ende * 3) / 4));
+  let o = 0, puffer = 0, bits = 0;
+  for (let i = 0; i < ende; i++) {
+    const c = s.charCodeAt(i);
+    const v = c < 128 ? WERT[c] : 255;
+    if (v === 255) continue;
+    puffer = ((puffer << 6) | v) & 0xffffff;
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      aus[o++] = (puffer >> bits) & 0xff;
+    }
+  }
+  return o === aus.length ? aus : aus.slice(0, o);
 }
+
+/** base64url (Gmail) → Standard-base64 mit „=“ (Claude) — ohne über Bytes zu gehen */
+export function base64Standard(s: string): string {
+  let t = s.indexOf("-") >= 0 || s.indexOf("_") >= 0 ? s.replace(/-/g, "+").replace(/_/g, "/") : s;
+  if (/\s/.test(t)) t = t.replace(/\s+/g, "");
+  return t.length % 4 ? t + "=".repeat(4 - (t.length % 4)) : t;
+}
+
+/** Wie viele Bytes stecken in diesem base64-Text? (ohne zu dekodieren) */
+export const base64Groesse = (s: string) => {
+  let ende = s.length;
+  while (ende > 0 && s.charCodeAt(ende - 1) === 61) ende--;
+  return Math.floor((ende * 3) / 4);
+};
 
 export const base64url = (b: Uint8Array | string) =>
   bytesBase64(typeof b === "string" ? enc.encode(b) : b).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -119,7 +188,7 @@ export function mailBauen(d: MailDaten): string {
       `Content-Disposition: attachment; ${dateinameKopf(a.dateiname)}`,
       "Content-Transfer-Encoding: base64",
       "",
-      zeilen76(bytesBase64(a.inhalt)),
+      bytesBase64(a.inhalt, true),
     );
   }
   teile.push(`--${gMix}--`, "");

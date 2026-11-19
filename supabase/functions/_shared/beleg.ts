@@ -1,6 +1,8 @@
 // Beleg lesen mit Claude — gemeinsam für `ki` (beleg_lesen, Foto/PDF aus dem
 // Speicher) und `postfach-abruf` (Anhang einer Mail).
 import type Anthropic from "npm:@anthropic-ai/sdk@1.7.0";
+import { base64Groesse, bytesBase64 } from "./mime.ts";
+import { wienerTag } from "./postfach.ts";
 
 export const MODELL = "claude-opus-5-5";
 
@@ -24,10 +26,11 @@ const POSITION = {
 export const BELEG = {
   type: "object",
   additionalProperties: false,
-  required: ["art", "lieferant", "nummer", "datum", "faellig_am", "netto", "ust_satz", "brutto", "iban", "skonto_prozent", "skonto_bis", "lieferschein_nummern", "positionen", "hinweis"],
+  required: ["art", "lieferant", "lieferant_uid", "nummer", "datum", "faellig_am", "netto", "ust_satz", "brutto", "iban", "skonto_prozent", "skonto_bis", "lieferschein_nummern", "positionen", "hinweis"],
   properties: {
     art: { type: "string", enum: ["lieferschein", "rechnung", "gutschrift", "unklar"] },
     lieferant: { type: "string", description: "leer, wenn unbekannt" },
+    lieferant_uid: { type: "string", description: "UID-Nummer (USt-IdNr.) des Ausstellers, z. B. ATU12345678 — NICHT die des Empfängers; leer, wenn unbekannt" },
     nummer: { type: "string", description: "Beleg- bzw. Rechnungsnummer — leer, wenn unbekannt" },
     datum: { type: "string", description: "JJJJ-MM-TT — leer, wenn unbekannt" },
     faellig_am: { type: "string", description: "JJJJ-MM-TT, aus Zahlungsziel berechnet wenn nötig — leer, wenn unbekannt" },
@@ -49,7 +52,10 @@ export type BelegPosition = {
 };
 export type GelesenerBeleg = {
   art: "lieferschein" | "rechnung" | "gutschrift" | "unklar";
-  lieferant: string | null; nummer: string | null; datum: string | null; faellig_am: string | null;
+  lieferant: string | null;
+  /** UID des Ausstellers (fehlt bei Lesungen vor dem 18.11.2026) */
+  lieferant_uid?: string | null;
+  nummer: string | null; datum: string | null; faellig_am: string | null;
   netto: number | null; ust_satz: number | null; brutto: number | null; iban: string | null;
   skonto_prozent: number | null; skonto_bis: string | null; lieferschein_nummern: string[];
   positionen: BelegPosition[]; hinweis: string | null;
@@ -83,27 +89,24 @@ export const leerZuNull = (x: unknown): unknown =>
   x === "" ? null : Array.isArray(x) ? x.map(leerZuNull)
     : x && typeof x === "object" ? Object.fromEntries(Object.entries(x).map(([k, v]) => [k, leerZuNull(v)])) : x;
 
-const zuBase64 = (daten: Uint8Array) => {
-  let s = "";
-  for (let i = 0; i < daten.length; i += 0x8000) s += String.fromCharCode(...daten.subarray(i, i + 0x8000));
-  return btoa(s);
-};
-
 /**
  * Foto oder PDF lesen.
  *  - wofuer "lieferschein" / "rechnung": wie bisher in der App (der Nutzer sagt, was es ist)
  *  - wofuer "email": Anhang einer Mail — kann alles sein; nur eine Rechnung AN den
  *    Betrieb gilt als „rechnung“, alles andere (AGB, Angebot, eigene Rechnung) „unklar“.
+ * `datei`: Bytes (aus dem Speicher) oder schon base64 (Mail-Anhang — so muss die
+ * Function ihn für die KI nicht dekodieren und wieder kodieren).
  */
 export async function belegAusDatei(
-  client: Anthropic, bytes: Uint8Array, mime: string, wofuer: "lieferschein" | "rechnung" | "email", firma?: string | null,
+  client: Anthropic, datei: Uint8Array | { base64: string }, mime: string, wofuer: "lieferschein" | "rechnung" | "email", firma?: string | null,
 ): Promise<GelesenerBeleg> {
-  if (bytes.length > 20 * 1024 * 1024) throw new Error("Die Datei ist zu groß (höchstens 20 MB).");
-  const b64 = zuBase64(bytes);
-  const datei: Block = mime === "application/pdf"
+  const groesse = datei instanceof Uint8Array ? datei.length : base64Groesse(datei.base64);
+  if (groesse > 20 * 1024 * 1024) throw new Error("Die Datei ist zu groß (höchstens 20 MB).");
+  const b64 = datei instanceof Uint8Array ? bytesBase64(datei) : datei.base64;
+  const block: Block = mime === "application/pdf"
     ? { type: "document", source: { type: "base64", media_type: "application/pdf", data: b64 } }
     : { type: "image", source: { type: "base64", media_type: ["image/png", "image/webp", "image/gif"].includes(mime) ? mime : "image/jpeg", data: b64 } };
-  const heute = new Date().toISOString().slice(0, 10);
+  const heute = wienerTag();
   const aufgabe = wofuer === "lieferschein" ? "Lies diesen Lieferschein."
     : wofuer === "rechnung" ? "Lies diese Rechnung."
     : `Diese Datei hing an einer E-Mail an ${firma || "den Betrieb"}. Ist sie eine Rechnung, die ein Lieferant, Großhändler oder ` +
@@ -116,6 +119,6 @@ export async function belegAusDatei(
     `Übernimm Zahlen genau wie gedruckt, Dezimalkomma → Punkt. Erfinde nichts: fehlende oder unleserliche Zahlen sind null, fehlende Texte leer. ` +
     `Jede Artikelzeile ist eine Position; Zwischensummen, Fracht-Hinweise ohne Betrag und Überschriften nicht. ` +
     `Fracht, Kupferzuschlag, Verpackung MIT Betrag sind eigene Positionen. Heute ist ${heute}.`,
-    [datei, { type: "text", text: aufgabe }],
+    [block, { type: "text", text: aufgabe }],
     BELEG, "medium")) as GelesenerBeleg;
 }

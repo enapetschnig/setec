@@ -1,19 +1,20 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { CheckCircle2, Copy, ExternalLink, Loader2, Mail, Plus, Trash2, X, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Copy, ExternalLink, Loader2, Mail, Plus, Trash2, X, XCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Karte } from "@/components/Bausteine";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useSitzung } from "@/hooks/useSitzung";
 import { useNeuLaden } from "@/hooks/useDaten";
 import { fehlerText } from "@/components/stamm/stammDaten";
 import { datum } from "@/lib/format";
 import {
-  ADMIN_KONSOLE, GOOGLE_BEREICHE, GOOGLE_CLIENT_ID, postfachTesten, usePostfaecher, type Postfach, type TestErgebnis,
+  ADMIN_KONSOLE, GOOGLE_BEREICHE, GOOGLE_CLIENT_ID, gmailLink, postfachTesten, usePostfaecher, useUngeleseneMails, wienerTag, wienerZeit,
+  type Postfach, type TestErgebnis, type UngeleseneMail,
 } from "@/lib/postfach";
 
 const MAIL = /^[^\s@<>(),;:"]+@[^\s@<>(),;:"]+\.[a-z]{2,}$/i;
@@ -88,14 +89,19 @@ function TestAnzeige({ t: ergebnis }: { t: TestErgebnis }) {
   );
 }
 
-type Zeile = { schluessel: string; id: string | null; adresse: string; rechnungen_einlesen: boolean; senden: boolean; standard_absender: boolean };
+type Zeile = {
+  schluessel: string; id: string | null; adresse: string; rechnungen_einlesen: boolean; senden: boolean; standard_absender: boolean;
+  /** eingelesene Rechnungen in Gmail als gelesen markieren (persönliches Postfach: aus) */
+  als_gelesen: boolean;
+};
 const zeileAus = (p: Postfach): Zeile => ({
   schluessel: p.id, id: p.id, adresse: p.adresse, rechnungen_einlesen: p.rechnungen_einlesen, senden: p.senden, standard_absender: p.standard_absender,
+  als_gelesen: p.als_gelesen ?? true,
 });
 
-/** Einstellungen → E-Mail (nur Chef): Postfächer, Verbindung testen, Einlesen/Senden, Standard-Absender */
+/** Einstellungen → E-Mail (nur Chef): Postfächer, Verbindung testen, Einlesen/Senden, Standard-Absender, nicht gelesene Mails */
 export function PostfachEinstellungen() {
-  const { firma } = useSitzung();
+  const { firma, darf } = useSitzung();
   const neuLaden = useNeuLaden();
   const { data: gespeichert = [], isLoading } = usePostfaecher();
   const [entwurf, setEntwurf] = useState<Zeile[] | null>(null);
@@ -115,7 +121,7 @@ export function PostfachEinstellungen() {
   }));
   const dazu = () => setEntwurf([...zeilen, {
     schluessel: crypto.randomUUID(), id: null, adresse: "", rechnungen_einlesen: true, senden: true,
-    standard_absender: !zeilen.some((z) => z.standard_absender),
+    standard_absender: !zeilen.some((z) => z.standard_absender), als_gelesen: true,
   }]);
 
   const testen = async (z: Zeile) => {
@@ -153,7 +159,7 @@ export function PostfachEinstellungen() {
         const t = tests[z.schluessel];
         const getestet = t && t !== "laeuft" && t.ok && t.adresse === z.adresse;
         const werte = {
-          adresse: z.adresse, rechnungen_einlesen: z.rechnungen_einlesen, senden: z.senden, standard_absender: false,
+          adresse: z.adresse, rechnungen_einlesen: z.rechnungen_einlesen, senden: z.senden, standard_absender: false, als_gelesen: z.als_gelesen,
           ...(getestet ? { geprueft_am: new Date().toISOString(), letzter_fehler: null } : {}),
         };
         const { error } = z.id
@@ -217,12 +223,21 @@ export function PostfachEinstellungen() {
                       </label>
                     ))}
                   </div>
+                  {z.rechnungen_einlesen && (
+                    <label className="flex min-h-11 cursor-pointer items-center gap-3 rounded-md px-1 py-1" data-pruef="als-gelesen">
+                      <Checkbox className="h-5 w-5" checked={z.als_gelesen} onCheckedChange={(v) => setze(z.schluessel, { als_gelesen: v === true })} />
+                      <span className="text-sm leading-tight">
+                        Eingelesene Rechnungen als gelesen markieren
+                        <span className="block text-xs text-muted-foreground">Aus: die App lässt den Gelesen-Status in Gmail, wie er ist (z. B. persönliches Postfach) — das Label „App: verarbeitet“ kommt trotzdem.</span>
+                      </span>
+                    </label>
+                  )}
                   {t && t !== "laeuft" && <TestAnzeige t={t} />}
                   {!t && p && (
                     <p className="text-xs text-muted-foreground">
                       {p.letzter_fehler ? <span className="font-medium text-destructive">Fehler: {p.letzter_fehler}</span>
-                        : p.geprueft_am ? <>Verbindung geprüft am {datum(p.geprueft_am.slice(0, 10))}</> : "Noch nicht getestet."}
-                      {p.zuletzt_abgerufen && <> · zuletzt abgerufen {new Date(p.zuletzt_abgerufen).toLocaleString("de-AT", { dateStyle: "short", timeStyle: "short" })}</>}
+                        : p.geprueft_am ? <>Verbindung geprüft am {datum(wienerTag(p.geprueft_am))}</> : "Noch nicht getestet."}
+                      {p.zuletzt_abgerufen && <> · zuletzt abgerufen {wienerZeit(p.zuletzt_abgerufen)}</>}
                     </p>
                   )}
                 </div>
@@ -242,10 +257,88 @@ export function PostfachEinstellungen() {
           </div>
         )}
       </Karte>
+      {darf("eingang") && (
+        <Karte titel="Nicht gelesene Mails (letzte 30 Tage)">
+          <UngeleseneKarte />
+        </Karte>
+      )}
       <Karte titel="Freigabe in Google (einmal je Firma)">
         <AdminAnleitung />
       </Karte>
     </div>
+  );
+}
+
+/** Mails, die die App nicht (ganz) lesen konnte — Absender, Betreff, Datum, Grund; öffnen in Gmail. Kein Inhalt. */
+export function UngeleseneListe({ liste }: { liste: UngeleseneMail[] }) {
+  return (
+    <ul className="divide-y rounded-md border" data-pruef="ungelesene-mails">
+      {liste.map((m) => (
+        <li key={m.id} className="space-y-1 p-3 text-sm">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+            <p className="min-w-0 font-medium [overflow-wrap:anywhere]">{m.betreff || "(ohne Betreff)"}</p>
+            <a href={gmailLink(m.postfach, m.message_id)} target="_blank" rel="noreferrer"
+              className="inline-flex min-h-11 shrink-0 items-center gap-1 text-sm font-medium text-primary underline-offset-2 hover:underline sm:min-h-0">
+              In Gmail öffnen <ExternalLink className="h-3.5 w-3.5" />
+            </a>
+          </div>
+          <p className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
+            {wienerZeit(m.datum ?? m.created_at)} · von {m.von || "unbekannt"} · an {m.postfach}
+          </p>
+          <p className="flex items-start gap-1.5 text-xs text-status-gelb-fg"><AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" /> <span className="[overflow-wrap:anywhere]">{m.ungelesen}</span></p>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function UngeleseneKarte() {
+  const { data: liste = [], isLoading } = useUngeleseneMails(30);
+  if (isLoading) return <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />;
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-muted-foreground">
+        Diese Mails konnte die App nicht oder nicht ganz lesen (Anhang zu groß, zu viele Anhänge, abgebrochen) — bitte selbst ansehen
+        und die Rechnung bei Bedarf unter Eingangsrechnungen erfassen.
+      </p>
+      {liste.length ? <UngeleseneListe liste={liste} />
+        : <p className="rounded-md border border-dashed p-4 text-center text-sm text-muted-foreground">Keine — alles gelesen.</p>}
+    </div>
+  );
+}
+
+const UNGELESEN_WEG = "postfach-ungelesen-weg";
+
+/** /eingang: „2 Mails konnten nicht gelesen werden“ — aufklappbar; ✕ blendet aus, bis wieder eine dazukommt */
+export function UngeleseneHinweis() {
+  const { istChef, darf } = useSitzung();
+  const { data: liste = [] } = useUngeleseneMails(14, istChef && darf("eingang"));
+  const [offen, setOffen] = useState(false);
+  const [weg, setWeg] = useState(() => {
+    try { return localStorage.getItem(UNGELESEN_WEG) ?? ""; } catch { return ""; }
+  });
+  const neu = liste.filter((m) => m.created_at > weg);
+  if (!neu.length) return null;
+  const ausblenden = () => {
+    const zeit = liste[0]?.created_at ?? new Date().toISOString();
+    try { localStorage.setItem(UNGELESEN_WEG, zeit); } catch { /* egal */ }
+    setWeg(zeit);
+  };
+  return (
+    <section className="rounded-lg border border-status-gelb-fg/30 bg-status-gelb/30 p-3" data-pruef="ungelesen-hinweis">
+      <div className="flex items-start gap-2">
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-status-gelb-fg" />
+        <p className="min-w-0 flex-1 text-sm">
+          <span className="font-medium">{neu.length === 1 ? "1 Mail" : `${neu.length} Mails`} aus dem Postfach konnte die App nicht lesen</span>
+          <span className="text-muted-foreground"> — bitte selbst ansehen.</span>
+        </p>
+        <Button variant="ghost" size="icon" className="-my-1 h-9 w-9 shrink-0" aria-label="Hinweis ausblenden" onClick={ausblenden}><X className="h-4 w-4" /></Button>
+      </div>
+      <Button variant="outline" size="sm" className="mt-2 h-9" onClick={() => setOffen(!offen)} aria-expanded={offen}>
+        {offen ? "Zuklappen" : "Ansehen"}
+      </Button>
+      {offen && <div className="mt-3"><UngeleseneListe liste={neu} /></div>}
+    </section>
   );
 }
 

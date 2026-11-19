@@ -23,10 +23,13 @@
 //   „Gesendet“): `von` aus dem Aufruf, sonst der Standard-Absender, sonst das
 //   einzige. Fehler beim Gmail-Senden → Meldung, KEIN Rückfall auf Resend.
 //   Ohne solches Postfach wie bisher über Resend.
-// Secrets: RESEND_API_KEY, optional RESEND_FROM; GOOGLE_MAIL_DIENSTKONTO fürs Postfach.
+//   Nur Postfächer der erlaubten Domains (Secret POSTFACH_DOMAINS, sonst Tabelle
+//   postfach_domains) — das Dienstkonto gilt auch für andere Kunden; sonst Meldung.
+// Secrets: RESEND_API_KEY, optional RESEND_FROM; GOOGLE_MAIL_DIENSTKONTO und POSTFACH_DOMAINS fürs Postfach.
 import { createClient } from "npm:@supabase/supabase-js@2.119.0";
 import { dienstkontoLesen, Gmail } from "../_shared/gmail.ts";
-import { mailBauen } from "../_shared/mime.ts";
+import { base64Bytes, bytesBase64, mailBauen } from "../_shared/mime.ts";
+import { domainErlaubt, domainText, erlaubteDomains } from "../_shared/postfach.ts";
 
 const KOPF = {
   "Access-Control-Allow-Origin": "*",
@@ -61,12 +64,8 @@ export function textZuHtml(text: string): string {
   return `<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.5;color:#1a1a1a">${mitLinks.replace(/\r?\n/g, "<br>")}</div>`;
 }
 
-const base64 = (b: Uint8Array) => {
-  let s = "";
-  for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode(...b.subarray(i, i + 0x8000));
-  return btoa(s);
-};
-const ausBase64 = (s: string) => Uint8Array.from(atob(s.replace(/^data:[^,]*,/, "")), (c) => c.charCodeAt(0));
+const base64 = (b: Uint8Array) => bytesBase64(b);
+const ausBase64 = (s: string) => base64Bytes(s.replace(/^data:[^,]*,/, ""));
 const istPdf = (b: Uint8Array) => b.length > 4 && b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46;
 
 Deno.serve(async (req) => {
@@ -185,6 +184,10 @@ Deno.serve(async (req) => {
         postfach = gewuenscht;
       } else {
         postfach = (postfaecher.find((p) => p.standard_absender) ?? postfaecher[0]).adresse;
+      }
+      // nie über ein Postfach einer fremden Domain (das Dienstkonto gilt auch für andere Kunden)
+      if (postfach && !domainErlaubt(postfach, await erlaubteDomains(dienst, Deno.env.get("POSTFACH_DOMAINS")))) {
+        return antwort({ error: `Von „${postfach}“ darf die App nicht senden. ${domainText(postfach)}` }, 403);
       }
     }
 

@@ -3,27 +3,36 @@
 //
 //   POST { aktion: "testen", adresse }
 //     → { ok: true, adresse, betreffe: [3 neueste] } bzw. { ok: false, grund, fehler }
-//       Nur der Chef. Steht die Adresse in `postfaecher`, merkt sie geprueft_am / letzter_fehler.
+//       Chef mit dem Recht „Einstellungen“. Steht die Adresse in `postfaecher`, merkt sie
+//       geprueft_am / letzter_fehler. Adressen außerhalb der erlaubten Domains: gar nicht erst
+//       bei Google versuchen (grund „domain“).
 //
 //   POST { aktion: "abrufen", postfach_id? }
 //     → Rechnungen aus allen Postfächern mit „Rechnungen einlesen“ (oder nur dem einen):
 //       Mails mit Anhang der letzten 14 Tage (ohne Gesendetes), je Mail einmal
 //       (postfach_mails, Zeile wird VOR der KI angelegt → Knopf und Cron nie doppelt).
-//       Jeder PDF-/Bild-Anhang geht an Claude (_shared/beleg.ts). Eine Rechnung AN
-//       den Betrieb → Eingangsrechnung „zu prüfen“ samt Datei und Positionen;
-//       gleicher Lieferant + Nummer → nicht doppelt. Gmail-Label „App: verarbeitet“,
-//       als gelesen nur bei Rechnungen; nichts gelöscht oder verschoben.
-//       Höchstens LESEN_MAX Anhänge je Lauf — der Rest beim nächsten.
-//     Chef (Benutzer-Token) ODER pg_cron mit Kopf x-postfach-secret (= postfach_verbindung.secret);
-//     der Cron bekommt sofort 202, der Abruf läuft im Hintergrund weiter.
+//       PDF-/Bild-Anhänge (PDF bis 10 MB, Bild bis 3,5 MB, 4 je Mail) gehen an Claude
+//       (_shared/beleg.ts); was nicht gelesen wird, steht mit Grund in postfach_mails.ungelesen.
+//       Eine Rechnung AN den Betrieb → Eingangsrechnung „zu prüfen“ samt Datei und Positionen;
+//       dieselbe Rechnung (Nummer + Brutto + Datum, egal welcher Name) → „doppelt“.
+//       Gmail-Label „App: verarbeitet“, als gelesen nur bei Rechnungen und nur mit
+//       postfaecher.als_gelesen; nichts gelöscht oder verschoben.
+//       Höchstens LESEN_MAX Anhänge je Lauf — der Rest beim nächsten. Postfächer außerhalb
+//       der erlaubten Domains werden übersprungen (letzter_fehler).
+//     Chef mit dem Recht „Eingangsrechnungen“ (Benutzer-Token) ODER pg_cron mit Kopf
+//     x-postfach-secret (= postfach_verbindung.secret); der Cron bekommt sofort 202, der
+//     Abruf läuft im Hintergrund weiter.
 //
-// Secrets: GOOGLE_MAIL_DIENSTKONTO, ANTHROPIC_API_KEY. verify_jwt = false (eigene Prüfung).
+// Erlaubte Domains: Secret POSTFACH_DOMAINS (mit Komma getrennt), sonst Tabelle
+// postfach_domains (nur per SQL). Das Dienstkonto gehört ePower und gilt für mehrere
+// Kunden — kein Benutzer dieser App darf an ein Postfach einer anderen Domain.
+// Secrets: GOOGLE_MAIL_DIENSTKONTO, ANTHROPIC_API_KEY, POSTFACH_DOMAINS. verify_jwt = false (eigene Prüfung).
 import Anthropic from "npm:@anthropic-ai/sdk@1.7.0";
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.119.0";
 import { abrufen as abrufKern } from "../_shared/abruf.ts";
 import { belegAusDatei } from "../_shared/beleg.ts";
 import { dienstkontoLesen, Gmail, PostfachFehler, type Dienstkonto } from "../_shared/gmail.ts";
-import { adresseSauber, kopfWert, type GmailTeil } from "../_shared/postfach.ts";
+import { adresseSauber, domainErlaubt, domainText, erlaubteDomains, kopfWert, type GmailTeil } from "../_shared/postfach.ts";
 
 const KOPF = {
   "Access-Control-Allow-Origin": "*",
@@ -44,17 +53,22 @@ const gleichzeitig = (a: string, b: string) => {
   return x === 0;
 };
 
-/** Abruf mit Claude als Leser */
-function abrufen(sb: SupabaseClient, sa: Dienstkonto, nurId: string | null) {
+/** Abruf mit Claude als Leser — der Anhang geht als base64 durch, ohne Umweg über Bytes */
+function abrufen(sb: SupabaseClient, sa: Dienstkonto, nurId: string | null, domains: string[]) {
   const schluesselKi = Deno.env.get("ANTHROPIC_API_KEY");
   if (!schluesselKi) throw new Error("Die KI ist noch nicht eingerichtet (ANTHROPIC_API_KEY fehlt).");
   const ki = new Anthropic({ apiKey: schluesselKi });
-  return abrufKern({ sb, sa, nurId, lesen: (bytes, mime, firma) => belegAusDatei(ki, bytes, mime, "email", firma) });
+  return abrufKern({ sb, sa, nurId, domains, lesen: (datei, firma) => belegAusDatei(ki, { base64: datei.base64 }, datei.mime, "email", firma) });
 }
 
 // ── Verbindung testen ─────────────────────────────────────────────────────
-async function testen(sb: SupabaseClient, sa: Dienstkonto, adresse: string) {
+async function testen(sb: SupabaseClient, sa: Dienstkonto, adresse: string, domains: string[]) {
   const { data: zeile } = await sb.from("postfaecher").select("id").eq("adresse", adresse).maybeSingle();
+  if (!domainErlaubt(adresse, domains)) {
+    const fehler = domainText(adresse);
+    if (zeile) await sb.from("postfaecher").update({ geprueft_am: null, letzter_fehler: fehler }).eq("id", zeile.id);
+    return { ok: false, adresse, grund: "domain", fehler, client_id: sa.client_id ?? null };
+  }
   try {
     const g = await Gmail.oeffnen(sa, adresse);
     const l = await g.api<{ messages?: { id: string }[] }>("messages?maxResults=3&q=in%3Ainbox");
@@ -88,40 +102,42 @@ Deno.serve(async (req) => {
       if (!v?.secret || !gleichzeitig(v.secret, geheim)) return antwort({ error: "Nicht berechtigt." }, 401);
       cron = true;
     } else {
+      if (ein.aktion !== "testen" && ein.aktion !== "abrufen") return antwort({ error: "Unbekannte Aktion." }, 400);
       const jwt = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
       const { data: { user } } = await sb.auth.getUser(jwt);
       if (!user) return antwort({ error: "Bitte anmelden." }, 401);
       const { data: ich } = await sb.from("profiles").select("rolle, aktiv").eq("id", user.id).maybeSingle();
       if (ich?.rolle !== "chef" || !ich.aktiv) return antwort({ error: "Das Postfach richtet nur der Chef ein." }, 403);
-      // Rollen & Rechte: abrufen gehört zu den Eingangsrechnungen, einrichten zu den Einstellungen
-      const [{ data: eing }, { data: einst }] = await Promise.all([
-        sb.rpc("hat_recht_von", { p_user: user.id, p_recht: "eingang" }),
-        sb.rpc("hat_recht_von", { p_user: user.id, p_recht: "einstellungen" }),
-      ]);
-      if (!eing && !einst) return antwort({ error: "Das Postfach ist für deine Rolle nicht freigegeben." }, 403);
+      // Rollen & Rechte: einrichten/testen = Einstellungen, abrufen = Eingangsrechnungen — je genau dieses Recht
+      const testenAktion = ein.aktion === "testen";
+      const { data: darf } = await sb.rpc("hat_recht_von", { p_user: user.id, p_recht: testenAktion ? "einstellungen" : "eingang" });
+      if (!darf) {
+        return antwort({ error: testenAktion ? "Postfächer einrichten ist für deine Rolle nicht freigegeben." : "Eingangsrechnungen sind für deine Rolle nicht freigegeben." }, 403);
+      }
     }
 
     let sa: Dienstkonto;
     try { sa = dienstkontoLesen(Deno.env.get("GOOGLE_MAIL_DIENSTKONTO")); } catch (e) {
       return antwort({ ok: false, grund: "dienstkonto", error: (e as Error).message, fehler: (e as Error).message }, 503);
     }
+    const domains = await erlaubteDomains(sb, Deno.env.get("POSTFACH_DOMAINS"));
 
     if (ein.aktion === "testen" && !cron) {
       const adresse = adresseSauber(ein.adresse);
       if (!adresse) return antwort({ error: "Bitte eine gültige E-Mail-Adresse eintragen." }, 400);
-      return antwort(await testen(sb, sa, adresse));
+      return antwort(await testen(sb, sa, adresse, domains));
     }
     if (ein.aktion === "abrufen") {
       const nurId = !cron && typeof ein.postfach_id === "string" ? ein.postfach_id : null;
       if (cron) {
-        const lauf = abrufen(sb, sa, null).catch((e) => console.error("Cron-Abruf", e));
+        const lauf = abrufen(sb, sa, null, domains).catch((e) => console.error("Cron-Abruf", e));
         // deno-lint-ignore no-explicit-any
         const rt = (globalThis as any).EdgeRuntime;
         if (rt?.waitUntil) { rt.waitUntil(lauf); return antwort({ ok: true, gestartet: true }, 202); }
         await lauf;
         return antwort({ ok: true });
       }
-      return antwort({ ok: true, ...(await abrufen(sb, sa, nurId)) });
+      return antwort({ ok: true, ...(await abrufen(sb, sa, nurId, domains)) });
     }
     return antwort({ error: "Unbekannte Aktion." }, 400);
   } catch (e) {

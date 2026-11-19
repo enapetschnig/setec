@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { adresseKopf, base64Bytes, base64url, kopfKodieren, mailBauen } from "../../supabase/functions/_shared/mime.ts";
 import {
-  anhaengeFinden, eigeneRechnung, fehlerDeuten, lieferantZuordnen, nummerSchluessel, type GmailTeil,
+  adresseKopf, base64Bytes, base64Groesse, base64Standard, base64url, bytesBase64, kopfKodieren, mailBauen, zeilen76,
+} from "../../supabase/functions/_shared/mime.ts";
+import {
+  anhaengeFinden, anhaengeWaehlen, eigeneRechnung, fehlerDeuten, lieferantZuordnen, nummerSchluessel, type GmailTeil,
 } from "../../supabase/functions/_shared/postfach.ts";
 
 const dekodiert = (kopf: string) => kopf.split(/\r\n /).map((w) => {
@@ -69,6 +71,40 @@ describe("MIME-Nachricht", () => {
   });
 });
 
+describe("base64 ohne Rückruf je Byte (Gmail-Anhänge)", () => {
+  const zufall = (n: number) => Uint8Array.from({ length: n }, (_, i) => (i * 7919 + 13) % 256);
+  it("gleich wie Buffer, jede Restlänge", () => {
+    for (const n of [0, 1, 2, 3, 4, 5, 57, 58, 59, 1000, 4097]) {
+      const b = zufall(n);
+      const soll = Buffer.from(b).toString("base64");
+      expect(bytesBase64(b)).toBe(soll);
+      expect([...base64Bytes(soll)]).toEqual([...b]);
+      expect([...base64Bytes(Buffer.from(b).toString("base64url"))]).toEqual([...b]); // Gmail: base64url ohne „=“
+      expect(base64Groesse(soll)).toBe(n);
+    }
+  });
+  it("Zeilen zu 76 Zeichen wie bisher (RFC 2045)", () => {
+    for (const n of [0, 56, 57, 58, 114, 1000]) {
+      const b = zufall(n);
+      expect(bytesBase64(b, true)).toBe(zeilen76(Buffer.from(b).toString("base64")));
+    }
+  });
+  it("überspringt Leerraum, base64url → Standard mit „=“", () => {
+    expect(new TextDecoder().decode(base64Bytes("JVBE\r\nRi0x\n LjQ="))).toBe("%PDF-1.4");
+    expect(base64Standard("Pz8-_w")).toBe("Pz8+/w==");
+    expect(base64Standard(Buffer.from("%PDF-1.4 ü").toString("base64url"))).toBe(Buffer.from("%PDF-1.4 ü").toString("base64"));
+  });
+  it("10 MB in kurzer Zeit (vorher: Funktion je Byte)", () => {
+    const b = zufall(10 * 1024 * 1024);
+    const t0 = performance.now();
+    const text = bytesBase64(b);
+    const zurueck = base64Bytes(text);
+    expect(zurueck.length).toBe(b.length);
+    expect(zurueck[123_457]).toBe(b[123_457]);
+    expect(performance.now() - t0).toBeLessThan(3000);
+  });
+});
+
 describe("Fehler von Google verständlich", () => {
   it("Freigabe fehlt", () => {
     expect(fehlerDeuten("unauthorized_client", "Client is unauthorized to retrieve access tokens using this method").grund).toBe("freigabe_fehlt");
@@ -102,6 +138,28 @@ describe("Anhänge finden", () => {
     expect(anhaengeFinden(teil).map((a) => [a.attachmentId, a.mime])).toEqual([
       ["A", "application/pdf"], ["B", "application/pdf"], ["C", "image/jpeg"],
     ]);
+  });
+  it("zu große Anhänge und mehr als 4 je Mail: nicht gelesen, aber mit Grund (nie still)", () => {
+    const pdf = (id: string, groesse: number) => ({ dateiname: `${id}.pdf`, mime: "application/pdf", attachmentId: id, groesse });
+    const { lesen, ungelesen } = anhaengeWaehlen([
+      pdf("gross", 15 * 1024 * 1024), pdf("a", 1000), pdf("b", 1000),
+      { dateiname: "foto.jpg", mime: "image/jpeg", attachmentId: "f", groesse: 4 * 1024 * 1024 },
+      pdf("c", 1000), pdf("d", 1000), pdf("e", 1000), pdf("f", 1000),
+    ]);
+    expect(lesen.map((a) => a.attachmentId)).toEqual(["a", "b", "c", "d"]);
+    expect(ungelesen).toEqual([
+      "„gross.pdf“ ist zu groß für die KI (15,0 MB, höchstens 10,0 MB)",
+      "„foto.jpg“ ist zu groß für die KI (4,0 MB, höchstens 3,5 MB)",
+      "2 weitere Anhänge nicht gelesen (höchstens 4 je Mail): „e.pdf“, „f.pdf“",
+    ]);
+    expect(anhaengeWaehlen([pdf("a", 1), pdf("b", 1)], 1).ungelesen).toEqual(["1 weiterer Anhang nicht gelesen (höchstens 1 je Mail): „b.pdf“"]);
+  });
+  it("PDF vor Fotos: fünf Fotos verdrängen die Rechnung nicht", () => {
+    const foto = (n: string) => ({ dateiname: `${n}.jpg`, mime: "image/jpeg", attachmentId: n, groesse: 200 * 1024 });
+    const rechnung = { dateiname: "rechnung.pdf", mime: "application/pdf", attachmentId: "rechnung", groesse: 1000 };
+    const { lesen, ungelesen } = anhaengeWaehlen([foto("f1"), foto("f2"), foto("f3"), foto("f4"), foto("f5"), rechnung]);
+    expect(lesen.map((a) => a.attachmentId)).toEqual(["rechnung", "f1", "f2", "f3"]);
+    expect(ungelesen).toEqual(["2 weitere Anhänge nicht gelesen (höchstens 4 je Mail): „f4.jpg“, „f5.jpg“"]);
   });
 });
 
