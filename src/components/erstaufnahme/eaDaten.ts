@@ -28,6 +28,19 @@ export function useErstaufnahmen() {
   });
 }
 
+/** Erstaufnahmen eines Kunden — Block beim Kontakt (Stefan 19.11.2026) */
+export function useKundeErstaufnahmen(kundeId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["erstaufnahmen", "kunde", kundeId],
+    enabled: !!kundeId,
+    queryFn: async () => {
+      const data = await alleZeilen((von, bis) => supabase.from("erstaufnahmen").select(AUSWAHL).eq("kunde_id", kundeId!)
+        .order("created_at", { ascending: false }).order("id").range(von, bis));
+      return data as unknown as EaZeile[];
+    },
+  });
+}
+
 async function fotosLaden(eaIds: string[]): Promise<{ fotos: ErstaufnahmeFoto[]; urls: Record<string, string> }> {
   if (!eaIds.length) return { fotos: [], urls: {} };
   const { data, error } = await supabase.from("erstaufnahme_fotos").select("*").in("erstaufnahme_id", eaIds)

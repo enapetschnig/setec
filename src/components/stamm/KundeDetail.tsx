@@ -1,6 +1,6 @@
 import { useMemo, type ComponentType, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { ChevronRight, FileText, Mail, MessageCircle, Navigation, PackageCheck, Pencil, Phone, Receipt } from "lucide-react";
+import { ChevronRight, ClipboardList, FileText, Mail, MessageCircle, Navigation, PackageCheck, Pencil, Phone, Receipt } from "lucide-react";
 import { Karte, Kennzahl, ProjektStatusBadge, StatusBadge, StatusPille } from "@/components/Bausteine";
 import { Button } from "@/components/ui/button";
 import type { ProjektMitKunde } from "@/hooks/useDaten";
@@ -18,6 +18,7 @@ import { KontaktPersonen } from "@/components/kontakte/KontaktPersonen";
 import { istFestnetz, waNummer } from "@/lib/whatsapp";
 import { KundeLieferscheine } from "@/components/kundenlieferschein/KundeLieferscheine";
 import { KundeAufgaben } from "@/components/aufgaben/KundeAufgaben";
+import { KundeErstaufnahmen } from "@/components/erstaufnahme/KundeErstaufnahmen";
 import { useSitzung } from "@/hooks/useSitzung";
 
 const adresse = (k: Pick<Kunde, "strasse" | "plz" | "ort">) =>
@@ -88,11 +89,14 @@ export function KundeDetail({
           </div>
         )}
         {!mitKopf && art !== "kunde" && <StatusPille eintrag={KONTAKT_ART[art]} />}
-        {dRech && !lieferant && (
-          <div className="grid grid-cols-2 gap-2 sm:flex">
+        {!lieferant && (
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap" data-kunde-aktionen>
+            {dRech && <>
             <Button asChild className="h-11"><Link to={`/belege/neu?typ=angebot&kunde=${kunde.id}`}><FileText className="h-4 w-4" /> Neues Angebot</Link></Button>
             <Button asChild variant="outline" className="h-11"><Link to={`/belege/neu?typ=rechnung&kunde=${kunde.id}`}><Receipt className="h-4 w-4" /> Neue Rechnung</Link></Button>
             <Button asChild variant="outline" className="h-11"><Link to={`/kunden-lieferscheine/neu?kunde=${kunde.id}`}><PackageCheck className="h-4 w-4" /> Lieferschein</Link></Button>
+            </>}
+            <Button asChild variant={dRech ? "outline" : "default"} className="h-11"><Link to={`/erstaufnahmen/neu?kunde=${kunde.id}`}><ClipboardList className="h-4 w-4" /> Erstaufnahme</Link></Button>
           </div>
         )}
         <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
@@ -126,6 +130,8 @@ export function KundeDetail({
       )}
 
       <KundeAufgaben kundeId={kunde.id} projektIds={projekte.map((p) => p.id)} />
+
+      {!lieferant && <KundeErstaufnahmen kundeId={kunde.id} />}
 
       {art !== "kunde" && <LieferantBelege kontakt={kunde} istChef={istChef && darf("eingang")} />}
 
