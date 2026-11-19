@@ -23,7 +23,7 @@ const tel = (n: string) => `tel:${n.replace(/[^\d+]/g, "")}`;
  * Adresse mit Karte und Navigation, Kunde mit Telefon, Notizen, wer noch
  * dabei ist, Bus und Geräte, offene Hinweise und der Weg ins Projekt.
  */
-export function EinsatzDetails({ t }: { t: Termin }) {
+export function EinsatzDetails({ t }: { t: Termin & { kunden?: { name: string; telefon: string | null; email: string | null } | null } }) {
   const { profil, istChef, darf } = useSitzung();
   const { data: projekt, isLoading } = useProjekt(t.projekt_id ?? undefined);
   const { data: mitarbeiter = [] } = useMitarbeiter();
@@ -42,7 +42,10 @@ export function EinsatzDetails({ t }: { t: Termin }) {
   // Besichtigung → Erstaufnahme, Service → Regiebericht (wer eingeteilt ist oder der Chef)
   const weiter = terminWeiter(t, istChef || (!!profil && t.mitarbeiter.includes(profil.id)), darf("regie"));
   const adresse = (projekt ? [projekt.strasse, [projekt.plz, projekt.ort].filter(Boolean).join(" ")].filter(Boolean).join(", ") : "") || t.ort || "";
-  const kunde = projekt?.kunden;
+  // Am Termin gewählter Kunde (Besichtigung ohne Projekt) vor dem Projekt-Kunden; Nummer notfalls vom anderen
+  const kunde = t.kunden || projekt?.kunden
+    ? { name: (t.kunden ?? projekt?.kunden)!.name, telefon: t.kunden?.telefon || projekt?.kunden?.telefon || null, email: t.kunden?.email || projekt?.kunden?.email || null }
+    : null;
   const kollegen = t.mitarbeiter.filter((id) => id !== profil?.id).map((id) => mitarbeiter.find((m) => m.id === id)).filter((m): m is NonNullable<typeof m> => !!m);
   const team = teams.find((x) => x.id === t.team_id);
   const geraete = t.fahrzeuge.map((id) => fahrzeuge.find((f) => f.id === id)).filter((f): f is NonNullable<typeof f> => !!f);
@@ -131,7 +134,7 @@ export function EinsatzDetails({ t }: { t: Termin }) {
           <Link to={weiter.pfad}>{weiter.art === "erstaufnahme" ? <ClipboardList className="h-4 w-4" /> : <ClipboardSignature className="h-4 w-4" />} {weiter.text}</Link>
         </Button>
       )}
-      {!projekt && !adresse && !t.beschreibung && !kollegen.length && !weiter && <p className="text-muted-foreground">Kein Projekt hinterlegt.</p>}
+      {!projekt && !kunde && !adresse && !t.beschreibung && !kollegen.length && !weiter && <p className="text-muted-foreground">Kein Projekt hinterlegt.</p>}
     </div>
   );
 }

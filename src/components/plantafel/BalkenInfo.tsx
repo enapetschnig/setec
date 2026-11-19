@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Check, ClipboardList, ClipboardSignature, Clock, MapPin, Pencil, Trash2, Truck, UserRound, Users, X } from "lucide-react";
+import { Check, ClipboardList, ClipboardSignature, Clock, MapPin, Pencil, Phone, Trash2, Truck, UserRound, Users, X } from "lucide-react";
 import { useSitzung } from "@/hooks/useSitzung";
 import { terminWeiter } from "@/lib/kalender";
 import { Avatar } from "@/components/Bausteine";
@@ -22,9 +22,9 @@ const zeitText = (t: Termin) => (t.ganztags || !t.von ? "ganztägig" : `${uhrzei
  * Termin bzw. Projekt vorbelegt) — für den Chef und wer eingeteilt ist.
  */
 export function BalkenInfo({
-  t, x, y, projekt, kunde, team, mitarbeiter, fahrzeuge, darf, konflikt, onZu, onBearbeiten, onErledigt, onGeraet, onPersonWeg, onLoeschen,
+  t, x, y, projekt, kunde, telefon, team, mitarbeiter, fahrzeuge, darf, konflikt, onZu, onBearbeiten, onErledigt, onGeraet, onPersonWeg, onLoeschen,
 }: {
-  t: Termin; x: number; y: number; projekt?: Projekt; kunde?: { name: string } | null; team?: Team; mitarbeiter: Profil[]; fahrzeuge: Fahrzeug[]; darf: boolean; konflikt: boolean;
+  t: Termin; x: number; y: number; projekt?: Projekt; kunde?: { name: string } | null; telefon?: string | null; team?: Team; mitarbeiter: Profil[]; fahrzeuge: Fahrzeug[]; darf: boolean; konflikt: boolean;
   onZu: () => void; onBearbeiten: () => void; onErledigt: () => void; onGeraet: (id: string) => void; onPersonWeg: (id: string) => void; onLoeschen: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -109,6 +109,11 @@ export function BalkenInfo({
         {weiter && (
           <Button size="sm" variant={darf ? "outline" : "default"} className="h-9 gap-1.5" onClick={() => { onZu(); navigate(weiter.pfad); }} data-termin-weiter={weiter.art}>
             {weiter.art === "erstaufnahme" ? <ClipboardList className="h-4 w-4" /> : <ClipboardSignature className="h-4 w-4" />} {weiter.text}
+          </Button>
+        )}
+        {telefon && (
+          <Button size="sm" variant="outline" className="h-9 gap-1.5" asChild data-kunde-anrufen>
+            <a href={`tel:${telefon.replace(/[^\d+]/g, "")}`} title={telefon} aria-label={`${kunde?.name ?? "Kunde"} anrufen`}><Phone className="h-4 w-4" /> Anrufen</a>
           </Button>
         )}
         {darf && <Button size="sm" variant="outline" className="h-9 gap-1.5" onClick={onErledigt}><Check className="h-4 w-4" /> {t.status === "erledigt" ? "Wieder offen" : "Erledigt"}</Button>}

@@ -2,7 +2,7 @@ import { AdresseFeld } from "@/components/AdresseFeld";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
-import { ClipboardList, ClipboardSignature, Loader2, Trash2 } from "lucide-react";
+import { ClipboardList, ClipboardSignature, Loader2, Phone, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import FormularDialog from "@/components/FormularDialog";
 import { Button } from "@/components/ui/button";
@@ -343,6 +343,11 @@ export function TerminDialog({
           <div className="space-y-2">
             <Label>Kunde</Label>
             <KundeWahl wert={w.kundeId || null} onChange={kundeWaehlen} />
+            {kunde?.telefon && (
+              <Button asChild variant="outline" className="h-11 w-full gap-2 sm:w-auto" data-kunde-anrufen>
+                <a href={`tel:${kunde.telefon.replace(/[^\d+]/g, "")}`}><Phone className="h-4 w-4" /> Anrufen · {kunde.telefon}</a>
+              </Button>
+            )}
           </div>
         )}
 

@@ -73,7 +73,7 @@ type Gemeinsam = {
   /** Sichtbare Stunden laut Betrieb (z. B. [6, 18]) — Einsätze außerhalb erweitern sie */
   stunden: [number, number];
   /** Kunden (Name) für Termine ohne Projekt */
-  kunden?: { id: string; name: string }[];
+  kunden?: { id: string; name: string; telefon?: string | null }[];
   /** Angemeldete Person — ihre Termine werden hervorgehoben, wenn sie nur liest */
   ich?: string;
   onBearbeiten: (t: Termin) => void;
@@ -157,6 +157,7 @@ function Info({ info, p, onZu }: { info: { id: string; x: number; y: number }; p
   if (!t) return null;
   return (
     <BalkenInfo t={t} x={info.x} y={info.y} projekt={p.projekte.find((x) => x.id === t.projekt_id)} kunde={kundeVon(p, t)} team={p.teams.find((x) => x.id === t.team_id)}
+      telefon={kundeVon(p, t)?.telefon || p.kunden?.find((k) => k.id === p.projekte.find((x) => x.id === t.projekt_id)?.kunde_id)?.telefon || null}
       mitarbeiter={p.mitarbeiter} fahrzeuge={p.fahrzeuge} darf={p.darf} konflikt={p.konfliktIds.has(t.id)}
       onZu={onZu}
       onBearbeiten={() => { onZu(); p.onBearbeiten(t); }}

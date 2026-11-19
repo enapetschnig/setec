@@ -15,7 +15,12 @@ import { ABWESENHEIT_ART, EINSATZ_STATUS, TEAM_FARBEN, type AbwesenheitArt, type
 import { istArbeitstag } from "@/lib/zeitkonto";
 import { cn } from "@/lib/utils";
 
-type Einsatz = Termin & { projekte: { nummer: string; name: string; kunden: { name: string; telefon: string | null } | null } | null };
+/** Kunde direkt am Termin (Besichtigung, Service ohne Projekt) oder über das Projekt */
+type Einsatz = Termin & {
+  projekte: { nummer: string; name: string; kunden: { name: string; telefon: string | null } | null } | null;
+  kunden: { name: string; telefon: string | null; email: string | null } | null;
+};
+const telLink = (n: string) => `tel:${n.replace(/[^\d+]/g, "")}`;
 
 const GESEHEN = "elektro.termine.gesehen";
 /** Ab wann dieses Gerät mitschaut — vorher Geändertes kennt der Monteur gar nicht anders (frisch installiert) */
@@ -64,7 +69,7 @@ export function EinsatzBereich({ onStunden }: { onStunden: (projektId?: string) 
     queryKey: ["termine", "einsaetze", profil?.id, heute],
     enabled: !!profil?.id,
     queryFn: async () => {
-      const { data, error } = await supabase.from("termine").select("*, projekte(nummer, name, kunden(name, telefon))")
+      const { data, error } = await supabase.from("termine").select("*, projekte(nummer, name, kunden(name, telefon)), kunden(name, telefon, email)")
         .contains("mitarbeiter", [profil!.id]).or(`bis_datum.gte.${heute},datum.gte.${heute}`).order("datum").limit(50);
       if (error) throw error;
       return (data ?? []) as unknown as Einsatz[];
@@ -141,7 +146,8 @@ export function EinsatzBereich({ onStunden }: { onStunden: (projektId?: string) 
       {!heuteListe.length && !ichAbwesend && <p className="rounded-lg border border-dashed bg-card p-3 text-sm text-muted-foreground">Heute kein Einsatz eingeteilt.</p>}
       <ul className="space-y-2.5">
         {heuteListe.map((t) => {
-          const telefon = t.projekte?.kunden?.telefon;
+          const telefon = t.kunden?.telefon || t.projekte?.kunden?.telefon;
+          const kundeName = t.kunden?.name ?? t.projekte?.kunden?.name;
           return (
             <li key={t.id} className={cn("rounded-lg border bg-card p-3", t.dringend && t.status !== "erledigt" && "border-status-rot-fg/50")}>
               <div className="flex items-start gap-2">
@@ -150,7 +156,7 @@ export function EinsatzBereich({ onStunden }: { onStunden: (projektId?: string) 
                   <p className="mt-0.5 text-sm text-muted-foreground">
                     <CalendarClock className="mr-1 inline h-3.5 w-3.5 align-[-2px]" />{zeitText(t)}{t.ort && ` · ${t.ort}`}
                   </p>
-                  {t.projekte?.kunden?.name && <p className="text-sm text-muted-foreground">{t.projekte.kunden.name}</p>}
+                  {kundeName && !t.titel.includes(kundeName) && <p className="text-sm text-muted-foreground">{kundeName}</p>}
                   <Einteilung t={t} />
                   {t.beschreibung && <p className="mt-1 text-sm">{t.beschreibung}</p>}
                 </div>
@@ -168,7 +174,7 @@ export function EinsatzBereich({ onStunden }: { onStunden: (projektId?: string) 
                     <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(t.ort)}`} target="_blank" rel="noreferrer"><Navigation className="h-4 w-4" /> Hinfahren</a>
                   </Button>
                 )}
-                {telefon && <Button asChild variant="outline" className="h-11"><a href={`tel:${telefon.replace(/\s/g, "")}`}><Phone className="h-4 w-4" /> Anrufen</a></Button>}
+                {telefon && <Button asChild variant="outline" className="h-11" data-kunde-anrufen><a href={telLink(telefon)} aria-label={`${kundeName ?? "Kunde"} anrufen`}><Phone className="h-4 w-4" /> Anrufen</a></Button>}
                 {t.projekt_id && (
                   <>
                     <Button variant="outline" className="h-11" onClick={() => onStunden(t.projekt_id ?? undefined)}><Clock className="h-4 w-4" /> Stunden</Button>
