@@ -38,7 +38,7 @@ const ART_FILTER: ArtFilter[] = ["alle", "kunde", "lieferant", "partner"];
  * Kontakt zeigt Anschrift, beim Kunden Projekte/Anlagen/Belege, beim
  * Lieferanten seine Belege. Am PC Liste links, Kontakt rechts; am Handy
  * eigene Ansicht über `?k=<id>` — so führt „Zurück“ wieder zur Liste.
- * Filter `?art=`, Karte `?ansicht=karte`.
+ * Filter `?art=`, Karte `?ansicht=karte` mit ihren Filtern `&filter=…&kwp=…`.
  */
 export default function KundenSeite() {
   const { istChef } = useSitzung();
@@ -129,13 +129,17 @@ export default function KundenSeite() {
 
   // ── Handy: ein Kontakt ────────────────────────────────────────────
   if (!pc && gewaehltId) {
+    // Zurück zur Liste bzw. Karte mit allem, was gewählt war (Art, Kartenfilter, kWp)
+    const zurueck = new URLSearchParams(params);
+    zurueck.delete("k");
+    const zurueckText = zurueck.toString();
     return (
       <Seite
         titel={gewaehlt?.name ?? "Kontakt"}
         untertitel={gewaehlt
           ? `${gewaehltArt === "lieferant" ? "Lieferant" : `K${gewaehlt.nummer}`}${gewaehlt.ort ? ` · ${gewaehlt.ort}` : ""}`
           : undefined}
-        zurueckPfad={`/kunden${karte ? "?ansicht=karte" : art !== "alle" ? `?art=${art}` : ""}`}
+        zurueckPfad={`/kunden${zurueckText ? `?${zurueckText}` : ""}`}
         aktionen={gewaehlt && (
           <Button variant="outline" className="h-11 px-3" onClick={() => oeffnen(gewaehlt)} aria-label="Kontakt bearbeiten">
             <Pencil className="h-4 w-4" />

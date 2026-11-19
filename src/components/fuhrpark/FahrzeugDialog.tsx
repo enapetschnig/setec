@@ -1,25 +1,30 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Loader2, Plus, Trash2 } from "lucide-react";
+import { Image as Bild, Loader2, Plus, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import FormularDialog from "@/components/FormularDialog";
 import { Rueckfrage, type Frage } from "@/components/Rueckfrage";
 import { Gruppentitel, StatusPille } from "@/components/Bausteine";
+import { BildBetrachter } from "@/components/projekt/BildBetrachter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Feld, leerNull, useBeimOeffnen, zahlFeld, Zusatz } from "@/components/stamm/Felder";
+import { Feld, leerNull, useBeimOeffnen, Zusatz } from "@/components/stamm/Felder";
 import { fehlerText } from "@/components/stamm/stammDaten";
 import { FahrzeugDokumente } from "@/components/fuhrpark/FahrzeugDokumente";
+import { EintragDialog } from "@/components/fuhrpark/EintragDialog";
+import { FAHRZEUG_FOTOS, useFahrzeugFotoAdressen } from "@/components/fuhrpark/fuhrparkDaten";
 import { useLagerorte, useMitarbeiter, useNeuLaden } from "@/hooks/useDaten";
 import { useSitzung } from "@/hooks/useSitzung";
 import { datum, dezimalLesen, euro, isoTag } from "@/lib/format";
 import { faelligkeiten, faelligText, pruefungText } from "@/lib/fuhrpark";
-import { FAHRZEUG_ART, FAHRZEUG_EINTRAG, name, type Fahrzeug, type FahrzeugArt, type FahrzeugEintrag } from "@/lib/types";
+import {
+  FAHRZEUG_ART, FAHRZEUG_EINTRAG, name, type Fahrzeug, type FahrzeugArt, type FahrzeugEintrag, type FahrzeugEintragFoto,
+} from "@/lib/types";
 import { datumKurz } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -76,13 +81,17 @@ export function FahrzeugDialog({
     queryKey: ["fahrzeuge", "bordbuch", fahrzeug?.id],
     enabled: open && !!fahrzeug,
     queryFn: async () => {
-      const { data, error } = await supabase.from("fahrzeug_eintraege").select("*").eq("fahrzeug_id", fahrzeug!.id)
-        .order("datum", { ascending: false }).order("created_at", { ascending: false }).limit(100);
+      // mit den Fotos am Eintrag (Schaden), älteste zuerst
+      const { data, error } = await supabase.from("fahrzeug_eintraege").select("*, fahrzeug_eintrag_fotos(*)").eq("fahrzeug_id", fahrzeug!.id)
+        .order("datum", { ascending: false }).order("created_at", { ascending: false })
+        .order("created_at", { referencedTable: "fahrzeug_eintrag_fotos" }).limit(100);
       if (error) throw error;
-      return (data ?? []) as FahrzeugEintrag[];
+      return (data ?? []) as EintragMitFotos[];
     },
   });
   const { data: mitarbeiter = [] } = useMitarbeiter();
+  // Vorschaubilder aller Fotos im Bordbuch auf einmal
+  const { data: adressen = {} } = useFahrzeugFotoAdressen(eintraege.flatMap((e) => e.fahrzeug_eintrag_fotos.map((f) => f.pfad)));
 
   const mitKennzeichen = FAHRZEUG_ART[w.art].mitKennzeichen;
   const darf = istChef;
@@ -256,9 +265,10 @@ export function FahrzeugDialog({
             {eintraege.length === 0 ? (
               <p className="rounded-lg border border-dashed px-3 py-2.5 text-sm text-muted-foreground">Noch nichts eingetragen.</p>
             ) : (
-              <ul className="divide-y rounded-lg border bg-card">
+              <ul className="divide-y rounded-lg border bg-card" data-bordbuch>
                 {eintraege.map((e) => (
-                  <EintragZeile key={e.id} e={e} von={name(mitarbeiter.find((m) => m.id === e.erstellt_von))} istChef={istChef} />
+                  <EintragZeile key={e.id} e={e} adressen={adressen} istChef={istChef}
+                    nameVon={(id) => name(mitarbeiter.find((m) => m.id === id))} />
                 ))}
               </ul>
             )}
@@ -279,21 +289,43 @@ export function FahrzeugDialog({
   );
 }
 
-function EintragZeile({ e, von, istChef }: { e: FahrzeugEintrag; von: string; istChef: boolean }) {
+type EintragMitFotos = FahrzeugEintrag & { fahrzeug_eintrag_fotos: FahrzeugEintragFoto[] };
+
+function EintragZeile({ e, adressen, nameVon, istChef }: {
+  e: EintragMitFotos;
+  adressen: Record<string, string>;
+  nameVon: (id: string | null) => string;
+  istChef: boolean;
+}) {
   const neuLaden = useNeuLaden();
+  const fotos = e.fahrzeug_eintrag_fotos;
+  const von = nameVon(e.erstellt_von);
+  const [index, setIndex] = useState<number | null>(null);
+  const aktuelles = index !== null ? fotos[index] : null;
   const umschalten = async () => {
     const { error } = await supabase.from("fahrzeug_eintraege").update({ erledigt: !e.erledigt }).eq("id", e.id);
     if (error) return toast.error("Nicht gespeichert", { description: fehlerText(error) });
     await neuLaden("fahrzeuge");
   };
   const [frage, setFrage] = useState<Frage | null>(null);
+  // Eintrag weg → Fotos mit: die Zeilen per Fremdschlüssel, die Dateien gleich danach (Speicher)
   const loeschen = async () => {
     const { error } = await supabase.from("fahrzeug_eintraege").delete().eq("id", e.id);
     if (error) return toast.error("Nicht gelöscht", { description: fehlerText(error) });
+    if (fotos.length) await supabase.storage.from(FAHRZEUG_FOTOS).remove(fotos.map((f) => f.pfad));
     await neuLaden("fahrzeuge");
   };
+  const fotoLoeschen = async (f: FahrzeugEintragFoto) => {
+    const { error } = await supabase.from("fahrzeug_eintrag_fotos").delete().eq("id", f.id);
+    if (error) return toast.error("Nicht gelöscht", { description: fehlerText(error) });
+    await supabase.storage.from(FAHRZEUG_FOTOS).remove([f.pfad]);
+    setIndex(null);
+    toast.success("Foto gelöscht");
+    await neuLaden("fahrzeuge");
+  };
+  const fotoText = fotos.length === 1 ? "1 Foto" : `${fotos.length} Fotos`;
   return (
-    <li className="flex items-start gap-3 p-3 text-sm">
+    <li className="flex items-start gap-3 p-3 text-sm" data-eintrag={e.id}>
       <div className="min-w-0 flex-1 space-y-1">
         <div className="flex flex-wrap items-center gap-1.5">
           <StatusPille eintrag={FAHRZEUG_EINTRAG[e.art]} />
@@ -301,6 +333,19 @@ function EintragZeile({ e, von, istChef }: { e: FahrzeugEintrag; von: string; is
           <span className="text-xs text-muted-foreground">{datum(e.datum)}{von ? ` · ${von}` : ""}{e.km != null ? ` · ${e.km.toLocaleString("de-AT")} km` : ""}</span>
         </div>
         <p className="whitespace-pre-line">{e.text}</p>
+        {fotos.length > 0 && (
+          <ul className="flex flex-wrap gap-1.5 pt-1" aria-label={fotoText}>
+            {fotos.map((f, i) => (
+              <li key={f.id}>
+                <button type="button" onClick={() => setIndex(i)} aria-label={`Foto ${i + 1} von ${fotos.length} ansehen`}
+                  className="block h-14 w-14 overflow-hidden rounded-md border bg-muted">
+                  {adressen[f.pfad] ? <img src={adressen[f.pfad]} alt="" loading="lazy" className="h-full w-full object-cover" />
+                    : <Bild className="m-auto h-5 w-5 text-muted-foreground" />}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
       {e.kosten != null && <span className="zahl shrink-0 font-medium">{euro(Number(e.kosten))}</span>}
       {istChef && (
@@ -309,86 +354,31 @@ function EintragZeile({ e, von, istChef }: { e: FahrzeugEintrag; von: string; is
             <Button variant="outline" className="h-9 px-2.5 text-xs" onClick={umschalten}>{e.erledigt ? "Wieder offen" : "Behoben"}</Button>
           )}
           <Button variant="ghost" size="icon" className="h-9 w-9" aria-label="Eintrag löschen"
-            onClick={() => setFrage({ titel: "Eintrag löschen?", text: `${FAHRZEUG_EINTRAG[e.art]?.text ?? "Eintrag"} vom ${datum(e.datum)} wird aus dem Bordbuch gelöscht.`, knopf: "Löschen", gefahr: true, aktion: loeschen })}><Trash2 className="h-4 w-4" /></Button>
+            onClick={() => setFrage({
+              titel: "Eintrag löschen?",
+              text: `${FAHRZEUG_EINTRAG[e.art]?.text ?? "Eintrag"} vom ${datum(e.datum)} wird aus dem Bordbuch gelöscht${fotos.length ? ` — samt ${fotoText}` : ""}.`,
+              knopf: "Löschen", gefahr: true, aktion: loeschen,
+            })}><Trash2 className="h-4 w-4" /></Button>
         </span>
       )}
       <Rueckfrage frage={frage} onClose={() => setFrage(null)} />
+      <BildBetrachter
+        bilder={fotos.map((f) => ({ url: adressen[f.pfad] ?? "", alt: f.name ?? "Foto" }))}
+        index={index}
+        onIndex={setIndex}
+        onSchliessen={() => setIndex(null)}
+        fuss={aktuelles ? (
+          <div className="flex items-center justify-between gap-3 p-3 text-sm text-white">
+            <span className="min-w-0 truncate">{[nameVon(aktuelles.erstellt_von), datum(isoTag(new Date(aktuelles.created_at)))].filter(Boolean).join(" · ")}</span>
+            {istChef && (
+              <button type="button" onClick={() => void fotoLoeschen(aktuelles)} className="flex h-11 shrink-0 items-center gap-1.5 px-3" aria-label="Foto löschen">
+                <Trash2 className="h-4 w-4 text-destructive" /> Löschen
+              </button>
+            )}
+          </div>
+        ) : undefined}
+      />
     </li>
   );
 }
 
-/** Neuer Bordbuch-Eintrag. Monteure: nur Schaden oder Tanken. */
-function EintragDialog({ open, onOpenChange, fahrzeug, onKm }: { open: boolean; onOpenChange: (o: boolean) => void; fahrzeug: Fahrzeug; onKm?: (km: number) => void }) {
-  const neuLaden = useNeuLaden();
-  const { istChef, profil } = useSitzung();
-  const arten = istChef ? Object.keys(FAHRZEUG_EINTRAG) : ["schaden", "tanken"];
-  const [art, setArt] = useState(istChef ? "service" : "schaden");
-  const [text, setText] = useState("");
-  const [tag, setTag] = useState(isoTag());
-  const [km, setKm] = useState("");
-  const [kosten, setKosten] = useState("");
-  const [speichert, setSpeichert] = useState(false);
-
-  useBeimOeffnen(open ? "offen" : null, () => {
-    setArt(istChef ? "service" : "schaden");
-    setText("");
-    setTag(isoTag());
-    setKm(fahrzeug.km_stand != null ? String(fahrzeug.km_stand) : "");
-    setKosten("");
-  });
-
-  const speichern = async () => {
-    if (!text.trim()) return toast.error(art === "schaden" ? "Bitte kurz beschreiben, was kaputt ist." : "Bitte kurz beschreiben, was gemacht wurde.");
-    const kmZahl = km.trim() ? dezimalLesen(km) : null;
-    const kostenZahl = kosten.trim() ? dezimalLesen(kosten) : null;
-    if ((kmZahl !== null && kmZahl < 0) || (kostenZahl !== null && kostenZahl < 0)) return toast.error("Kilometer und Kosten können nicht negativ sein.");
-    setSpeichert(true);
-    const { error } = await supabase.from("fahrzeug_eintraege").insert({
-      fahrzeug_id: fahrzeug.id, art, text: text.trim(), datum: tag, km: kmZahl === null ? null : Math.round(kmZahl),
-      kosten: kostenZahl, erledigt: art !== "schaden", erstellt_von: profil?.id,
-    });
-    // km-Stand mitziehen, wenn er höher ist (nur Chef darf das Fahrzeug ändern)
-    if (!error && istChef && kmZahl !== null && kmZahl > (fahrzeug.km_stand ?? 0)) {
-      const { error: kmFehler } = await supabase.from("fahrzeuge").update({ km_stand: Math.round(kmZahl) }).eq("id", fahrzeug.id);
-      if (!kmFehler) onKm?.(Math.round(kmZahl));
-    }
-    setSpeichert(false);
-    if (error) return toast.error("Nicht gespeichert", { description: fehlerText(error) });
-    toast.success(art === "schaden" ? "Schaden gemeldet — der Chef sieht es" : "Eingetragen");
-    await neuLaden("fahrzeuge");
-    onOpenChange(false);
-  };
-
-  return (
-    <FormularDialog open={open} onOpenChange={onOpenChange} titel={istChef ? "Bordbuch-Eintrag" : "Schaden melden"} beschreibung={fahrzeug.name}
-      gesperrt={speichert} ungespeichert={!!text.trim()}
-      fuss={(
-        <>
-          <Button variant="outline" className="h-12" onClick={() => onOpenChange(false)} disabled={speichert}>Abbrechen</Button>
-          <Button className="h-12 min-w-32" onClick={speichern} disabled={speichert}>
-            {speichert && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Speichern
-          </Button>
-        </>
-      )}>
-      <div className="max-w-xl space-y-4">
-        <div className="flex flex-wrap gap-2">
-          {arten.map((a) => (
-            <button key={a} type="button" aria-pressed={art === a} onClick={() => setArt(a)}
-              className={cn("min-h-11 rounded-full border px-3.5 text-sm font-medium", art === a ? "border-primary bg-primary-soft text-primary" : "bg-card hover:bg-muted")}>
-              {FAHRZEUG_EINTRAG[a].text}
-            </button>
-          ))}
-        </div>
-        <Feld id="b-text" label={art === "schaden" ? "Was ist kaputt?" : "Was wurde gemacht?"}>
-          <Textarea id="b-text" rows={3} value={text} onChange={(e) => setText(e.target.value)}
-            placeholder={art === "schaden" ? "z. B. Seitenspiegel rechts gebrochen" : "z. B. Ölwechsel, Bremsen vorne"} />
-        </Feld>
-        <div className="grid grid-cols-3 gap-2">
-          <Feld id="b-datum" label="Datum"><Input id="b-datum" type="date" className="h-11" value={tag} onChange={(e) => setTag(e.target.value)} /></Feld>
-          <Feld id="b-km" label="km"><Input id="b-km" className="zahl h-11" inputMode="numeric" value={km} onChange={(e) => setKm(e.target.value)} /></Feld>
-          <Feld id="b-kosten" label="Kosten €"><Input id="b-kosten" className="zahl h-11 text-right" inputMode="decimal" value={kosten} onChange={(e) => setKosten(e.target.value)} placeholder={zahlFeld(null)} /></Feld>
-        </div>
-      </div>
-    </FormularDialog>
-  );
-}

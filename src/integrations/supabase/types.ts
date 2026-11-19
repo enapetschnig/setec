@@ -1717,6 +1717,54 @@ export type Database = {
           },
         ]
       }
+      fahrzeug_eintrag_fotos: {
+        Row: {
+          created_at: string
+          eintrag_id: string
+          erstellt_von: string | null
+          groesse: number | null
+          id: string
+          mime: string | null
+          name: string | null
+          pfad: string
+        }
+        Insert: {
+          created_at?: string
+          eintrag_id: string
+          erstellt_von?: string | null
+          groesse?: number | null
+          id?: string
+          mime?: string | null
+          name?: string | null
+          pfad: string
+        }
+        Update: {
+          created_at?: string
+          eintrag_id?: string
+          erstellt_von?: string | null
+          groesse?: number | null
+          id?: string
+          mime?: string | null
+          name?: string | null
+          pfad?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fahrzeug_eintrag_fotos_eintrag_id_fkey"
+            columns: ["eintrag_id"]
+            isOneToOne: false
+            referencedRelation: "fahrzeug_eintraege"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fahrzeug_eintrag_fotos_erstellt_von_fkey"
+            columns: ["erstellt_von"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       fahrzeuge: {
         Row: {
           aktiv: boolean

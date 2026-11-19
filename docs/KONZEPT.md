@@ -355,7 +355,11 @@ Migration `20261113113000_kontakte_anlagen_karte.sql`, Logik in `kontaktLogik.ts
   („Anlage des Kunden“ in der Übersicht — auch für den Monteur).
 - **Karte** (Leaflet + OpenStreetMap-Kacheln, erst beim Öffnen geladen): Punkt je Kontakt mit
   Lage; Farbe Projekt läuft / Kunde mit PV / Kunde / Lieferant / Partner (Status-Tokens);
-  Filter PV, Speicher, Wallbox, Projekt läuft; Tippen → Eckdaten + „Öffnen“.
+  Filter PV, Speicher, Wallbox, Einspeisung begrenzt, Projekt läuft und Leistung „ab 10/15/20/30 kWp“
+  (Nachbar-Referenzen, Besprechung 17.11.2026) — in der Adresse (`&filter=pv,begrenzt&kwp=15`), nach
+  „Öffnen“ → Zurück noch da. Begrenzt = Prozent unter 100 oder kW unter der kWp der Anlage, 0 kW zählt
+  (`einspeisungBegrenzt`); Leistung und Begrenzung an derselben Anlage (`kontaktPasst`).
+  Tippen → je Anlage kWp, Speicher, Wallbox und „Einspeisung begrenzt auf …“ + „Öffnen“.
   Koordinaten aus Nominatim, höchstens 1 Anfrage/s (`kontaktDaten.ts`), gespeichert samt der
   gesuchten Adresse (`geo_adresse`) — neu gesucht wird nur bei geänderter Adresse: automatisch
   beim Speichern des Kontakts, für Altbestand per Knopf „Lage suchen“ auf der Karte.
@@ -817,6 +821,17 @@ Migrationen `20261110100000_fuhrpark_teams_plantafel.sql` und
   Messgeräte — Kennzeichen, Pickerl/Service/Prüfung bis, gemietet, stillgelegt.
   `fahrzeug_eintraege` = Bordbuch (Service, Reparatur, Prüfung, Schaden,
   Tanken); Monteure melden Schäden und Tanken, alles andere der Chef.
+  `fahrzeug_eintrag_fotos` = Fotos am Eintrag (privater Bucket `fahrzeug-fotos`,
+  Pfad `<eintrag_id>/…`, Migration `20261119114500`): sehen alle Aktiven, anhängen
+  der Chef oder wer den Eintrag gemeldet hat, löschen nur der Chef. Eintrag gelöscht
+  → Fotos mit (Zeilen per cascade, die Dateien löscht die App über die Storage-API).
+- **Schaden melden mit Fotos** (Besprechung 17.11.2026): der Monteur über die
+  Startseite („Schaden am Fahrzeug melden“ — Fuhrpark ist `nurChef`), `EintragDialog`
+  ohne Fahrzeug, vorbelegt mit seinem Bus (`meinFahrzeug`: Lagerort im Bus, sonst
+  Stamm-Bus seines Teams); Fotos per Kamera (Serienaufnahme) oder Galerie, verkleinert
+  wie die Baustellenfotos. Scheitert ein Foto, bleibt der Eintrag, „Fotos nachladen“
+  versucht den Rest. Der Chef sieht im Bordbuch Vorschaubilder, groß im `BildBetrachter`
+  (wer, wann, Löschen); Startseite „N Schäden an Fahrzeugen gemeldet · M Fotos“.
 - `teams`: Name, Farbe, Leitung, Mitglieder, Stamm-Bus (Teams-Dialog im Kalender).
   Ein Termin (`termine`) hat `team_id`, `mitarbeiter[]` und `fahrzeuge[]`.
 - **Der Kalender ist der einzige Ort zum Einteilen** (seit 17.11.2026; Gantt,
@@ -924,7 +939,8 @@ Monteur am Handy: nur Täglich (Stunden, Scannen, Regieberichte), Baustelle
 (Lieferscheine), Sonstiges (Mein Konto); „Meine Aufgaben“ nur, wenn ihm eine
 zugeteilt ist, ohne „+ Aufgabe“; Projekte, Aufgaben, Änderungswünsche sind `nurChef`
 — `START_MONTEUR` in `pages/Index.tsx`. Kontakte, Lager, Fuhrpark,
-Anlagen, Dokumente, Artikel sind `nurChef` im Menü. Das Büro hat eigene Punkte
+Anlagen, Dokumente, Artikel sind `nurChef` im Menü — einen Schaden am Bus meldet der
+Monteur über den Knopf „Schaden am Fahrzeug melden“ auf der Startseite. Das Büro hat eigene Punkte
 „Artikel & Leistungen“ (ein Katalog, Reiter) und „Mitarbeiter & Zugänge“.
 Den Kalender sehen auch Monteure (nur lesen).
 

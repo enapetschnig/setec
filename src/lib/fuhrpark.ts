@@ -40,3 +40,24 @@ export function faelligkeiten(
 export function faelligText(x: Faelligkeit, datumKurz: (iso: string) => string): string {
   return x.ueberfaellig ? `${x.was} überfällig` : `${x.was} bis ${datumKurz(x.datum)}`;
 }
+
+/**
+ * „Schaden melden“ von der Startseite: welches Fahrzeug ist wohl gemeint?
+ * Sein Bus (der Lagerort im Bus gehört ihm), sonst der Stamm-Bus seines
+ * Teams (Leitung oder Mitglied) — sonst keins, dann wählt er selbst.
+ */
+export function meinFahrzeug(
+  fahrzeuge: Pick<Fahrzeug, "id" | "lagerort_id" | "aktiv">[],
+  lagerorte: { id: string; user_id: string | null }[],
+  teams: { fahrzeug_id: string | null; leiter_id: string | null; mitglieder: string[]; aktiv?: boolean }[],
+  userId: string | null | undefined,
+): string | null {
+  if (!userId) return null;
+  const aktiv = fahrzeuge.filter((f) => f.aktiv);
+  const meinLager = new Set(lagerorte.filter((l) => l.user_id === userId).map((l) => l.id));
+  const bus = aktiv.find((f) => f.lagerort_id && meinLager.has(f.lagerort_id));
+  if (bus) return bus.id;
+  const team = teams.find((t) => t.aktiv !== false && t.fahrzeug_id && (t.leiter_id === userId || t.mitglieder.includes(userId))
+    && aktiv.some((f) => f.id === t.fahrzeug_id));
+  return team?.fahrzeug_id ?? null;
+}

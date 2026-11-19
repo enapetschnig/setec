@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -13,7 +14,8 @@ import type { Kunde, StatusTon } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useGeokodierung } from "./kontaktDaten";
 import {
-  adresseText, KONTAKT_ART, kontaktArt, merkmale, PUNKT_LEGENDE, punktTon, pvKurz, serverNichtGefunden, type KartenFilter,
+  adresseText, anlageKurz, kartenAuswahlLesen, kartenAuswahlSchreiben, KONTAKT_ART, kontaktArt, kontaktPasst, KWP_STUFEN, merkmale,
+  PUNKT_LEGENDE, punktTon, serverNichtGefunden, type KartenAuswahl, type KartenFilter,
 } from "./kontaktLogik";
 
 /** Punktfarbe aus den Status-Tokens — ganze Klassennamen, damit Tailwind sie findet */
@@ -43,8 +45,12 @@ const FILTER: { wert: KartenFilter; text: string }[] = [
   { wert: "pv", text: "Mit PV" },
   { wert: "speicher", text: "Mit Speicher" },
   { wert: "wallbox", text: "Mit Wallbox" },
+  { wert: "begrenzt", text: "Einspeisung begrenzt" },
   { wert: "laufend", text: "Projekt läuft" },
 ];
+
+const CHIP = "h-10 shrink-0 rounded-full border px-3.5 text-sm font-medium transition-colors";
+const chipKlasse = (an: boolean) => cn(CHIP, an ? "border-primary bg-primary-soft text-primary" : "bg-card text-muted-foreground hover:text-foreground");
 
 /** Beim ersten Mal (und wenn sich die Auswahl ändert) alle Punkte ins Bild */
 function Einpassen({ punkte, filter }: { punkte: [number, number][]; filter: string }) {
@@ -75,6 +81,8 @@ function Einpassen({ punkte, filter }: { punkte: [number, number][]; filter: str
  * Tippen zeigt Name, Adresse und PV-Eckdaten mit „Öffnen“. Koordinaten
  * kommen aus der Datenbank; fehlende sucht der Server im Hintergrund (geo-suchen,
  * jede Minute) oder sofort „Jetzt suchen“ (Nominatim, 1/s).
+ * Filter (auch „ab … kWp“ und „Einspeisung begrenzt“ für Nachbar-Referenzen,
+ * Besprechung 17.11.2026) stehen in der Adresse — nach „Öffnen“ und Zurück sind sie noch da.
  */
 export default function KontakteKarte({
   kontakte, projekte, anlagen, onOeffnen,
@@ -84,7 +92,9 @@ export default function KontakteKarte({
   anlagen: AnlageMitKunde[];
   onOeffnen: (id: string) => void;
 }) {
-  const [filter, setFilter] = useState<Set<KartenFilter>>(new Set());
+  const [params, setParams] = useSearchParams();
+  const auswahl = useMemo(() => kartenAuswahlLesen(params), [params]);
+  const { filter, kwp: abKwp } = auswahl;
   const { fehlend, laeuft, starten } = useGeokodierung(kontakte);
   // Der Server sucht fehlende Lagen jede Minute im Hintergrund (Edge Function
   // geo-suchen) — solange welche fehlen, die Punkte alle 30 s nachladen.
@@ -110,22 +120,25 @@ export default function KontakteKarte({
       const al = jeKunde.get(k.id) ?? [];
       const m = merkmale(al);
       const art = kontaktArt(k.art);
-      return { k, art, m, laeuft: laufend.has(k.id), ton: punktTon(art, m, laufend.has(k.id)), pv: al.flatMap(pvKurz).slice(0, 4) };
+      // im Kärtchen je Anlage eine Zeile, höchstens drei (Wallbox allein zeigt nichts)
+      const zeilen = al.map(anlageKurz).filter((z) => z.eckdaten.length || z.einspeisung).slice(0, 3);
+      return { k, al, art, m, laeuft: laufend.has(k.id), ton: punktTon(art, m, laufend.has(k.id)), zeilen };
     });
   }, [kontakte, projekte, anlagen]);
 
-  const sichtbar = daten.filter((d) => d.k.lat != null && d.k.lng != null && [...filter].every((f) =>
-    f === "pv" ? d.m.pv : f === "speicher" ? d.m.speicher : f === "wallbox" ? d.m.wallbox : d.laeuft));
+  const sichtbar = daten.filter((d) => d.k.lat != null && d.k.lng != null && kontaktPasst(d.al, d.laeuft, auswahl));
   const ohneLage = daten.filter((d) => d.k.lat == null || d.k.lng == null).length;
   const punkte = sichtbar.map((d) => [d.k.lat!, d.k.lng!] as [number, number]);
   const kwp = sichtbar.reduce((s, d) => s + d.m.kwp, 0);
 
-  const umschalten = (f: KartenFilter) => setFilter((alt) => {
-    const neu = new Set(alt);
+  // In die Adresse (ersetzen, kein neuer Verlaufseintrag) — andere Parameter bleiben
+  const waehlen = (neu: KartenAuswahl) => setParams(kartenAuswahlSchreiben(params, neu), { replace: true });
+  const umschalten = (f: KartenFilter) => {
+    const neu = new Set(filter);
     if (neu.has(f)) neu.delete(f);
     else neu.add(f);
-    return neu;
-  });
+    waehlen({ filter: neu, kwp: abKwp });
+  };
 
   const suchen = async () => {
     const r = await starten();
@@ -136,33 +149,52 @@ export default function KontakteKarte({
 
   return (
     <div className="space-y-3">
-      <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
-        {FILTER.map((f) => (
-          <button key={f.wert} type="button" aria-pressed={filter.has(f.wert)} onClick={() => umschalten(f.wert)}
-            className={cn("h-10 shrink-0 rounded-full border px-3.5 text-sm font-medium transition-colors",
-              filter.has(f.wert) ? "border-primary bg-primary-soft text-primary" : "bg-card text-muted-foreground hover:text-foreground")}>
-            {f.text}
-          </button>
-        ))}
+      <div className="space-y-2" data-karten-filter>
+        <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+          {FILTER.map((f) => (
+            <button key={f.wert} type="button" aria-pressed={filter.has(f.wert)} onClick={() => umschalten(f.wert)} className={chipKlasse(filter.has(f.wert))}>
+              {f.text}
+            </button>
+          ))}
+        </div>
+        {/* Leistung: eine Stufe oder alle — noch einmal tippen nimmt sie weg */}
+        <div className="-mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-1" role="group" aria-label="Leistung der Anlage">
+          <span className="shrink-0 text-sm text-muted-foreground">Leistung</span>
+          <button type="button" aria-pressed={!abKwp} onClick={() => waehlen({ filter, kwp: null })} className={chipKlasse(!abKwp)}>alle</button>
+          {KWP_STUFEN.map((s) => (
+            <button key={s} type="button" aria-pressed={abKwp === s} onClick={() => waehlen({ filter, kwp: abKwp === s ? null : s })} className={chipKlasse(abKwp === s)}>
+              ab {s} kWp
+            </button>
+          ))}
+          {/* eine andere Zahl aus der Adresse (?kwp=12) bleibt sichtbar */}
+          {abKwp && !KWP_STUFEN.includes(abKwp) && (
+            <button type="button" aria-pressed onClick={() => waehlen({ filter, kwp: null })} className={chipKlasse(true)}>ab {zahl(abKwp)} kWp</button>
+          )}
+        </div>
       </div>
 
       <div className="isolate overflow-hidden rounded-lg border">
-        <MapContainer center={[47.41, 15.27]} zoom={10} scrollWheelZoom className="h-[calc(100dvh-17rem)] min-h-[22rem] w-full lg:h-[calc(100dvh-20rem)]">
+        <MapContainer center={[47.41, 15.27]} zoom={10} scrollWheelZoom className="h-[calc(100dvh-20rem)] min-h-[22rem] w-full lg:h-[calc(100dvh-23rem)]">
           <TileLayer
             url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
             maxZoom={19}
           />
-          <Einpassen punkte={punkte} filter={[...filter].sort().join(",")} />
+          <Einpassen punkte={punkte} filter={`${[...filter].sort().join(",")}|${abKwp ?? ""}`} />
           {sichtbar.map((d) => (
             <Marker key={d.k.id} position={[d.k.lat!, d.k.lng!]} icon={punkt(d.ton)} title={d.k.name}>
               <Popup>
-                <div className="min-w-48 space-y-1.5 font-sans">
+                <div className="min-w-48 space-y-1.5 font-sans" data-karten-popup>
                   <p className="text-sm font-semibold leading-tight text-foreground">{d.k.name}</p>
                   <p className="text-xs text-muted-foreground">
                     {[d.art !== "kunde" ? KONTAKT_ART[d.art].text : null, adresseText(d.k)].filter(Boolean).join(" · ")}
                   </p>
-                  {d.pv.length > 0 && <p className="text-xs text-foreground">{d.pv.join(" · ")}</p>}
+                  {d.zeilen.map((z, i) => (
+                    <div key={i} className="text-xs text-foreground">
+                      {z.eckdaten.length > 0 && <p>{z.eckdaten.join(" · ")}</p>}
+                      {z.einspeisung && <p className={cn(z.begrenzt && "font-semibold")}>{z.einspeisung}</p>}
+                    </div>
+                  ))}
                   {d.laeuft && <p className="text-xs text-foreground">Projekt läuft</p>}
                   <Button size="sm" className="mt-1 h-9 w-full" onClick={() => onOeffnen(d.k.id)}>Öffnen</Button>
                 </div>

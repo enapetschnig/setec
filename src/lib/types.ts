@@ -27,6 +27,7 @@ export type Zahlung = Tables<"zahlungen">;
 export type Mahnung = Tables<"mahnungen">;
 export type Fahrzeug = Tables<"fahrzeuge">;
 export type FahrzeugEintrag = Tables<"fahrzeug_eintraege">;
+export type FahrzeugEintragFoto = Tables<"fahrzeug_eintrag_fotos">;
 export type Team = Tables<"teams">;
 export type EingangPosition = Tables<"eingang_positionen">;
 export type Lieferschein = Tables<"lieferscheine">;

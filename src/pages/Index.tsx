@@ -33,7 +33,8 @@ import { datumKurz, euro, isoTag, stunden, tageDazu } from "@/lib/format";
 import { sichtbareNavigation, type NavEintrag } from "@/lib/navigation";
 import { useEingangsrechnungen } from "@/components/eingang/eingangDaten";
 import { ablauf, skontoLaeuftAb, zuordnung, zuZahlen } from "@/components/eingang/eingangLogik";
-import { useOffeneSchaeden } from "@/components/fuhrpark/fuhrparkDaten";
+import { useOffeneSchaeden, useOffeneSchadenFotos } from "@/components/fuhrpark/fuhrparkDaten";
+import { EintragDialog } from "@/components/fuhrpark/EintragDialog";
 import { useFahrzeuge } from "@/hooks/useDaten";
 import { faelligkeiten } from "@/lib/fuhrpark";
 import { useOffenePosten } from "@/components/op/opDaten";
@@ -106,6 +107,7 @@ export default function Index() {
   const [zeitProjekt, setZeitProjekt] = useState<string | undefined>();
   const [projektOffen, setProjektOffen] = useState(false);
   const [terminOffen, setTerminOffen] = useState(false);
+  const [schadenOffen, setSchadenOffen] = useState(false);
   const [alleOffen, setAlleOffen] = useState(false);
 
   const heute = isoTag();
@@ -192,6 +194,7 @@ export default function Index() {
   // Fuhrpark: Pickerl, Service, Prüfung fällig — und gemeldete Schäden
   const { data: fahrzeuge = [] } = useFahrzeuge();
   const { data: schaeden = {} } = useOffeneSchaeden();
+  const { data: schadenFotos = 0 } = useOffeneSchadenFotos();
   const fuhrparkFaellig = fahrzeuge.flatMap((f) => faelligkeiten(f, isoTag()));
   const fuhrparkUeber = fuhrparkFaellig.filter((x) => x.ueberfaellig).length;
   const schaedenOffen = Object.values(schaeden).reduce((s, n) => s + n, 0);
@@ -282,7 +285,12 @@ export default function Index() {
       to: "/fuhrpark",
       warn: fuhrparkUeber > 0,
     },
-    schaedenOffen > 0 && { icon: Wrench, text: `${schaedenOffen} ${schaedenOffen === 1 ? "Schaden" : "Schäden"} an Fahrzeugen gemeldet`, to: "/fuhrpark", warn: true },
+    schaedenOffen > 0 && {
+      icon: Wrench,
+      text: `${schaedenOffen} ${schaedenOffen === 1 ? "Schaden" : "Schäden"} an Fahrzeugen gemeldet${schadenFotos ? ` · ${schadenFotos} ${schadenFotos === 1 ? "Foto" : "Fotos"}` : ""}`,
+      to: "/fuhrpark",
+      warn: true,
+    },
     eingangZuordnen > 0 && { icon: Inbox, text: `${eingangZuordnen} ${eingangZuordnen === 1 ? "Eingangsrechnung" : "Eingangsrechnungen"} zuordnen`, to: "/eingang?filter=zuzuordnen" },
     dRech && zuVerrechnen > 0 && { icon: FolderKanban, text: `${zuVerrechnen} ${zuVerrechnen === 1 ? "Projekt hat" : "Projekte haben"} offene Stunden oder Material`, to: "/projekte?filter=offen" },
     buero.nachfassen > 0 && { icon: PhoneCall, text: `${buero.nachfassen} ${buero.nachfassen === 1 ? "Angebot" : "Angebote"} nachfassen — Gültigkeit läuft ab`, to: "/angebote?filter=nachfassen", warn: true },
@@ -318,6 +326,12 @@ export default function Index() {
         {!istChef && darf("projekte_anlegen") && (
           <Button variant="outline" className="mt-2.5 h-12 w-full gap-2" onClick={() => setProjektOffen(true)}>
             <FolderPlus className="h-4 w-4" /> Neue Baustelle anlegen
+          </Button>
+        )}
+        {/* Monteur: Schaden an Bus oder Gerät mit Fotos melden — den Fuhrpark hat er nicht im Menü (Besprechung 17.11.2026) */}
+        {!istChef && fahrzeuge.length > 0 && (
+          <Button variant="outline" className="mt-2.5 h-12 w-full gap-2" onClick={() => setSchadenOffen(true)} data-schaden-melden>
+            <Wrench className="h-4 w-4" /> Schaden am Fahrzeug melden
           </Button>
         )}
         {dRech && (
@@ -496,6 +510,7 @@ export default function Index() {
       <ZeitDialog open={zeitOffen} onOpenChange={setZeitOffen} projektId={zeitProjekt} />
       <ProjektDialog open={projektOffen} onOpenChange={setProjektOffen} />
       <TerminDialog open={terminOffen} onOpenChange={setTerminOffen} />
+      {!istChef && <EintragDialog open={schadenOffen} onOpenChange={setSchadenOffen} fahrzeug={null} />}
     </div>
   );
 }

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-  belegPille, belegSummen, brauchtGeo, einspeisungText, geoAnfrage, istLieferant, kontaktArt, linkSauber, lieferantSchluessel,
-  merkmale, namenLesen, nominatimLesen, punktTon, pvKurz, type LieferantBeleg,
+  anlageKurz, belegPille, belegSummen, brauchtGeo, einspeisungBegrenzt, einspeisungText, geoAnfrage, istLieferant, kartenAuswahlLesen,
+  kartenAuswahlSchreiben, kontaktArt, kontaktPasst, linkSauber, lieferantSchluessel, merkmale, namenLesen, nominatimLesen, punktTon, pvKurz,
+  type KartenAuswahl, type LieferantBeleg,
 } from "./kontaktLogik";
 
 describe("Lieferanten-Namen", () => {
@@ -80,6 +81,58 @@ describe("PV-Anlage", () => {
     expect(punktTon("kunde", { pv: true }, false)).toBe("gruen");
     expect(punktTon("kunde", { pv: false }, false)).toBe("grau");
     expect(punktTon("lieferant", { pv: false }, true)).toBe("lila");
+  });
+});
+
+describe("Karte: Einspeisebegrenzung und Leistung (Nachbar-Referenzen, Besprechung 17.11.)", () => {
+  it("begrenzt: Prozent unter 100, kW unter der Modulleistung, 0 kW = Nulleinspeisung", () => {
+    expect(einspeisungBegrenzt({ einspeisung_prozent: 70 })).toBe(true);
+    expect(einspeisungBegrenzt({ einspeisung_prozent: 100 })).toBe(false);
+    expect(einspeisungBegrenzt({ pv_kwp: 10, einspeisung_kw: 0 })).toBe(true);
+    expect(einspeisungBegrenzt({ pv_kwp: 10, einspeisung_kw: 4 })).toBe(true);
+    expect(einspeisungBegrenzt({ pv_kwp: 10, einspeisung_kw: 10 })).toBe(false);
+    expect(einspeisungBegrenzt({ pv_kwp: 10, einspeisung_kw: 15 })).toBe(false);
+    // ohne kWp lässt sich nicht vergleichen — ein eingetragener kW-Wert gilt als Begrenzung
+    expect(einspeisungBegrenzt({ einspeisung_kw: 4 })).toBe(true);
+    expect(einspeisungBegrenzt({ pv_kwp: 10 })).toBe(false);
+    expect(einspeisungBegrenzt({})).toBe(false);
+  });
+
+  it("Auswahl aus der Adresse und zurück — andere Parameter bleiben", () => {
+    const a = kartenAuswahlLesen(new URLSearchParams("ansicht=karte&filter=pv,begrenzt,unsinn&kwp=15"));
+    expect([...a.filter].sort()).toEqual(["begrenzt", "pv"]);
+    expect(a.kwp).toBe(15);
+    expect(kartenAuswahlLesen(new URLSearchParams("kwp=abc")).kwp).toBeNull();
+    expect(kartenAuswahlLesen(new URLSearchParams("kwp=-3")).kwp).toBeNull();
+    const p = kartenAuswahlSchreiben(new URLSearchParams("ansicht=karte&art=kunde&filter=pv"), { filter: new Set(["begrenzt", "speicher"]), kwp: 10 });
+    expect(p.toString()).toBe("ansicht=karte&art=kunde&filter=speicher%2Cbegrenzt&kwp=10");
+    expect(kartenAuswahlSchreiben(p, { filter: new Set(), kwp: null }).toString()).toBe("ansicht=karte&art=kunde");
+  });
+
+  const auswahl = (filter: string[], kwp: number | null = null): KartenAuswahl => ({ filter: new Set(filter) as KartenAuswahl["filter"], kwp });
+  it("Leistung und Begrenzung an derselben Anlage, Wallbox als eigene Anlage zählt für den Kontakt", () => {
+    const huber = [{ art: "pv", pv_kwp: 15.2, einspeisung_kw: 4 }, { art: "ladestation", wallbox: "go-e" }];
+    const maier = [{ art: "pv", pv_kwp: 16, einspeisung_kw: 20 }, { art: "pv", pv_kwp: 5, einspeisung_prozent: 70 }];
+    const klein = [{ art: "pv", pv_kwp: 8, einspeisung_kw: 0 }];
+    expect(kontaktPasst(huber, false, auswahl(["begrenzt"], 15))).toBe(true);
+    expect(kontaktPasst(huber, false, auswahl(["pv", "wallbox", "begrenzt"], 10))).toBe(true);
+    // 16 kWp ohne Begrenzung + 5 kWp mit 70 % — keine 15-kWp-Anlage mit Begrenzung
+    expect(kontaktPasst(maier, false, auswahl(["begrenzt"], 15))).toBe(false);
+    expect(kontaktPasst(maier, false, auswahl([], 15))).toBe(true);
+    expect(kontaktPasst(maier, false, auswahl(["begrenzt"]))).toBe(true);
+    expect(kontaktPasst(klein, false, auswahl(["begrenzt"]))).toBe(true);
+    expect(kontaktPasst(klein, false, auswahl([], 10))).toBe(false);
+    expect(kontaktPasst(klein, false, auswahl(["laufend"]))).toBe(false);
+    expect(kontaktPasst([], true, auswahl(["laufend"]))).toBe(true);
+    expect(kontaktPasst([], false, auswahl([]))).toBe(true);
+  });
+
+  it("Kärtchen: Eckdaten und Einspeisung je Anlage", () => {
+    expect(anlageKurz({ pv_kwp: 15.2, speicher_kwh: 10, einspeisung_kw: 4 }))
+      .toEqual({ eckdaten: ["15,2 kWp", "Speicher 10 kWh"], einspeisung: "Einspeisung begrenzt auf 4 kW", begrenzt: true });
+    expect(anlageKurz({ pv_kwp: 8, einspeisung_kw: 10 }))
+      .toEqual({ eckdaten: ["8 kWp"], einspeisung: "Einspeisung 10 kW", begrenzt: false });
+    expect(anlageKurz({ art: "ladestation", wallbox: "go-e" })).toEqual({ eckdaten: ["Wallbox"], einspeisung: null, begrenzt: false });
   });
 });
 
