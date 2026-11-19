@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { geoAnfrage, geoLauf, photonPunkt } from "../../supabase/functions/_shared/geo.ts";
+import { brauchtGeo, geoAnfrage, geoLauf, photonPunkt, serverNichtGefunden } from "../../supabase/functions/_shared/geo.ts";
 
 // Hintergrund-Verortung (Stefan 18.11.2026: Karte leer — importierte Kontakte waren nie gesucht)
 type Zeile = { id: string; art: string; strasse: string | null; plz: string | null; ort: string | null; geo_adresse: string | null; updated_at: string; lat?: number | null; lng?: number | null };
@@ -41,8 +41,18 @@ describe("geoLauf", () => {
     expect(r).toEqual({ offen: 3, gesucht: 3, gefunden: 2, abbruch: null });
     expect(d.updates.map((u) => u.id)).toEqual(["kunde", "nix", "lief"]); // Kunden zuerst, zuletzt geänderte zuerst
     expect(d.updates.find((u) => u.id === "kunde")!.werte).toEqual({ lat: 47.5, lng: 15.4, geo_adresse: "Hauptstraße 1, 8680 Mürzzuschlag, Österreich" });
-    expect(d.updates.find((u) => u.id === "nix")!.werte).toMatchObject({ lat: null, lng: null });
+    expect(d.updates.find((u) => u.id === "nix")!.werte).toEqual({ lat: null, lng: null, geo_adresse: "?Hauptstraße 1, 9999 Nirgendwo, Österreich" });
     expect(gefragt.every((u) => u.startsWith("https://photon.komoot.io/api/"))).toBe(true);
+  });
+  it("Photon fand nichts („?“) → Server sucht nicht wieder, die App (Nominatim) schon", async () => {
+    const nix = k("nix", { geo_adresse: "?Hauptstraße 1, 8650 Kindberg, Österreich" });
+    expect(serverNichtGefunden(nix)).toBe(true);
+    expect(brauchtGeo(nix)).toBe(true);
+    const d = db([nix]);
+    const r = await geoLauf(d, { bisMs: 10_000, pauseMs: 0, holen: (async () => { throw new Error("nicht fragen"); }) as typeof fetch });
+    expect(r).toEqual({ offen: 0, gesucht: 0, gefunden: 0, abbruch: null });
+    // Adresse geändert → Vermerk gilt nicht mehr, Server sucht wieder
+    expect(serverNichtGefunden({ ...nix, strasse: "Hauptstraße 2" })).toBe(false);
   });
   it("Dienst überlastet → aufhören, nichts als „nicht gefunden“ merken", async () => {
     const d = db([k("a"), k("bb")]);

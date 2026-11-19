@@ -13,7 +13,7 @@ import type { Kunde, StatusTon } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useGeokodierung } from "./kontaktDaten";
 import {
-  adresseText, KONTAKT_ART, kontaktArt, merkmale, PUNKT_LEGENDE, punktTon, pvKurz, type KartenFilter,
+  adresseText, KONTAKT_ART, kontaktArt, merkmale, PUNKT_LEGENDE, punktTon, pvKurz, serverNichtGefunden, type KartenFilter,
 } from "./kontaktLogik";
 
 /** Punktfarbe aus den Status-Tokens — ganze Klassennamen, damit Tailwind sie findet */
@@ -89,7 +89,8 @@ export default function KontakteKarte({
   // Der Server sucht fehlende Lagen jede Minute im Hintergrund (Edge Function
   // geo-suchen) — solange welche fehlen, die Punkte alle 30 s nachladen.
   const qc = useQueryClient();
-  const nochOffen = fehlend.length > 0;
+  // Was Photon schon nicht fand, sucht der Server nicht wieder — nur „Jetzt suchen“ (Nominatim)
+  const nochOffen = fehlend.some((k) => !serverNichtGefunden(k));
   useEffect(() => {
     if (!nochOffen || laeuft) return;
     const t = setInterval(() => void qc.invalidateQueries({ queryKey: ["kunden"] }), 30_000);
@@ -188,7 +189,7 @@ export default function KontakteKarte({
           <span className="min-w-0 flex-1">
             {zahl(ohneLage)} {ohneLage === 1 ? "Kontakt" : "Kontakte"} ohne Lage
             {fehlend.length < ohneLage && <span className="text-muted-foreground"> · {zahl(ohneLage - fehlend.length)} ohne Ort oder nicht gefunden</span>}
-            {fehlend.length > 0 && !laeuft && (
+            {nochOffen && !laeuft && (
               <span className="block text-xs text-muted-foreground" data-geo-hintergrund>
                 Die übrigen werden im Hintergrund gesucht (etwa 40 je Minute) und erscheinen nach und nach — auch wenn die Seite zu ist.
               </span>

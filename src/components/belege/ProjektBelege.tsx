@@ -19,14 +19,16 @@ import { useBelege, verrechneteAngeboteAus } from "./daten";
  * (öffnet gleich den Übernahme-Assistenten) und die Belege des Projekts.
  */
 export function ProjektBelege({ projekt }: { projekt: ProjektMitKunde }) {
-  const { istChef } = useSitzung();
+  const { istChef, darf } = useSitzung();
+  // Eingangsrechnungen sind ein eigenes Recht (RESTRICTIVE-Regel) — ohne es keine Karte, kein „Erfassen“
+  const dEingang = istChef && darf("eingang");
   const pc = useIstPc();
   const heute = isoTag();
   const { data: belege = [], isLoading } = useBelege(projekt.id, istChef);
   const { data: zahlen = {} } = useProjektZahlen();
   const verrechnet = useMemo(() => verrechneteAngeboteAus(belege), [belege]);
-  const { data: eingang = [] } = useProjektEingang(projekt.id, istChef);
-  const { data: eingangAlle = [] } = useEingangsrechnungen(istChef);
+  const { data: eingang = [] } = useProjektEingang(projekt.id, dEingang);
+  const { data: eingangAlle = [] } = useEingangsrechnungen(dEingang);
   const [eingangOffen, setEingangOffen] = useState<EingangMitAnteilen | "neu" | null>(null);
 
   // Belege sind Chef-Sache (RLS) — Monteure sehen hier nichts
@@ -74,7 +76,7 @@ export function ProjektBelege({ projekt }: { projekt: ProjektMitKunde }) {
         <AktionsKachel icon={FileText} titel="Angebot" unter="Leistungen antippen oder diktieren" to={`/belege/neu?typ=angebot&projekt=${projekt.id}`} />
       </div>
 
-      <Karte
+      {dEingang && <Karte
         titel="Eingangsrechnungen"
         ohnePolster
         aktion={(
@@ -113,7 +115,7 @@ export function ProjektBelege({ projekt }: { projekt: ProjektMitKunde }) {
             </li>
           </ul>
         )}
-      </Karte>
+      </Karte>}
 
       {isLoading ? (
         <p className="py-6 text-center text-sm text-muted-foreground">Lädt …</p>

@@ -6,7 +6,10 @@
 //
 // `geo_adresse` merkt sich, für welche Anfrage die Koordinaten gelten — erst eine
 // geänderte Adresse wird neu gesucht. Nicht gefunden = lat/lng leer, geo_adresse
-// gesetzt (nicht jedes Mal neu fragen).
+// gesetzt (nicht jedes Mal neu fragen). Findet der Server (Photon, strenger: nur
+// gleiche PLZ) nichts, merkt er sich „?“ + Anfrage — dann fragt die App beim
+// Öffnen des Kontakts oder über „Jetzt suchen“ noch einmal Nominatim; erst
+// deren „nicht gefunden“ ist endgültig.
 
 export type MitAdresse = { strasse?: string | null; plz?: string | null; ort?: string | null };
 
@@ -29,6 +32,17 @@ export const brauchtGeo = (k: MitAdresse & { geo_adresse?: string | null }) => {
   const a = geoAnfrage(k);
   return !!a && k.geo_adresse !== a;
 };
+
+/** Vermerk des Servers: Photon fand nichts, Nominatim (App) noch nicht gefragt */
+export const SERVER_NICHT_GEFUNDEN = "?";
+
+export const serverNichtGefunden = (k: MitAdresse & { geo_adresse?: string | null }) => {
+  const a = geoAnfrage(k);
+  return !!a && k.geo_adresse === SERVER_NICHT_GEFUNDEN + a;
+};
+
+/** Was der Hintergrundlauf noch suchen muss (ohne seine eigenen Fehlschläge) */
+export const brauchtGeoServer = (k: MitAdresse & { geo_adresse?: string | null }) => brauchtGeo(k) && !serverNichtGefunden(k);
 
 export const nominatimUrl = (anfrage: string) =>
   `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=at,de,it,si,hu,sk,cz,ch&accept-language=de&q=${encodeURIComponent(anfrage)}`;
@@ -87,7 +101,8 @@ type Db = { from: (t: string) => any };
  * Ein Lauf im Hintergrund: Kontakte ohne (aktuelle) Lage nacheinander suchen,
  * Kunden zuerst, zuletzt geänderte zuerst, bis `bisMs` um ist.
  * Dienst überlastet/gesperrt (429/403/5xx/Netz) → Lauf endet, der nächste
- * versucht es wieder; andere Fehler (400) → als „nicht gefunden“ merken.
+ * versucht es wieder; andere Fehler (400) → als „nicht gefunden“ merken
+ * (mit „?“ davor — die App fragt dann noch Nominatim).
  */
 export async function geoLauf(sb: Db, opt: { bisMs: number; holen?: typeof fetch; pauseMs?: number }) {
   const holen = opt.holen ?? fetch;
@@ -101,7 +116,7 @@ export async function geoLauf(sb: Db, opt: { bisMs: number; holen?: typeof fetch
     alle.push(...(data ?? []));
     if (!data || data.length < 1000) break;
   }
-  const offen = alle.filter(brauchtGeo).sort((a, b) =>
+  const offen = alle.filter(brauchtGeoServer).sort((a, b) =>
     Number(b.art === "kunde") - Number(a.art === "kunde") || b.updated_at.localeCompare(a.updated_at));
   let gesucht = 0, gefunden = 0, abbruch: string | null = null;
   for (const k of offen) {
@@ -118,7 +133,7 @@ export async function geoLauf(sb: Db, opt: { bisMs: number; holen?: typeof fetch
     gesucht++;
     if (punkt) gefunden++;
     // Nur schreiben, wenn die Adresse inzwischen nicht geändert wurde
-    const { error } = await sb.from("kunden").update({ lat: punkt?.lat ?? null, lng: punkt?.lng ?? null, geo_adresse: anfrage })
+    const { error } = await sb.from("kunden").update({ lat: punkt?.lat ?? null, lng: punkt?.lng ?? null, geo_adresse: punkt ? anfrage : SERVER_NICHT_GEFUNDEN + anfrage })
       .eq("id", k.id).eq("updated_at", k.updated_at);
     if (error) throw error;
   }

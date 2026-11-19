@@ -46,7 +46,7 @@ export const istLieferant = (k: { name: string; namen?: string[] | null }, text:
 
 // ── Adresse und Koordinaten ──────────────────────────────────────────────
 // Gemeinsam mit der Edge Function `geo-suchen` (Hintergrund-Verortung per pg_cron)
-export { adresseText, brauchtGeo, geoAnfrage, nominatimLesen, nominatimUrl } from "../../../supabase/functions/_shared/geo.ts";
+export { adresseText, brauchtGeo, geoAnfrage, nominatimLesen, nominatimUrl, serverNichtGefunden } from "../../../supabase/functions/_shared/geo.ts";
 
 // ── PV-Anlage ────────────────────────────────────────────────────────────
 export type Ueberwachung = "fronius" | "solax" | "huawei" | "sma" | "sonstige";

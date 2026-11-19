@@ -371,7 +371,7 @@ function Editor({ start, kunden, vorlageKunde, retourVon, lager }: {
 
 function Ansicht({ l }: { l: KlsVoll }) {
   const neuLaden = useNeuLaden();
-  const { firma } = useSitzung();
+  const { firma, darf } = useSitzung();
   const [unterschreiben, setUnterschreiben] = useState(false);
   const [mail, setMail] = useState(false);
   const [pdfLaeuft, setPdfLaeuft] = useState(false);
@@ -434,7 +434,7 @@ function Ansicht({ l }: { l: KlsVoll }) {
             {istMobilGeraet() ? "PDF" : "PDF / Drucken"}
           </Button>
           <Button variant="outline" className="h-11 gap-1.5" onClick={() => setMail(true)}><Mail className="h-4 w-4" /> Per E-Mail</Button>
-          {l.rechnung ? (
+          {!darf("rechnungen") ? null : l.rechnung ? (
             <Button asChild variant="outline" className="h-11 gap-1.5"><Link to={`/belege/${l.rechnung.id}`}><Receipt className="h-4 w-4" /> Rechnung {l.rechnung.nummer ?? "(Entwurf)"}</Link></Button>
           ) : (
             <Button asChild variant="outline" className="h-11 gap-1.5">
