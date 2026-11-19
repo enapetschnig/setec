@@ -46,6 +46,7 @@ export default function ErstaufnahmeDetail() {
 function NeueErstaufnahme() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
+  const neuLaden = useNeuLaden();
   const { data: kunden = [] } = useKunden();
   const [kundeId, setKundeId] = useState<string | null>(params.get("kunde"));
   const [laeuft, setLaeuft] = useState(false);
@@ -60,15 +61,18 @@ function NeueErstaufnahme() {
       const { data: t, error } = await supabase.from("termine").select("id, kunde_id, ort").eq("id", terminId).maybeSingle();
       if (error || !t) throw new Error(error?.message ?? "Termin nicht gefunden.");
       const eaId = await eaZumTermin(t);
+      void neuLaden("erstaufnahmen");
       navigate(`/erstaufnahmen/${eaId}`, { replace: true });
     })().catch((e) => setFehler((e as Error).message));
-  }, [terminId, navigate]);
+  }, [terminId, navigate, neuLaden]);
 
   const anlegen = async () => {
     setLaeuft(true);
     try {
       const k = kunden.find((x) => x.id === kundeId);
       const eaId = await eaAnlegen({ kunde_id: kundeId, strasse: k?.strasse ?? null, plz: k?.plz ?? null, ort: k?.ort ?? null, termin_id: null });
+      // Liste und Kunden-Karte gleich mit — sonst 30 s alter Stand beim Zurück
+      void neuLaden("erstaufnahmen");
       navigate(`/erstaufnahmen/${eaId}`, { replace: true });
     } catch (e) {
       toast.error((e as Error).message);

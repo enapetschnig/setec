@@ -90,6 +90,13 @@ try {
     await p.getByRole("button", { name: "Erstaufnahme anlegen" }).click();
     await p.waitForURL((u) => /^\/erstaufnahmen\/[0-9a-f-]{36}$/.test(u.pathname), { timeout: 15000 });
     ok(await anzahlEa() === vorher + 1, `${name}: neue Erstaufnahme hängt am Kunden`);
+    // ohne Eingabe zurück zum Kontakt: die Karte zeigt die neue sofort (nicht erst nach 30 s)
+    await p.goBack();
+    await p.waitForURL((u) => u.pathname === "/kunden", { timeout: 10000 });
+    const karte2 = p.locator("[data-kunde-erstaufnahmen]").last();
+    await karte2.waitFor({ timeout: 10000 });
+    await p.waitForTimeout(1500);
+    ok(await karte2.locator("[data-ea]").count() === vorher + 1, `${name}: neue Erstaufnahme gleich in der Kunden-Karte`);
     await p.context().close();
   }
 
