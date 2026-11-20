@@ -3,9 +3,10 @@
 // Chef sieht alles; Monteur/Lehrling nie Rechnungen, Eingangsrechnungen, Buchhaltung, Mitarbeiter;
 // Büro hat Rechnungen und Buchhaltung, aber nicht „Mitarbeiter & Zugänge“ und kann sich nicht zum Chef machen.
 import { expect, test } from "@playwright/test";
-import { als, anmelden, handySeite, konto, nurTestumgebung, wache } from "./grundtest-hilfe";
+import { als, anmelden, grundbestand, handySeite, konto, nurTestumgebung, wache } from "./grundtest-hilfe";
 
 nurTestumgebung();
+test.beforeAll(grundbestand);
 
 const BUERO_SEITEN = ["/rechnungen", "/angebote", "/eingang", "/buchhaltung", "/mitarbeiter", "/offene-posten"];
 
@@ -16,7 +17,7 @@ async function anzahl(db: Awaited<ReturnType<typeof als>>, tabelle: string) {
 
 test("Chef: sieht Rechnungen, Eingang und Buchhaltung der Echtdaten", async ({ page }) => {
   const chef = await als(await konto("chef"));
-  expect(await anzahl(chef, "belege"), "Belege (Echtdaten geladen?)").toBeGreaterThan(0);
+  expect(await anzahl(chef, "belege"), "Belege").toBeGreaterThan(0);
   expect(await anzahl(chef, "eingangsrechnungen")).toBeGreaterThan(0);
   expect((await chef.rpc("hat_recht", { p_recht: "mitarbeiter" })).data).toBe(true);
 

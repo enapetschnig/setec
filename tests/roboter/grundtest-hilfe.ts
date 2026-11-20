@@ -115,9 +115,32 @@ export function wache(page: Page) {
 /** Eigener Kunde + Projekt „In Arbeit“ (Projekte entstehen sonst erst mit der Angebotsannahme). */
 export async function testProjekt(titel: string) {
   const name = `${LAUF} ${titel}`;
-  const { data: kunde, error: e1 } = await admin.from("kunden").insert({ name, ort: "Testort", plz: "8600", strasse: "Teststraße 1" }).select("id").single();
+  // Nummer selbst vergeben: nach dem Laden der Echtdaten steht der Zähler (identity) sonst noch auf den alten Nummern.
+  const { data: hoechste } = await admin.from("kunden").select("nummer").order("nummer", { ascending: false, nullsFirst: false }).limit(1);
+  const nummer = Number(hoechste?.[0]?.nummer ?? 0) + 1 + Math.floor(Math.random() * 50);
+  const { data: kunde, error: e1 } = await admin.from("kunden").insert({ name, nummer, ort: "Testort", plz: "8600", strasse: "Teststraße 1" }).select("id").single();
   if (e1) throw e1;
   const { data: projekt, error: e2 } = await admin.from("projekte").insert({ name, kunde_id: kunde.id, status: "aktiv" }).select("id, nummer, status").single();
   if (e2) throw e2;
   return { kundeId: kunde.id as string, projektId: projekt.id as string, nummer: projekt.nummer as string, name };
+}
+
+/**
+ * Ohne `testumgebung.mjs daten` ist die Datenbank leer — dann je eine eigene Zeile, damit „sieht der Chef die
+ * Rechnungen / Eingangsrechnungen / Kategorien?“ etwas zu sehen hat. Mit Echtdaten wird nichts angelegt.
+ */
+export async function grundbestand() {
+  const leer = async (t: string) => ((await admin.from(t).select("id", { count: "exact", head: true })).count ?? 0) === 0;
+  if (await leer("belege")) {
+    const { error } = await admin.from("belege").insert({ typ: "rechnung", status: "entwurf", empf_name: "ZZGT Grundbestand", betreff: "ZZGT Grundbestand" });
+    if (error) throw error;
+  }
+  if (await leer("eingangsrechnungen")) {
+    const { error } = await admin.from("eingangsrechnungen").insert({ lieferant: "ZZGT Grundbestand" });
+    if (error) throw error;
+  }
+  if (await leer("rechnung_kategorien")) {
+    const { error } = await admin.from("rechnung_kategorien").insert({ richtung: "ausgang", name: "ZZGT Grundbestand" });
+    if (error) throw error;
+  }
 }
