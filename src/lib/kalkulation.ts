@@ -38,12 +38,19 @@ export function kalkPreis(k: { ek: number; aufschlag: number; minuten: number; s
 export const umProzent = (preis: number, prozent: number) => runden2(preis * (1 + prozent / 100));
 
 /**
- * Was vom Netto nach dem Material bleibt — gesamt und je Arbeitsstunde.
- * Lohnkosten kennt die App nicht; „je Stunde“ zeigt, ob die Arbeit sich rechnet.
+ * Was vom Netto nach dem Material bleibt — gesamt und je Arbeitsstunde —
+ * und nach den Lohnkosten (Stunden × Lohnkosten je Stunde aus den
+ * Einstellungen, `firma.kostensatz`). Ohne Lohnkosten-Satz: `ertrag` null.
  */
-export function rohertrag(netto: number, ek: number, stunden: number) {
+export function rohertrag(netto: number, ek: number, stunden: number, kostensatz?: number | null) {
   const bleibt = runden2(netto - ek);
-  return { bleibt, jeStunde: stunden > 0 ? runden2(bleibt / stunden) : null, anteil: netto > 0 ? bleibt / netto : null };
+  const satz = kostensatz != null && Number(kostensatz) > 0 ? Number(kostensatz) : null;
+  const lohnkosten = satz != null ? runden2(stunden * satz) : null;
+  const ertrag = lohnkosten != null ? runden2(bleibt - lohnkosten) : null;
+  return {
+    bleibt, jeStunde: stunden > 0 ? runden2(bleibt / stunden) : null, anteil: netto > 0 ? bleibt / netto : null,
+    lohnkosten, ertrag, ertragAnteil: ertrag != null && netto > 0 ? ertrag / netto : null,
+  };
 }
 
 /**

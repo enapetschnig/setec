@@ -1324,13 +1324,15 @@ export function BelegEditor({
         <div className="sticky bottom-3 z-20 flex flex-wrap items-center gap-x-6 gap-y-1 rounded-lg border bg-card px-4 py-2.5 text-sm" data-summenleiste>
           <span>Netto <span className="zahl font-semibold">{euro(s.netto)}</span></span>
           {!ohneUst && <span>Brutto <span className="zahl font-bold">{euro(s.brutto)}</span></span>}
-          {kalk.ek > 0 && (() => {
-            const r = rohertrag(s.netto, kalk.ek, kalk.stunden);
+          {(kalk.ek > 0 || kalk.stunden > 0) && (() => {
+            const r = rohertrag(s.netto, kalk.ek, kalk.stunden, firma?.kostensatz);
             return (
-              <span className="text-muted-foreground" title="Netto minus Material-Einkauf — nur für dich">
-                Bleibt nach Material <span className="zahl font-semibold text-foreground">{euro(r.bleibt)}</span>
-                {r.anteil != null && ` (${Math.round(r.anteil * 100)} %)`}
-                {r.jeStunde != null && <> · je Stunde <span className="zahl font-semibold text-foreground">{euro(r.jeStunde)}</span></>}
+              <span className="text-muted-foreground" title="Netto minus Material-Einkauf und Lohnkosten — nur für dich">
+                {kalk.ek > 0 && <>Bleibt nach Material <span className="zahl font-semibold text-foreground">{euro(r.bleibt)}</span>
+                  {r.anteil != null && ` (${Math.round(r.anteil * 100)} %)`}</>}
+                {r.ertrag != null && kalk.stunden > 0 && <>{kalk.ek > 0 && " · "}Rohertrag nach Lohn <span className="zahl font-semibold text-foreground">{euro(r.ertrag)}</span>
+                  {r.ertragAnteil != null && ` (${Math.round(r.ertragAnteil * 100)} %)`}</>}
+                {r.jeStunde != null && kalk.ek > 0 && <> · je Stunde <span className="zahl font-semibold text-foreground">{euro(r.jeStunde)}</span></>}
               </span>
             );
           })()}
@@ -1653,7 +1655,8 @@ function Summen({
 }) {
   const [nachlassOffen, setNachlassOffen] = useState(false);
   const [foerderOffen, setFoerderOffen] = useState(false);
-  const r = rohertrag(netto, kalk.ek, kalk.stunden);
+  const kostensatz = firma?.kostensatz ?? null;
+  const r = rohertrag(netto, kalk.ek, kalk.stunden, kostensatz);
   const mitKalk = kalk.stunden > 0 || kalk.ek > 0;
   const nachlassBetrag = nachlass ? positionGesamt(nachlass) : 0;
   const zahlen = ohneUst ? netto : brutto;
@@ -1738,6 +1741,17 @@ function Summen({
               {r.jeStunde != null && (
                 <div className="flex justify-between gap-3"><dt className="text-muted-foreground">je Arbeitsstunde</dt><dd className="zahl">{euro(r.jeStunde)}</dd></div>
               )}
+              {kalk.stunden > 0 && (r.lohnkosten != null ? (
+                <>
+                  <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Lohnkosten {zahl(Math.round(kalk.stunden * 10) / 10)} h × {euro(kostensatz ?? 0)}</dt><dd className="zahl">{euro(r.lohnkosten)}</dd></div>
+                  <div className="flex justify-between gap-3 font-medium">
+                    <dt>Rohertrag nach Lohn</dt>
+                    <dd className="zahl">{euro(r.ertrag ?? 0)}{r.ertragAnteil != null && <span className="ml-1 font-normal text-muted-foreground">({Math.round(r.ertragAnteil * 100)} %)</span>}</dd>
+                  </div>
+                </>
+              ) : (
+                <p className="text-xs text-muted-foreground">Lohnkosten je Stunde in den Einstellungen eintragen, dann steht hier der Rohertrag nach Lohn.</p>
+              ))}
             </dl>
           )}
           {onAufschlaege && (

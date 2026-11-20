@@ -491,7 +491,10 @@ export function LeistungDialog({
           <div className="border-t pt-2">
             <KalkZeile titel={festPreis != null ? "Preis (fest)" : "Preis (berechnet)"} wert={euro(k.preis)} fett />
           </div>
-          <KalkZeile titel="Rohertrag" unter="Preis − Material-EK"
+          <KalkZeile titel={k.kostensatz != null ? `Lohnkosten ${zahl(minuten)} min × ${euro(k.kostensatz)}/h` : "Lohnkosten"}
+            unter={k.kostensatz == null ? "Lohnkosten je Stunde in den Einstellungen eintragen" : undefined}
+            wert={k.kostensatz != null ? euro(k.lohnkosten) : "–"} />
+          <KalkZeile titel="Rohertrag" unter="Preis − Material-EK − Lohnkosten"
             wert={`${euro(k.rohertrag)}${k.rohertragProzent != null ? ` · ${zahl(k.rohertragProzent)} %` : ""}`} />
           {k.jeStunde != null && (
             <KalkZeile titel="je Arbeitsstunde" wert={euro(k.jeStunde)}

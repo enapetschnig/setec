@@ -58,6 +58,14 @@ describe("Kalkulation", () => {
     expect(k.jeStunde).toBe(84.96);
     expect(k.rohertragProzent).toBeCloseTo(85.507, 2);
   });
+  it("Rohertrag zieht die Lohnkosten aus den Einstellungen ab (Montage 115 min × 38 €)", () => {
+    const k = kalkulieren({ preis: null, minuten: 115 }, [], { stundensatz: 77, material_aufschlag: 0, kostensatz: 38 });
+    expect(k).toMatchObject({ preis: 147.58, lohn: 147.58, lohnkosten: 72.83, kostensatz: 38, rohertrag: 74.75 });
+    expect(k.rohertragProzent).toBeCloseTo(50.65, 1);
+    expect(k.jeStunde).toBe(77);
+    const misch = kalkulieren({ preis: null, minuten: 25 }, material, { ...firma, kostensatz: 36 });
+    expect(misch).toMatchObject({ lohnkosten: 15, rohertrag: 20.4 });
+  });
   it("fester Preis geht vor; ohne Minuten kein Ertrag je Stunde", () => {
     const k = kalkulieren({ preis: 50, minuten: 0 }, material, firma);
     expect(k).toMatchObject({ preis: 50, berechnet: 11.4, rohertrag: 44, jeStunde: null });

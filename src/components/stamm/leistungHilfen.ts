@@ -83,41 +83,53 @@ export function passtZuSuche(
 export interface Kalkulation {
   materialEk: number;
   materialVk: number;
-  /** Montagezeit × Stundensatz */
+  /** Montagezeit × Stundensatz (was der Kunde für die Arbeit zahlt) */
   lohn: number;
   stundensatz: number;
+  /** Montagezeit × Lohnkosten je Stunde aus den Einstellungen (was die Arbeit den Betrieb kostet) */
+  lohnkosten: number;
+  /** Lohnkosten je Stunde (`firma.kostensatz`); null = in den Einstellungen nicht eingetragen */
+  kostensatz: number | null;
   /** Preis ohne festen Preis (Material-VK + Lohn) */
   berechnet: number;
   /** Was die Leistung kostet — fester Preis, sonst berechnet */
   preis: number;
-  /** Preis − Material-EK: was für Arbeitszeit und Betrieb bleibt */
+  /** Preis − Material-EK − Lohnkosten: was dem Betrieb bleibt */
   rohertrag: number;
   rohertragProzent: number | null;
-  /** Rohertrag je Arbeitsstunde — Vergleich mit dem Stundensatz */
+  /** (Preis − Material-EK) je Arbeitsstunde — Vergleich mit dem Stundensatz */
   jeStunde: number | null;
 }
 
-/** Kalkulation einer Leistung; Preise kommen aus lib/preise.ts. */
+/**
+ * Kalkulation einer Leistung; Preise kommen aus lib/preise.ts. Der Rohertrag
+ * zieht neben dem Material-Einkauf auch die Lohnkosten ab (Stefan 20.11.2026:
+ * vorher zeigte eine reine Montage-Leistung 100 % Rohertrag).
+ */
 export function kalkulieren(
   l: { preis: number | null; minuten: number },
   material: LeistungsMaterial[],
-  firma: Pick<Firma, "material_aufschlag" | "stundensatz"> | null | undefined,
+  firma: (Pick<Firma, "material_aufschlag" | "stundensatz"> & { kostensatz?: number | null }) | null | undefined,
 ): Kalkulation {
   const minuten = Number(l.minuten) || 0;
   const stundensatz = Number(firma?.stundensatz ?? 0);
+  const kostensatz = firma?.kostensatz != null && Number(firma.kostensatz) > 0 ? Number(firma.kostensatz) : null;
   const materialEk = leistungMaterialEk(material);
   const preis = leistungPreis({ preis: l.preis, minuten }, material, firma);
-  const rohertrag = runden2(preis - materialEk);
+  const lohnkosten = runden2((minuten / 60) * (kostensatz ?? 0));
+  const rohertrag = runden2(preis - materialEk - lohnkosten);
   return {
     materialEk,
     materialVk: leistungMaterialVk(material, firma),
     lohn: runden2((minuten / 60) * stundensatz),
     stundensatz,
+    lohnkosten,
+    kostensatz,
     berechnet: leistungPreis({ preis: null, minuten }, material, firma),
     preis,
     rohertrag,
     rohertragProzent: preis > 0 ? (rohertrag / preis) * 100 : null,
-    jeStunde: minuten > 0 ? runden2(rohertrag / (minuten / 60)) : null,
+    jeStunde: minuten > 0 ? runden2((preis - materialEk) / (minuten / 60)) : null,
   };
 }
 

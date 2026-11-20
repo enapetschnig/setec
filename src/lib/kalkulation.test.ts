@@ -30,8 +30,10 @@ describe("Kalkulation", () => {
   });
 
   it("Rohertrag", () => {
-    expect(rohertrag(1000, 300, 10)).toEqual({ bleibt: 700, jeStunde: 70, anteil: 0.7 });
-    expect(rohertrag(0, 0, 0)).toEqual({ bleibt: 0, jeStunde: null, anteil: null });
+    expect(rohertrag(1000, 300, 10)).toEqual({ bleibt: 700, jeStunde: 70, anteil: 0.7, lohnkosten: null, ertrag: null, ertragAnteil: null });
+    expect(rohertrag(0, 0, 0)).toEqual({ bleibt: 0, jeStunde: null, anteil: null, lohnkosten: null, ertrag: null, ertragAnteil: null });
+    // Lohnkosten aus den Einstellungen (Stefan 20.11.2026): 10 h × 38 € = 380 €
+    expect(rohertrag(1000, 300, 10, 38)).toMatchObject({ bleibt: 700, lohnkosten: 380, ertrag: 320, ertragAnteil: 0.32 });
   });
 
   it("Aufschlag aus dem Preis zurückrechnen", () => {
