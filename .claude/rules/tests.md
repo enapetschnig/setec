@@ -1,0 +1,4 @@
+# Feste Tests (tests/roboter)
+
+- 2026-11-20 · Grundtests `tests/roboter/2026-11-20-grund-1…6-*.spec.ts` (Anmelden je Rolle, Rechte Monteur/Lehrling/Büro in Menü+Seite+RLS, Stunden am Handy, Regiebericht mit Unterschrift+PDF, Rechnung → fertig → PDF = Archiv, alle Hauptseiten mit Echtdaten). `playwright.config.ts` startet vite selbst gegen die Testumgebung (`umgebung.ts` liest `testumgebung.mjs status`, bricht bei nicht-lokaler API ab); Hilfen in `grundtest-hilfe.ts`. Die älteren `*.mjs` laufen weiter mit `node`.
+  Konten: Chef/Monteur = Kopien der echten (`nutzerN@example.invalid`), Büro/Lehrling eigene `zzgt-…@test.local`. Projekte „In Arbeit“ heißen in der DB `status = 'aktiv'`. Playwright 1.64 trifft `name: /Positionen? übernehmen/` nicht (Knopf trotzdem da) — eindeutigeren Text nehmen; Beträge haben ein geschütztes Leerzeichen (`/€\s195,00/`).

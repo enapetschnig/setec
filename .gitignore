@@ -45,3 +45,4 @@ tests/.rlstest-passwort
 
 # Besprechungen mit Kunden (Zitate) — nie ins öffentliche Repo
 docs/besprechungen/
+playwright-report/

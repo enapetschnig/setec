@@ -5,5 +5,6 @@ import { configDefaults, defineConfig } from "vitest/config";
 // vite.config.ts laden. .claude/ enthält Worktrees der Agenten — nicht mittesten.
 export default defineConfig({
   resolve: { alias: { "@": path.resolve(__dirname, "./src") } },
-  test: { exclude: [...configDefaults.exclude, ".claude/**"] },
+  // tests/roboter/*.spec.ts sind Playwright-Grundtests (npx playwright test), keine vitest-Tests.
+  test: { exclude: [...configDefaults.exclude, ".claude/**", "tests/roboter/**"] },
 });
