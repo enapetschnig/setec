@@ -5,12 +5,13 @@ import { KatalogReiter } from "@/components/stamm/KatalogReiter";
 import { Leer, StatusPille } from "@/components/Bausteine";
 import { useIstPc } from "@/components/AppLayout";
 import { LeistungDialog } from "@/components/stamm/LeistungDialog";
-import { kalkulieren, nachKategorie, passtZuSuche } from "@/components/stamm/leistungHilfen";
+import { kalkulieren, nachKategorie, passtZuSuche, staffelText } from "@/components/stamm/leistungHilfen";
 import { useLeistungenKatalog, type LeistungMitMaterial } from "@/components/stamm/stammDaten";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useSitzung } from "@/hooks/useSitzung";
 import { euro, zahl } from "@/lib/format";
+import { hatStaffel } from "@/lib/preise";
 import type { StatusEintrag } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -125,7 +126,10 @@ export default function LeistungenSeite() {
                             {l.langtext && <div className="truncate text-xs text-muted-foreground">{l.langtext}</div>}
                           </td>
                           <td className="px-3 py-2.5">{l.einheit}</td>
-                          <td className="zahl px-3 py-2.5 text-right">{zahl(l.minuten)}</td>
+                          <td className="zahl px-3 py-2.5 text-right">
+                            {zahl(l.minuten)}
+                            {hatStaffel(l) && <span className="block text-xs font-normal text-muted-foreground" title={staffelText(l)}>Staffel</span>}
+                          </td>
                           <td className="zahl px-3 py-2.5 text-right">
                             {l.leistung_material.length ? euro(k.materialVk) : "–"}
                           </td>
@@ -152,6 +156,7 @@ export default function LeistungenSeite() {
                             <p className={cn("font-medium leading-snug", !l.aktiv && "text-muted-foreground")}>{l.kurztext}</p>
                             <p className="mt-0.5 text-xs text-muted-foreground">
                               <span className="zahl">{zahl(l.minuten)}</span> min
+                              {hatStaffel(l) && <> · Staffel {staffelText(l)}</>}
                               {l.leistung_material.length > 0 && <> · <span className="zahl">{l.leistung_material.length}</span> Artikel</>}
                             </p>
                             {!l.aktiv && <StatusPille eintrag={INAKTIV} className="mt-1" />}

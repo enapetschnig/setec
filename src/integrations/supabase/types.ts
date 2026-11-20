@@ -2510,6 +2510,7 @@ export type Database = {
           nummer: string | null
           preis: number | null
           reihenfolge: number
+          staffel: Json | null
           suchwoerter: string | null
           updated_at: string
         }
@@ -2525,6 +2526,7 @@ export type Database = {
           nummer?: string | null
           preis?: number | null
           reihenfolge?: number
+          staffel?: Json | null
           suchwoerter?: string | null
           updated_at?: string
         }
@@ -2540,6 +2542,7 @@ export type Database = {
           nummer?: string | null
           preis?: number | null
           reihenfolge?: number
+          staffel?: Json | null
           suchwoerter?: string | null
           updated_at?: string
         }

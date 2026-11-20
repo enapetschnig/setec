@@ -1,5 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
-import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType, type SetStateAction } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -29,7 +29,7 @@ import { belegPdfErstellen } from "@/lib/belegPdf";
 import { datum, dezimalLesen, euro, isoTag, zahl, zahlUngueltig } from "@/lib/format";
 import { pdfDateiname, pdfTeilenOderLaden } from "@/lib/pdfBasis";
 import { lohnarten as lohnartenFuer, rohertrag } from "@/lib/kalkulation";
-import { runden2, stundensatzFuer } from "@/lib/preise";
+import { hatStaffel, runden2, stundensatzFuer } from "@/lib/preise";
 import { belegStatus, TON_KLASSE, type Artikel, type Beleg, type Firma } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { ArbeitszeitDialog } from "./ArbeitszeitDialog";
@@ -41,7 +41,7 @@ import { belegLaden, useBelegKurz, useFolgeRechnungen, useLeistungsKatalog, useN
 import {
   artikelPosition, fertigHinweise, freierTitelName, hinzufuegen, istNachlass, kopfAusBeleg, leerePosition, leistungPosition, leistungWeniger, mengeVon,
   nachlassRechnen, nachlassSetzen, nachlassText, ohneBetrag, ohneUstFuer, positionAusDb, positionGesamt, preisVon, quelleLesen, quellenIds, summen,
-  summeVorNachlass, titelMitNamen, titelPosition, titelUebersicht, zahlText,
+  staffelNachziehen, summeVorNachlass, titelMitNamen, titelPosition, titelUebersicht, zahlText,
   type EditorPosition, type KatalogLeistung, type Kopf,
 } from "./editor";
 import { ImportDialog, type ImportErgebnis } from "./ImportDialog";
@@ -141,7 +141,15 @@ export function BelegEditor({
   const [neu, setNeu] = useState(!daten);
   const [beleg, setBeleg] = useState<Beleg | null>(daten?.beleg ?? null);
   const [kopf, setKopf] = useState<Kopf>(start.k);
-  const [positionen, setPositionen] = useState<EditorPosition[]>(start.p);
+  const [positionen, setPositionenRoh] = useState<EditorPosition[]>(start.p);
+  // Jede Bearbeitung läuft über die Staffel der Montagezeit (Menge ändert Preis/Minuten);
+  // Laden und Wiederherstellen setzen roh, damit gespeicherte Preise bleiben, wie sie sind.
+  const staffelQuelle = useRef<{ katalog: KatalogLeistung[]; firma: typeof firma; stundensatz: number }>({ katalog: [], firma, stundensatz: 0 });
+  const setPositionen = useCallback((x: SetStateAction<EditorPosition[]>) => setPositionenRoh((alt) => {
+    const neu = typeof x === "function" ? x(alt) : x;
+    const q = staffelQuelle.current;
+    return staffelNachziehen(alt, neu, q.katalog, q.firma, q.stundensatz);
+  }), []);
   const [basis, setBasis] = useState(start.s);
   const dbIds = useRef(new Set(start.p.map((p) => p.id)));
   const [aktiverTitel, setAktiverTitel] = useState<string | null>(() => [...start.p].reverse().find((p) => p.art === "titel")?.id ?? null);
@@ -173,7 +181,7 @@ export function BelegEditor({
   // Nachlass in % folgt jeder Änderung der Positionen und bleibt am Ende
   useEffect(() => {
     const n = nachlassRechnen(positionen);
-    if (n !== positionen) setPositionen(n);
+    if (n !== positionen) setPositionenRoh(n);
   }, [positionen]);
 
   const aktuell = useMemo(() => schnappschuss(kopf, positionen), [kopf, positionen]);
@@ -201,6 +209,7 @@ export function BelegEditor({
   const projekt = projektAbfrage.data;
   const stundensatz = stundensatzFuer(projekt, firma);
   const { data: katalog = [], isLoading: katalogLaedt } = useLeistungsKatalog();
+  staffelQuelle.current = { katalog, firma, stundensatz };
   const { data: folge = [] } = useFolgeRechnungen(id, !neu && istAngebot);
   // Teilrechnungen sperren das Angebot nicht — erst die (Schluss-)Rechnung
   const teilFolge = folge.filter((f) => f.teil_nr != null && f.status !== "storniert");
@@ -259,7 +268,7 @@ export function BelegEditor({
     if (!gefunden) return;
     const { s } = gefunden;
     setKopf({ ...s.kopf, typ: kopf.typ });
-    setPositionen(s.positionen);
+    setPositionenRoh(s.positionen);
     setAktiverTitel([...s.positionen].reverse().find((p) => p.art === "titel")?.id ?? null);
     setGefunden(null);
     toast.success("Wiederhergestellt — zum Behalten speichern.");
@@ -275,7 +284,7 @@ export function BelegEditor({
     const p = d.positionen.map(positionAusDb);
     setBeleg(d.beleg);
     setKopf(k);
-    setPositionen(p);
+    setPositionenRoh(p);
     setBasis(schnappschuss(k, p));
     dbIds.current = new Set(p.map((x) => x.id));
     setNeu(false);
@@ -706,7 +715,7 @@ export function BelegEditor({
   // ── Positionen hinzufügen ──
   const kopfAendern = (w: Partial<Kopf>) => setKopf((k) => ({ ...k, ...w }));
   const leistungPlus = (l: KatalogLeistung) =>
-    setPositionen((alt) => hinzufuegen(alt, leistungPosition(l, firma, stundensatz), aktiverTitel).liste);
+    setPositionen((alt) => hinzufuegen(alt, leistungPosition(l, firma, stundensatz), aktiverTitel, hatStaffel(l)).liste);
   const leistungMinus = (l: KatalogLeistung) => setPositionen((alt) => leistungWeniger(alt, aktiverTitel, l.id));
   const artikelPlus = (a: Artikel) => setPositionen((alt) => hinzufuegen(alt, artikelPosition(a, firma), aktiverTitel).liste);
   /** Titel ans Ende; ohne Namen gleich zum Eintippen in der Zeile */
@@ -718,7 +727,7 @@ export function BelegEditor({
   };
   // Eingabezeile: unter den aktiven Titel, wie die Knöpfe
   const schnellLeistung = (l: KatalogLeistung, menge: number) =>
-    setPositionen((alt) => hinzufuegen(alt, leistungPosition(l, firma, stundensatz, menge), aktiverTitel).liste);
+    setPositionen((alt) => hinzufuegen(alt, leistungPosition(l, firma, stundensatz, menge), aktiverTitel, hatStaffel(l)).liste);
   const katalogUebernehmen = (wahl: KatalogWahl[]) => {
     setPositionen((alt) => wahl.reduce((liste, w) => hinzufuegen(liste, { ...artikelPosition(w.artikel, firma), menge: zahlText(w.menge) }, aktiverTitel).liste, alt));
     toast.success(`${wahl.length} Artikel übernommen`);
@@ -819,7 +828,8 @@ export function BelegEditor({
         ? leistungPosition(p.leistung, firma, stundensatz, p.menge)
         : leerePosition("leistung", { bezeichnung: p.text, menge: zahlText(p.menge), einheit: p.einheit || "Stk" });
       if (!p.leistung) ohnePreis += 1;
-      liste = hinzufuegen(liste, pos, ziel).liste;
+      // Staffel: zwei Ansagen derselben Leistung im Raum → eine Zeile, Preis nach der Summe
+      liste = staffelNachziehen(liste, hinzufuegen(liste, pos, ziel, !!p.leistung && hatStaffel(p.leistung)).liste, katalog, firma, stundensatz);
     });
     setPositionen(liste);
     setAktiverTitel(zuletzt);

@@ -134,7 +134,7 @@ export function Eingabezeile({
                       <>
                         <ListChecks className="h-4 w-4 shrink-0 text-primary" />
                         <span className="min-w-0 flex-1 truncate">{t.l.kurztext}</span>
-                        <span className="zahl shrink-0 text-muted-foreground">{euro(leistungPreis(t.l, t.l.leistung_material ?? [], firma, stundensatz))} / {t.l.einheit}</span>
+                        <span className="zahl shrink-0 text-muted-foreground">{euro(leistungPreis(t.l, t.l.leistung_material ?? [], firma, stundensatz, menge))} / {t.l.einheit}</span>
                       </>
                     )}
                     {t.art === "artikel" && (

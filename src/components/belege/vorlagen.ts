@@ -1,5 +1,5 @@
 import type { Json } from "@/integrations/supabase/types";
-import { artikelVk, leistungMaterialEk, leistungPreis, runden2 } from "@/lib/preise";
+import { artikelVk, hatStaffel, leistungMaterialEk, leistungPreis, runden2, staffelMinuten } from "@/lib/preise";
 import type { Artikel, Firma } from "@/lib/types";
 import {
   gruppenEnde, leerePosition, mengeVon, ohneBetrag, preisText, preisVon, summen, zahlText,
@@ -145,12 +145,12 @@ export function ausVorlage(
       if (!l) fehlt.push(v.bezeichnung);
       else {
         const material = l.leistung_material ?? [];
-        const heute = leistungPreis(l, material, firma, stundensatz);
+        const heute = leistungPreis(l, material, firma, stundensatz, v.menge);
         if (heute > 0 && Math.abs(heute - v.einzelpreis) >= 0.005) abweichungen.push({ bezeichnung: v.bezeichnung, alt: v.einzelpreis, neu: heute });
         if (nachziehen && heute > 0) {
           preis = heute;
           ek = leistungMaterialEk(material) || null;
-          minuten = l.minuten == null ? null : Number(l.minuten);
+          minuten = l.minuten == null && !hatStaffel(l) ? null : staffelMinuten(l, v.menge);
         }
       }
     }

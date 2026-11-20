@@ -142,7 +142,8 @@ export function LeistungDialog({
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
             {liste.map((l) => {
               const anzahl = mengeInGruppe(positionen, titelId, l.id);
-              const preis = leistungPreis(l, l.leistung_material ?? [], firma, stundensatz);
+              // Staffel: Preis zur Menge, die schon im Angebot steht
+              const preis = leistungPreis(l, l.leistung_material ?? [], firma, stundensatz, anzahl || 1);
               return (
                 <div key={l.id} className={cn("relative rounded-lg border bg-card transition-colors", anzahl > 0 && "border-primary bg-primary-soft")}>
                   <button

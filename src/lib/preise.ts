@@ -73,15 +73,50 @@ export function buchungVk(
 
 export type LeistungsMaterial = { menge: number; artikel: PreisArtikel | null };
 
-/** Was eine Leistung kostet: fester Preis oder Material-VK + Montagezeit × Stundensatz. */
+/** Eine Stufe der Staffel: ab dieser Menge gilt diese Montagezeit je Einheit. */
+export type StaffelStufe = { ab: number; minuten: number };
+
+/** Staffel aus der Datenbank lesen — nur gültige Stufen, nach „ab“ sortiert, je „ab“ eine. */
+export function staffelLesen(j: unknown): StaffelStufe[] {
+  if (!Array.isArray(j)) return [];
+  const stufen = new Map<number, number>();
+  for (const x of j) {
+    if (!x || typeof x !== "object") continue;
+    const ab = Number((x as Record<string, unknown>).ab);
+    const minuten = Number((x as Record<string, unknown>).minuten);
+    if (Number.isFinite(ab) && ab > 0 && Number.isFinite(minuten) && minuten >= 0) stufen.set(ab, minuten);
+  }
+  return [...stufen.entries()].sort((a, b) => a[0] - b[0]).map(([ab, minuten]) => ({ ab, minuten }));
+}
+
+/**
+ * Montagezeit je Einheit für diese Menge: die Stufe mit dem größten „ab“,
+ * das die Menge erreicht. Ohne Staffel, ohne Menge oder unter der ersten
+ * Stufe gilt die Grundzeit `minuten`. Die ganze Menge rechnet mit der Zeit
+ * ihrer Stufe (12 Module → alle 12 mit der Zeit „ab 11“).
+ */
+export function staffelMinuten(l: { minuten: number | null; staffel?: unknown }, menge?: number | null): number {
+  let min = Number(l.minuten) || 0;
+  if (menge == null) return min;
+  for (const s of staffelLesen(l.staffel)) if (menge >= s.ab) min = s.minuten;
+  return min;
+}
+
+export const hatStaffel = (l: { staffel?: unknown } | null | undefined) => staffelLesen(l?.staffel).length > 0;
+
+/**
+ * Was eine Leistung kostet: fester Preis oder Material-VK + Montagezeit ×
+ * Stundensatz. Mit `menge` gilt die Montagezeit aus der Staffel.
+ */
 export function leistungPreis(
-  l: Pick<Leistung, "preis" | "minuten">,
+  l: Pick<Leistung, "preis" | "minuten"> & { staffel?: unknown },
   material: LeistungsMaterial[],
   firma: Pick<Firma, "material_aufschlag" | "stundensatz"> | null | undefined,
   stundensatz = Number(firma?.stundensatz ?? 0),
+  menge?: number | null,
 ): number {
   if (l.preis != null) return runden2(Number(l.preis));
-  return runden2(leistungMaterialVk(material, firma) + (Number(l.minuten) / 60) * stundensatz);
+  return runden2(leistungMaterialVk(material, firma) + (staffelMinuten(l, menge) / 60) * stundensatz);
 }
 
 export function leistungMaterialVk(material: LeistungsMaterial[], firma: Pick<Firma, "material_aufschlag"> | null | undefined): number {

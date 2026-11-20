@@ -18,11 +18,13 @@ import { useNeuLaden } from "@/hooks/useDaten";
 import { useSitzung } from "@/hooks/useSitzung";
 import { dezimalLesen } from "@/lib/csvImport";
 import { euro, zahl } from "@/lib/format";
-import { artikelVk } from "@/lib/preise";
+import { artikelVk, leistungPreis, staffelLesen } from "@/lib/preise";
 import { EINHEITEN, TON_KLASSE, type Artikel, type StatusEintrag } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Feld, leerNull, useBeimOeffnen, zahlFeld, Zusatz } from "./Felder";
-import { kalkulieren, nachKategorie, naechsteNummer, naechsteReihenfolge } from "./leistungHilfen";
+import {
+  kalkulieren, nachKategorie, naechsteNummer, naechsteReihenfolge, STAFFEL_KATEGORIE, staffelBereiche, staffelErlaubt, staffelPruefen,
+} from "./leistungHilfen";
 import { fehlerText, type LeistungMitMaterial, type MaterialArtikel } from "./stammDaten";
 
 type Form = {
@@ -36,7 +38,11 @@ type Form = {
   suchwoerter: string;
   reihenfolge: string;
   aktiv: boolean;
+  /** Staffel der Montagezeit — nur in „Montagearbeiten“ */
+  staffel: StaffelZeile[];
 };
+
+type StaffelZeile = { ab: string; minuten: string };
 
 type MaterialZeile = { artikel: MaterialArtikel; menge: string };
 
@@ -55,6 +61,7 @@ const formAus = (l: Partial<LeistungMitMaterial> | null): Form => ({
   suchwoerter: l?.suchwoerter ?? "",
   reihenfolge: l?.reihenfolge != null ? String(l.reihenfolge) : "",
   aktiv: l?.aktiv ?? true,
+  staffel: staffelLesen(l?.staffel).map((s) => ({ ab: zahlFeld(s.ab), minuten: zahlFeld(s.minuten) })),
 });
 
 const materialAus = (a: Artikel | MaterialArtikel): MaterialArtikel => ({
@@ -130,7 +137,25 @@ export function LeistungDialog({
   const minuten = dezimalLesen(f.minuten) ?? 0;
   const festPreis = f.preis.trim() ? dezimalLesen(f.preis) : null;
   const mengen = material.map((m) => dezimalLesen(m.menge) ?? 0);
-  const k = kalkulieren({ preis: festPreis, minuten }, material.map((m, i) => ({ menge: mengen[i], artikel: m.artikel })), firma);
+  const materialMitMenge = material.map((m, i) => ({ menge: mengen[i], artikel: m.artikel }));
+  const k = kalkulieren({ preis: festPreis, minuten }, materialMitMenge, firma);
+
+  // ── Staffel (nur „Montagearbeiten“) ──────────────────────────────────
+  const staffelDa = staffelErlaubt(f.kategorie);
+  const staffelZeilen = f.staffel.map((z) => ({
+    ab: z.ab.trim() ? dezimalLesen(z.ab) : null,
+    minuten: z.minuten.trim() ? dezimalLesen(z.minuten) : null,
+  }));
+  const staffelGeprueft = staffelPruefen(staffelZeilen);
+  const staffelVorschau = "stufen" in staffelGeprueft ? staffelBereiche(staffelGeprueft.stufen) : [];
+  const staffelSetzen = (i: number, w: Partial<StaffelZeile>) =>
+    setF((alt) => ({ ...alt, staffel: alt.staffel.map((z, j) => (j === i ? { ...z, ...w } : z)) }));
+  const stufeDazu = () => setF((alt) => {
+    const letzte = staffelPruefen(alt.staffel.map((z) => ({ ab: dezimalLesen(z.ab), minuten: dezimalLesen(z.minuten) })));
+    const st = "stufen" in letzte ? letzte.stufen : [];
+    const ab = st.length ? String(st[st.length - 1].ab + 1) : "2";
+    return { ...alt, staffel: [...alt.staffel, { ab, minuten: "" }] };
+  });
 
   // ── Material ─────────────────────────────────────────────────────────
   const artikelGewaehlt = (a: Artikel) => {
@@ -163,6 +188,9 @@ export function LeistungDialog({
     if (rText && !/^-?\d{1,9}$/.test(rText)) return toast.error("Reihenfolge: bitte eine ganze Zahl.");
     const schlecht = material.find((_, i) => !(mengen[i] > 0));
     if (schlecht) return toast.error(`Menge für „${schlecht.artikel.bezeichnung}“ fehlt.`);
+    if (staffelDa && "fehler" in staffelGeprueft) return toast.error(staffelGeprueft.fehler);
+    // Andere Kategorie: keine Staffel (sonst rechnete eine unsichtbare Staffel weiter)
+    const staffel = staffelDa && "stufen" in staffelGeprueft && staffelGeprueft.stufen.length ? staffelGeprueft.stufen : null;
 
     const kategorie = f.kategorie.trim() || "Allgemein";
     const vorher = id ? katalog.find((x) => x.id === id) : null;
@@ -184,6 +212,7 @@ export function LeistungDialog({
       suchwoerter: leerNull(f.suchwoerter.replace(/\s+/g, " ")),
       reihenfolge,
       aktiv: f.aktiv,
+      staffel,
     };
     const { data, error } = id
       ? await supabase.from("leistungen").update(daten).eq("id", id).select("id").single()
@@ -331,6 +360,58 @@ export function LeistungDialog({
                   placeholder={zahl(k.berechnet)} />
               </Feld>
             </div>
+            {staffelDa && (
+              <div className="space-y-3 rounded-lg border bg-card p-3" data-testid="staffel">
+                <div>
+                  <p className="text-sm font-medium">Staffel Montagezeit</p>
+                  <p className="text-xs text-muted-foreground">
+                    Je nach Menge in der Angebots-Position gilt eine andere Zeit je {f.einheit} — die ganze Menge rechnet mit der Zeit ihrer Stufe.
+                    {" "}Unter der ersten Stufe gelten die {zahl(minuten)} Minuten oben.
+                  </p>
+                </div>
+                {f.staffel.length > 0 && (
+                  <ul className="space-y-2">
+                    {f.staffel.map((z, i) => {
+                      const ab = staffelZeilen[i].ab;
+                      const min = staffelZeilen[i].minuten;
+                      const bereich = staffelVorschau.find((b) => b.stufe.ab === ab)?.text;
+                      const preis = ab != null && min != null
+                        ? leistungPreis({ preis: festPreis, minuten: min }, materialMitMenge, firma)
+                        : null;
+                      return (
+                        <li key={i} className="flex flex-wrap items-center gap-2">
+                          <span className="text-sm text-muted-foreground">ab</span>
+                          <Input className={cn("zahl h-11 w-20 text-right", z.ab.trim() && !(ab != null && ab > 0) && "border-destructive")} inputMode="decimal"
+                            value={z.ab} onChange={(e) => staffelSetzen(i, { ab: e.target.value })} aria-label={`Staffel ${i + 1} ab Menge`} />
+                          <span className="w-10 text-sm text-muted-foreground">{f.einheit}</span>
+                          <Input className={cn("zahl h-11 w-24 text-right", z.minuten.trim() && min == null && "border-destructive")} inputMode="decimal"
+                            value={z.minuten} onChange={(e) => staffelSetzen(i, { minuten: e.target.value })} placeholder="Min." aria-label={`Staffel ${i + 1} Minuten`} />
+                          <span className="text-sm text-muted-foreground">min je {f.einheit}</span>
+                          <span className="zahl ml-auto text-right text-sm">
+                            {bereich && <span className="block text-xs text-muted-foreground">{bereich} {f.einheit}</span>}
+                            {preis != null && <span className="font-medium">{euro(preis)}</span>}
+                          </span>
+                          <Button variant="ghost" size="icon" className="h-11 w-11 shrink-0" aria-label={`Staffel ${i + 1} entfernen`}
+                            onClick={() => setF((alt) => ({ ...alt, staffel: alt.staffel.filter((_, j) => j !== i) }))}>
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+                {"fehler" in staffelGeprueft && <p className="text-xs text-destructive">{staffelGeprueft.fehler}</p>}
+                {festPreis != null && f.staffel.length > 0 && (
+                  <p className="text-xs text-muted-foreground">Fester Preis gesetzt — die Staffel ändert dann nur die Montagezeit, nicht den Preis. Preis oben leer lassen, damit er sich nach der Staffel richtet.</p>
+                )}
+                <Button variant="outline" className="h-11" onClick={stufeDazu}><Plus className="h-4 w-4" /> Stufe</Button>
+              </div>
+            )}
+            {!staffelDa && f.staffel.length > 0 && (
+              <p className={cn("rounded-lg px-3 py-2.5 text-sm", TON_KLASSE.gelb)}>
+                Die Staffel gibt es nur in der Kategorie „{STAFFEL_KATEGORIE}“ — in dieser Kategorie wird sie beim Speichern entfernt.
+              </p>
+            )}
             <Feld id="l-such" label="Suchwörter"
               hinweis="Damit findet die Spracheingabe die Leistung — Wörter, wie man sie auf der Baustelle sagt (z. B. „schuko dose zweifach“). Mit Leerzeichen trennen.">
               <Input id="l-such" className="h-11" value={f.suchwoerter} onChange={(e) => setze("suchwoerter", e.target.value)} autoComplete="off" />

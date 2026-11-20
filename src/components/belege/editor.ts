@@ -2,7 +2,7 @@ import type { Json } from "@/integrations/supabase/types";
 import { zahlLesen } from "@/lib/format";
 import { aufschlagAus, kalkPreis } from "@/lib/kalkulation";
 import {
-  artikelVk, belegSummen, leistungMaterialEk, leistungPreis, runden2, type LeistungsMaterial,
+  artikelVk, belegSummen, hatStaffel, leistungMaterialEk, leistungPreis, runden2, staffelMinuten, type LeistungsMaterial,
 } from "@/lib/preise";
 import type { Artikel, Beleg, Firma, Kunde, Leistung, Position } from "@/lib/types";
 
@@ -243,11 +243,47 @@ export function leistungPosition(
     langtext: l.langtext ?? "",
     menge: zahlText(menge),
     einheit: l.einheit || "Stk",
-    einzelpreis: preisText(leistungPreis(l, material, firma, stundensatz)),
+    einzelpreis: preisText(leistungPreis(l, material, firma, stundensatz, menge)),
     ek_preis: leistungMaterialEk(material) || null,
-    minuten: l.minuten == null ? null : Number(l.minuten),
+    minuten: l.minuten == null && !hatStaffel(l) ? null : staffelMinuten(l, menge),
     leistung_id: l.id,
   });
+}
+
+/**
+ * Staffel der Montagezeit: ändert sich die Menge einer Leistungs-Zeile,
+ * gelten die Minuten der Stufe der neuen Menge; den Preis rechnet sie nur
+ * nach, wenn er noch der von der Staffel gerechnete war (von Hand gesetzte
+ * Preise bleiben) und im selben Schritt nicht auch der Preis geändert wurde.
+ * Neue Zeilen und geladene Belege fasst das nie an.
+ */
+export function staffelNachziehen(
+  alt: EditorPosition[],
+  neu: EditorPosition[],
+  katalog: KatalogLeistung[],
+  firma: Pick<Firma, "material_aufschlag" | "stundensatz"> | null | undefined,
+  stundensatz: number,
+): EditorPosition[] {
+  if (alt === neu) return neu;
+  const mitStaffel = new Map(katalog.filter(hatStaffel).map((l) => [l.id, l]));
+  if (!mitStaffel.size) return neu;
+  const vorher = new Map(alt.map((p) => [p.id, p]));
+  let geaendert = false;
+  const liste = neu.map((p) => {
+    const l = p.leistung_id ? mitStaffel.get(p.leistung_id) : undefined;
+    const v = vorher.get(p.id);
+    if (!l || !v || p.quelle || ohneBetrag(p) || v.menge === p.menge) return p;
+    const material = l.leistung_material ?? [];
+    // Minuten (Planzeit) immer nach der Stufe, den Preis nur, solange er der gerechnete ist
+    const minuten = staffelMinuten(l, mengeVon(p));
+    const preisAuto = v.einzelpreis === p.einzelpreis
+      && Math.abs(preisVon(v) - leistungPreis(l, material, firma, stundensatz, mengeVon(v))) < 0.005;
+    const einzelpreis = preisAuto ? preisText(leistungPreis(l, material, firma, stundensatz, mengeVon(p))) : p.einzelpreis;
+    if (einzelpreis === p.einzelpreis && minuten === p.minuten) return p;
+    geaendert = true;
+    return { ...p, einzelpreis, minuten };
+  });
+  return geaendert ? liste : neu;
 }
 
 export function artikelPosition(
@@ -291,12 +327,12 @@ function gruppenStart(positionen: Pick<EditorPosition, "id">[], titelId: string 
   return i < 0 ? positionen.length : i + 1;
 }
 
-const gleicheHerkunft = (a: EditorPosition, b: EditorPosition) =>
+const gleicheHerkunft = (a: EditorPosition, b: EditorPosition, preisEgal: boolean) =>
   a.art === b.art
   && a.leistung_id === b.leistung_id
   && a.artikel_id === b.artikel_id
   && a.einheit === b.einheit
-  && preisVon(a) === preisVon(b)
+  && (preisEgal || preisVon(a) === preisVon(b))
   && !a.quelle && !b.quelle;
 
 /**
@@ -308,13 +344,15 @@ export function hinzufuegen(
   positionen: EditorPosition[],
   neu: EditorPosition,
   titelId: string | null,
+  /** Leistung mit Staffel: Preis hängt an der Menge — trotzdem in dieselbe Zeile (Preis zieht `staffelNachziehen` nach) */
+  staffel = false,
 ): { liste: EditorPosition[]; id: string } {
   const start = gruppenStart(positionen, titelId);
   const ende = gruppenEnde(positionen, titelId);
   if (neu.leistung_id || neu.artikel_id) {
     for (let k = start; k < ende; k++) {
       const p = positionen[k];
-      if (gleicheHerkunft(p, neu)) {
+      if (gleicheHerkunft(p, neu, staffel && !!neu.leistung_id)) {
         const liste = [...positionen];
         liste[k] = { ...p, menge: zahlText(mengeVon(p) + mengeVon(neu)) };
         return { liste, id: p.id };

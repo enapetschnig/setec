@@ -1,4 +1,4 @@
-import { leistungMaterialEk, leistungMaterialVk, leistungPreis, runden2, type LeistungsMaterial } from "@/lib/preise";
+import { leistungMaterialEk, leistungMaterialVk, leistungPreis, runden2, staffelLesen, type LeistungsMaterial, type StaffelStufe } from "@/lib/preise";
 import type { Firma, Leistung } from "@/lib/types";
 
 /** Reine Hilfen für den Leistungskatalog — ohne Oberfläche, damit testbar. */
@@ -119,4 +119,47 @@ export function kalkulieren(
     rohertragProzent: preis > 0 ? (rohertrag / preis) * 100 : null,
     jeStunde: minuten > 0 ? runden2(rohertrag / (minuten / 60)) : null,
   };
+}
+
+// ── Staffel der Montagezeit ─────────────────────────────────────────────
+
+/** Die Staffel gibt es nur in der Kategorie „Montagearbeiten“ (Stefan, 20.11.2026). */
+export const STAFFEL_KATEGORIE = "Montagearbeiten";
+export const staffelErlaubt = (kategorie: string | null | undefined) => gleicheKategorie(kategorie, STAFFEL_KATEGORIE);
+
+const zahlDe = (n: number) => String(n).replace(".", ",");
+
+/** Bereich je Stufe: „2–10“, „11–18“, „ab 19“ — die Stufe reicht bis vor die nächste. */
+export function staffelBereiche(stufen: StaffelStufe[]): { stufe: StaffelStufe; text: string }[] {
+  return stufen.map((stufe, i) => {
+    const naechste = stufen[i + 1];
+    if (!naechste) return { stufe, text: `ab ${zahlDe(stufe.ab)}` };
+    const bis = Number.isInteger(stufe.ab) && Number.isInteger(naechste.ab) ? naechste.ab - 1 : null;
+    if (bis == null) return { stufe, text: `${zahlDe(stufe.ab)} bis unter ${zahlDe(naechste.ab)}` };
+    return { stufe, text: bis === stufe.ab ? zahlDe(stufe.ab) : `${zahlDe(stufe.ab)}–${zahlDe(bis)}` };
+  });
+}
+
+/** Kurz für die Liste: „2–10: 160 · 11–18: 145 · ab 19: 130 min“ */
+export function staffelText(l: { staffel?: unknown }): string {
+  const b = staffelBereiche(staffelLesen(l.staffel));
+  return b.length ? `${b.map((x) => `${x.text}: ${zahlDe(x.stufe.minuten)}`).join(" · ")} min` : "";
+}
+
+/**
+ * Staffel aus dem Formular prüfen: „ab“ über 0, Minuten ab 0, kein „ab“
+ * doppelt. Leere Zeilen fallen weg. Fehler als Text für die Meldung.
+ */
+export function staffelPruefen(
+  zeilen: { ab: number | null; minuten: number | null }[],
+): { stufen: StaffelStufe[] } | { fehler: string } {
+  const stufen: StaffelStufe[] = [];
+  for (const z of zeilen) {
+    if (z.ab == null && z.minuten == null) continue;
+    if (z.ab == null || !(z.ab > 0)) return { fehler: "Staffel: „ab Menge“ muss größer als 0 sein." };
+    if (z.minuten == null || z.minuten < 0 || z.minuten >= 1_000_000) return { fehler: `Staffel ab ${zahlDe(z.ab)}: bitte die Minuten eintragen.` };
+    if (stufen.some((s) => s.ab === z.ab)) return { fehler: `Staffel: „ab ${zahlDe(z.ab)}“ steht doppelt.` };
+    stufen.push({ ab: z.ab, minuten: z.minuten });
+  }
+  return { stufen: stufen.sort((a, b) => a.ab - b.ab) };
 }
