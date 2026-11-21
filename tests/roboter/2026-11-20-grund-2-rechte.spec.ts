@@ -3,10 +3,9 @@
 // Chef sieht alles; Monteur/Lehrling nie Rechnungen, Eingangsrechnungen, Buchhaltung, Mitarbeiter;
 // Büro hat Rechnungen und Buchhaltung, aber nicht „Mitarbeiter & Zugänge“ und kann sich nicht zum Chef machen.
 import { expect, test } from "@playwright/test";
-import { als, anmelden, grundbestand, handySeite, konto, nurTestumgebung, wache } from "./grundtest-hilfe";
+import { als, anmelden, handySeite, konto, nurTestumgebung, wache } from "./grundtest-hilfe";
 
 nurTestumgebung();
-test.beforeAll(grundbestand);
 
 const BUERO_SEITEN = ["/rechnungen", "/angebote", "/eingang", "/buchhaltung", "/mitarbeiter", "/offene-posten"];
 

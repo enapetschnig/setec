@@ -19,6 +19,8 @@ export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
     port: 8080,
+    // Playwright-Testserver (playwright.config.ts) braucht keinen Datei-Wächter — spart die knappen inotify-Plätze.
+    ...(process.env.VITE_OHNE_WATCH ? { watch: null } : {}),
   },
   plugins: [
     react(),

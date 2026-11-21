@@ -3,10 +3,9 @@
 // der Datenbank abgelehnt (falsche Spalte, RLS, Timeout), jede zeigt ihre Überschrift.
 // Eingangsrechnungen: alle Reiter. Rechnungen: die erste der Liste öffnet (Altrechnung oder Editor).
 import { expect, test, type Page } from "@playwright/test";
-import { anmelden, grundbestand, handySeite, konto, nurTestumgebung, wache } from "./grundtest-hilfe";
+import { anmelden, handySeite, konto, nurTestumgebung, wache } from "./grundtest-hilfe";
 
 nurTestumgebung();
-test.beforeAll(grundbestand);
 
 const SEITEN = [
   "/", "/projekte", "/kunden", "/kunden?ansicht=karte", "/erstaufnahmen", "/angebote", "/rechnungen", "/kalender",

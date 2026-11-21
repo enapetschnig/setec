@@ -1,1 +1,1 @@
-# Schon vor einer Änderung rote Tests, je Zeile „datei  # Grund“ — derzeit keine (19.11.2026: 2026-11-17-erstaufnahme und -kalender repariert).
+# Schon vor einer Änderung rote Tests, je Zeile „datei  # Grund“ — derzeit keine (21.11.2026: alle 8 *.spec.ts grün, einzeln und mit --workers=4).

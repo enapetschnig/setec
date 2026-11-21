@@ -9,7 +9,8 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { umgebung } from "./umgebung";
 
 const U = umgebung();
-export const LAUF = `ZZGT ${Date.now().toString(36)}`;
+// Je Arbeiter-Prozess eindeutig (laufen mit --workers=4 gleichzeitig): Zeit + Zufall.
+export const LAUF = `ZZGT ${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 export const PASSWORT_KOPIE = "Test1234!"; // festes Passwort der Testumgebung für die Kopien
 const PASSWORT_EIGEN = "zzgt-Test1234!";
 
@@ -27,26 +28,50 @@ export function nurTestumgebung() {
 }
 
 const merk = new Map<string, Konto>();
+export const ROLLEN: Rolle[] = ["chef", "monteur", "buero", "lehrling"];
 
-/** Kopie eines echten Benutzers dieser Grundstufe (aktiv, nicht versteckt, ohne eigene Rolle), sonst eigenes Konto. */
+/**
+ * Konto dieser Rolle: Kopie eines echten Benutzers dieser Grundstufe (aktiv, nicht versteckt, ohne eigene Rolle),
+ * sonst das eigene „zzgt-<rolle>@test.local“. Nur lesen — angelegt werden die eigenen Konten einmal vorab
+ * (`kontenAnlegen` in vorab.ts), damit parallele Arbeiter sich nicht gegenseitig Konten/Passwörter umstellen.
+ */
 export async function konto(rolle: Rolle): Promise<Konto> {
   if (merk.has(rolle)) return merk.get(rolle)!;
+  const { data: liste } = await admin.auth.admin.listUsers({ perPage: 1000 });
   let k: Konto | null = null;
   if (rolle === "chef" || rolle === "monteur") {
     const { data: profile } = await admin.from("profiles").select("id").eq("rolle", rolle).eq("aktiv", true)
       .eq("versteckt", false).is("rolle_id", null).eq("passwort_neu", false).order("id");
-    const { data: liste } = await admin.auth.admin.listUsers({ perPage: 1000 });
     const kopie = liste.users.find((u) => /^nutzer\d+@example\.invalid$/.test(u.email ?? "") && profile?.some((p) => p.id === u.id));
     if (kopie) k = { id: kopie.id, email: kopie.email!, passwort: PASSWORT_KOPIE };
   }
-  k ??= await eigenesKonto(rolle);
+  if (!k) {
+    const eigen = liste.users.find((u) => u.email === eigeneEmail(rolle));
+    if (!eigen) throw new Error(`Konto ${eigeneEmail(rolle)} fehlt — globalSetup (tests/roboter/vorab.ts) lief nicht.`);
+    k = { id: eigen.id, email: eigen.email!, passwort: PASSWORT_EIGEN };
+  }
   merk.set(rolle, k);
   return k;
 }
 
-/** Eigenes Konto mit einer eingebauten Rolle (Büro, Lehrling …) bzw. Grundstufe — je Rolle einmal, wird wiederverwendet. */
+const eigeneEmail = (rolle: Rolle) => `zzgt-${rolle}@test.local`;
+
+/** Vorab einmal (vorab.ts): je Rolle ohne passende Kopie ein eigenes Konto anlegen bzw. zurücksetzen. */
+export async function kontenAnlegen() {
+  for (const rolle of ROLLEN) {
+    if (rolle === "chef" || rolle === "monteur") {
+      const { data: profile } = await admin.from("profiles").select("id").eq("rolle", rolle).eq("aktiv", true)
+        .eq("versteckt", false).is("rolle_id", null).eq("passwort_neu", false);
+      const { data: liste } = await admin.auth.admin.listUsers({ perPage: 1000 });
+      if (liste.users.some((u) => /^nutzer\d+@example\.invalid$/.test(u.email ?? "") && profile?.some((p) => p.id === u.id))) continue;
+    }
+    await eigenesKonto(rolle);
+  }
+}
+
+/** Eigenes Konto mit einer eingebauten Rolle (Büro, Lehrling …) bzw. Grundstufe. */
 async function eigenesKonto(rolle: Rolle): Promise<Konto> {
-  const email = `zzgt-${rolle}@test.local`;
+  const email = eigeneEmail(rolle);
   const { data: liste } = await admin.auth.admin.listUsers({ perPage: 1000 });
   let id = liste.users.find((u) => u.email === email)?.id;
   if (id) await admin.auth.admin.updateUserById(id, { password: PASSWORT_EIGEN });
@@ -116,16 +141,22 @@ export function wache(page: Page) {
 export async function testProjekt(titel: string) {
   const name = `${LAUF} ${titel}`;
   // Nummer selbst vergeben: nach dem Laden der Echtdaten steht der Zähler (identity) sonst noch auf den alten Nummern.
-  const { data: hoechste } = await admin.from("kunden").select("nummer").order("nummer", { ascending: false, nullsFirst: false }).limit(1);
-  const nummer = Number(hoechste?.[0]?.nummer ?? 0) + 1 + Math.floor(Math.random() * 50);
-  const { data: kunde, error: e1 } = await admin.from("kunden").insert({ name, nummer, ort: "Testort", plz: "8600", strasse: "Teststraße 1" }).select("id").single();
-  if (e1) throw e1;
+  // Parallele Arbeiter können dieselbe Nummer ziehen → bei Doppelung (23505) neu würfeln.
+  let kunde: { id: string } | null = null;
+  for (let versuch = 0; !kunde; versuch++) {
+    const { data: hoechste } = await admin.from("kunden").select("nummer").order("nummer", { ascending: false, nullsFirst: false }).limit(1);
+    const nummer = Number(hoechste?.[0]?.nummer ?? 0) + 1 + Math.floor(Math.random() * 500);
+    const { data, error } = await admin.from("kunden").insert({ name, nummer, ort: "Testort", plz: "8600", strasse: "Teststraße 1" }).select("id").single();
+    if (error && (error.code !== "23505" || versuch >= 5)) throw error;
+    kunde = data;
+  }
   const { data: projekt, error: e2 } = await admin.from("projekte").insert({ name, kunde_id: kunde.id, status: "aktiv" }).select("id, nummer, status").single();
   if (e2) throw e2;
   return { kundeId: kunde.id as string, projektId: projekt.id as string, nummer: projekt.nummer as string, name };
 }
 
 /**
+ * Läuft nur vorab (vorab.ts), nie in einem Test.
  * Ohne `testumgebung.mjs daten` ist die Datenbank leer — dann je eine eigene Zeile, damit „sieht der Chef die
  * Rechnungen / Eingangsrechnungen / Kategorien?“ etwas zu sehen hat. Mit Echtdaten wird nichts angelegt.
  */

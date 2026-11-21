@@ -9,10 +9,12 @@ const u = umgebung();
 export default defineConfig({
   testDir: "./tests/roboter",
   testMatch: "*.spec.ts",
+  // Gemeinsames (Konten, Grundbestand, Firmensätze) einmal vorab — die Tests lesen es nur, damit sie parallel laufen.
+  globalSetup: "./tests/roboter/vorab.ts",
   timeout: 90_000,
   expect: { timeout: 15_000 },
   retries: 0,
-  fullyParallel: false,
+  fullyParallel: true, // jeder Test legt eigene Daten an (LAUF-Präfix), Gemeinsames nur aus vorab.ts
   reporter: [["list"]],
   outputDir: "test-results",
   use: {
@@ -29,6 +31,6 @@ export default defineConfig({
     url: u.app,
     reuseExistingServer: true,
     timeout: 120_000,
-    env: { VITE_SUPABASE_URL: u.api, VITE_SUPABASE_KEY: u.anon },
+    env: { VITE_SUPABASE_URL: u.api, VITE_SUPABASE_KEY: u.anon, VITE_OHNE_WATCH: "1" },
   },
 });
