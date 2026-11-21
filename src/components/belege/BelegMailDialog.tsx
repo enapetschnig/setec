@@ -18,7 +18,7 @@ import { standardAbsender, usePostfaecher } from "@/lib/postfach";
  * (Edge Function `beleg-mail`, Resend). Empfänger, Betreff und Text sind
  * vorbelegt und änderbar; Antworten gehen an die Firmen-Mail. Bei Rechnungen
  * hängt die Function das abgelegte Original an, beim Angebot das PDF wie beim
- * Herunterladen plus die gewählten Datenblätter. „Mail-App öffnen“ (mailto:)
+ * Herunterladen plus die gewählten Anhänge (eigene wie die PV-Planung und Datenblätter). „Mail-App öffnen“ (mailto:)
  * bleibt als Ausweichweg — dort ohne Anhang.
  * Mit Postfach (Einstellungen → E-Mail, „Senden“ an) geht die Mail über Gmail
  * von dieser Adresse; mehrere → Auswahl „Senden von“ (Vorgabe: Standard-Absender).
@@ -159,13 +159,14 @@ export function BelegMailDialog({
                   <input type="checkbox" className="h-5 w-5 shrink-0 accent-[hsl(var(--primary))]" checked={gewaehlt.has(d.pfad)}
                     onChange={(e) => setGewaehlt((s) => { const n = new Set(s); if (e.target.checked) n.add(d.pfad); else n.delete(d.pfad); return n; })} />
                   <span className="min-w-0 flex-1 truncate">{d.name}{d.artikel && <span className="text-muted-foreground"> · {d.artikel}</span>}</span>
+                  {d.eigen && <span className="shrink-0 text-xs text-muted-foreground">eigener Anhang</span>}
                 </label>
               </li>
             ))}
           </ul>
           {datenblaetter.length > 0 && (
             <p className="border-t px-4 py-2 text-xs text-muted-foreground">
-              {zahl} von {datenblaetter.length} {datenblaetter.length === 1 ? "Datenblatt" : "Datenblättern"} — „nur intern“ geht nie mit, „erst nach Auftrag“ erst nach der Annahme.
+              {zahl} von {datenblaetter.length} {datenblaetter.length === 1 ? "Anhang" : "Anhängen"} gewählt{datenblaetter.some((d) => !d.eigen) && " — Datenblätter „nur intern“ gehen nie mit, „erst nach Auftrag“ erst nach der Annahme"}.
             </p>
           )}
         </section>

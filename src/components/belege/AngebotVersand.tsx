@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   CheckCircle2, Copy, ExternalLink, FileDown, FileText, Link2, Loader2, Mail, MessageCircle, MessageSquareText, MoreVertical, Paperclip,
-  RefreshCw, Send, Share2, ShieldOff,
+  Plus, RefreshCw, Send, Share2, ShieldOff, X,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -16,7 +16,9 @@ import { TON_KLASSE, type Beleg } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { linkAdresse, teilenText, VERLAUF_TEXT, whatsappAdresse, type VerlaufArt } from "./bestaetigung";
 import { BelegMailDialog } from "./BelegMailDialog";
-import { artikelIdsVon, datenblattLaden, fuerKunden, paketNamen, paketZip, useDatenblaetter } from "./datenblaetter";
+import {
+  ANHANG_TYPEN, anhangHochladen, anhangLoeschen, artikelIdsVon, datenblattLaden, fuerKunden, paketNamen, paketZip, useAngebotAnhaenge, useDatenblaetter,
+} from "./datenblaetter";
 import { mailVorgabe } from "./mail";
 import type { EditorPosition, KatalogLeistung } from "./editor";
 
@@ -134,9 +136,31 @@ export function AngebotVersand({
   const namen = useMemo(() => new Map(positionen.filter((p) => p.artikel_id).map((p) => [p.artikel_id!, p.bezeichnung])), [positionen]);
   const ids = useMemo(() => artikelIdsVon(positionen, katalog), [positionen, katalog]);
   const { data: alleBlaetter = [] } = useDatenblaetter(ids, namen);
-  const blaetter = useMemo(() => alleBlaetter.filter((d) => fuerKunden(d.sichtbar, beleg.status)), [alleBlaetter, beleg.status]);
+  // eigene Anhänge (PV-Planung …) zuerst, dann die Datenblätter der Artikel
+  const { data: eigene = [] } = useAngebotAnhaenge(beleg.id, fertig);
+  const blaetter = useMemo(
+    () => [...eigene, ...alleBlaetter.filter((d) => fuerKunden(d.sichtbar, beleg.status))],
+    [eigene, alleBlaetter, beleg.status],
+  );
   const [ohne, setOhne] = useState<Set<string>>(new Set());
   const gewaehlt = blaetter.filter((d) => !ohne.has(d.pfad));
+  const versendbar = beleg.status === "offen" || beleg.status === "angenommen";
+  const dateiFeld = useRef<HTMLInputElement>(null);
+  const anhaengen = (dateien: File[]) => ausfuehren("anhang", async () => {
+    let n = 0;
+    try {
+      for (const d of dateien) { await anhangHochladen(beleg.id, d); n++; }
+    } finally {
+      if (n) await qc.invalidateQueries({ queryKey: ["beleg_anhaenge", beleg.id] });
+    }
+    toast.success(n === 1 ? "Angehängt — geht mit der Mail mit." : `${n} Dateien angehängt — gehen mit der Mail mit.`);
+  });
+  const entfernen = (d: { id?: string; pfad: string; name: string }) => ausfuehren("anhang", async () => {
+    if (!window.confirm(`„${d.name}“ vom Angebot entfernen?`)) return;
+    await anhangLoeschen(d);
+    await qc.invalidateQueries({ queryKey: ["beleg_anhaenge", beleg.id] });
+    toast.success("Anhang entfernt");
+  });
 
   const paket = () => ausfuehren("paket", async () => {
     const pdf = await pdfErzeugen();
@@ -151,7 +175,7 @@ export function AngebotVersand({
         if ((e as Error).name === "AbortError") return;
         // iPhone: Laden dauerte länger als das Antippen gilt — ein Tipp mehr statt ZIP
         if ((e as Error).name === "NotAllowedError") {
-          toast.success("Angebot und Datenblätter sind bereit", {
+          toast.success("Angebot und Anhänge sind bereit", {
             duration: 30_000,
             action: { label: "Teilen", onClick: () => { void navigator.share({ files, title: betreff }).catch(() => undefined); } },
           });
@@ -160,7 +184,7 @@ export function AngebotVersand({
       }
     }
     const zip = await paketZip(dateien);
-    await pdfTeilenOderLaden(zip, pdf.dateiname.replace(/\.pdf$/i, " mit Datenblättern.zip"));
+    await pdfTeilenOderLaden(zip, pdf.dateiname.replace(/\.pdf$/i, " mit Anhängen.zip"));
   });
   const einzeln = (pfad: string, name: string) => ausfuehren("blatt", async () => {
     const blob = await datenblattLaden(pfad);
@@ -258,29 +282,50 @@ export function AngebotVersand({
         </section>
       )}
 
-      {blaetter.length > 0 && (
-        <section className="rounded-lg border bg-card p-4" aria-label="Datenblätter">
-          <h2 className="flex items-center gap-2 text-[0.9375rem] font-semibold"><Paperclip className="h-4 w-4 text-primary" /> Datenblätter als Anhang</h2>
+      {(blaetter.length > 0 || versendbar) && (
+        <section className="rounded-lg border bg-card p-4" aria-label="Anhänge">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <h2 className="flex items-center gap-2 text-[0.9375rem] font-semibold"><Paperclip className="h-4 w-4 text-primary" /> Anhänge</h2>
+            {versendbar && (
+              <>
+                <input ref={dateiFeld} type="file" accept={ANHANG_TYPEN} multiple className="hidden" data-anhang-datei
+                  onChange={(e) => { const f = [...(e.target.files ?? [])]; e.target.value = ""; if (f.length) anhaengen(f); }} />
+                <Button variant="outline" className="h-11" onClick={() => dateiFeld.current?.click()} disabled={!!laeuft}>
+                  {laeuft === "anhang" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Datei anhängen
+                </Button>
+              </>
+            )}
+          </div>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            Aus den Artikeln im Angebot — der Kunde sieht sie auch beim Bestätigungslink.
-            {alleBlaetter.length > blaetter.length && ` Weitere ${alleBlaetter.length - blaetter.length} sind am Artikel auf „nur intern“${beleg.status === "angenommen" ? "" : " oder „erst nach Auftrag“"} gestellt.`}
+            Eigene Dateien (z. B. die PV-Planung als PDF) und die Datenblätter der Artikel — gehen mit der Mail mit, der Kunde sieht sie auch beim Bestätigungslink.
+            {alleBlaetter.filter((d) => !fuerKunden(d.sichtbar, beleg.status)).length > 0
+              && ` Weitere ${alleBlaetter.filter((d) => !fuerKunden(d.sichtbar, beleg.status)).length} Datenblätter sind am Artikel auf „nur intern“${beleg.status === "angenommen" ? "" : " oder „erst nach Auftrag“"} gestellt.`}
           </p>
-          <ul className="mt-2 divide-y text-sm">
-            {blaetter.map((d) => (
-              <li key={d.pfad} className="flex items-center gap-2 py-1.5">
-                <input type="checkbox" className="h-5 w-5 shrink-0 accent-[hsl(var(--primary))]" checked={!ohne.has(d.pfad)} aria-label={`${d.name} mitschicken`}
-                  onChange={(e) => setOhne((s) => { const n = new Set(s); if (e.target.checked) n.delete(d.pfad); else n.add(d.pfad); return n; })} />
-                <button type="button" className="min-w-0 flex-1 truncate py-1 text-left hover:underline" onClick={() => einzeln(d.pfad, d.name)}>
-                  <FileText className="mr-1.5 inline h-4 w-4 text-muted-foreground" />{d.name}
-                  {d.artikel && <span className="text-muted-foreground"> · {d.artikel}</span>}
-                </button>
-              </li>
-            ))}
-          </ul>
-          <Button variant="outline" className="mt-2 h-11 w-full sm:w-auto" onClick={paket} disabled={!!laeuft}>
-            {laeuft === "paket" ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
-            Angebot + {gewaehlt.length} {gewaehlt.length === 1 ? "Datenblatt" : "Datenblätter"} {kannTeilen ? "teilen" : "laden (ZIP)"}
-          </Button>
+          {blaetter.length > 0 && (
+            <>
+              <ul className="mt-2 divide-y text-sm">
+                {blaetter.map((d) => (
+                  <li key={d.pfad} className="flex items-center gap-2 py-1.5" data-anhang={d.eigen ? "eigen" : "datenblatt"}>
+                    <input type="checkbox" className="h-5 w-5 shrink-0 accent-[hsl(var(--primary))]" checked={!ohne.has(d.pfad)} aria-label={`${d.name} mitschicken`}
+                      onChange={(e) => setOhne((s) => { const n = new Set(s); if (e.target.checked) n.delete(d.pfad); else n.add(d.pfad); return n; })} />
+                    <button type="button" className="min-w-0 flex-1 truncate py-1 text-left hover:underline" onClick={() => einzeln(d.pfad, d.name)}>
+                      <FileText className="mr-1.5 inline h-4 w-4 text-muted-foreground" />{d.name}
+                      {d.artikel && <span className="text-muted-foreground"> · {d.artikel}</span>}
+                    </button>
+                    {d.eigen && (
+                      <Button variant="ghost" size="icon" className="h-11 w-11 shrink-0" aria-label={`${d.name} entfernen`} disabled={!!laeuft} onClick={() => entfernen(d)}>
+                        <X className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+              <Button variant="outline" className="mt-2 h-11 w-full sm:w-auto" onClick={paket} disabled={!!laeuft}>
+                {laeuft === "paket" ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
+                Angebot + {gewaehlt.length} {gewaehlt.length === 1 ? "Anhang" : "Anhänge"} {kannTeilen ? "teilen" : "laden (ZIP)"}
+              </Button>
+            </>
+          )}
         </section>
       )}
 
@@ -293,7 +338,8 @@ export function AngebotVersand({
           vorgabe={mailVorgabe({
             art: "Angebot", nummer: beleg.nummer, betreff: beleg.betreff, an: beleg.empf_email ?? kunde?.email, firma: firma?.name,
             telefon: firma?.telefon, link: offen ? link : null, giltBis: beleg.gueltig_bis ? datum(beleg.gueltig_bis) : null,
-            datenblaetter: gewaehlt.length,
+            datenblaetter: gewaehlt.filter((d) => !d.eigen).length,
+            anhaenge: gewaehlt.filter((d) => d.eigen).length,
           })}
           anhangName={pdfDateiname("Angebot", beleg.nummer, beleg.empf_name)}
           vorbereiten={async () => (await pdfErzeugen()).blob}

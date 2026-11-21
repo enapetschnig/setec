@@ -221,9 +221,12 @@ export async function angebotAnnehmen(angebot: Pick<Beleg, "id" | "projekt_id">)
 
 /** Entwurf oder Angebot löschen (RLS lässt fertige Rechnungen nicht zu) */
 export async function belegLoeschen(id: string): Promise<void> {
+  // eigene Anhänge am Angebot (Zeilen gehen per cascade, die Dateien räumt die App weg)
+  const { data: anhaenge } = await supabase.from("beleg_anhaenge").select("pfad").eq("beleg_id", id);
   const { data, error } = await supabase.from("belege").delete().eq("id", id).select("id");
   if (error) throw fehler("Löschen nicht möglich", error);
   if (!data?.length) throw new Error("Löschen nicht möglich — fertige Rechnungen bleiben erhalten (stornieren statt löschen).");
+  if (anhaenge?.length) await supabase.storage.from("projekt-dateien").remove(anhaenge.map((a) => a.pfad)).catch(() => undefined);
 }
 
 /** Hängt außer diesem Beleg nichts am Projekt — keine weiteren Belege, Stunden, Material, Regieberichte, Dateien, Termine? */

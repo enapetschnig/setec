@@ -3,6 +3,7 @@
  * Verschickt wird über die Edge Function `beleg-mail` (Resend, PDF als Anhang);
  * `mailto:` bleibt als Ausweichweg.
  */
+import { anhangText } from "./datenblattLogik";
 
 export type MailArt = "Angebot" | "Rechnung" | "Stornorechnung" | "Lieferschein";
 
@@ -43,12 +44,14 @@ export function mailVorgabe(d: {
   bezahlt?: boolean;
   stornoZu?: string | null;
   datenblaetter?: number;
+  /** eigene Anhänge am Angebot (PV-Planung …) */
+  anhaenge?: number;
 }): MailVorgabe {
   const nr = d.nummer ?? "";
   const titel = d.betreff?.trim() ? ` „${d.betreff.trim()}“` : "";
   const zeilen: string[] = ["Guten Tag,", ""];
   if (d.art === "Angebot") {
-    const blaetter = d.datenblaetter ? ` samt ${d.datenblaetter === 1 ? "Datenblatt" : `${d.datenblaetter} Datenblättern`}` : "";
+    const blaetter = anhangText(d.datenblaetter ?? 0, d.anhaenge ?? 0);
     zeilen.push(`anbei unser Angebot ${nr}${titel} als PDF${blaetter}.`);
     if (d.link) zeilen.push("", "Sie können es auch online ansehen und direkt bestätigen:", d.link);
     if (d.giltBis) zeilen.push("", `Das Angebot gilt bis ${d.giltBis}.`);

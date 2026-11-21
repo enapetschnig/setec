@@ -33,7 +33,26 @@ export function fuerKunden(sichtbar: Sichtbarkeit | undefined, angebotStatus: st
   return true;
 }
 
-export type Datenblatt = { id?: string; artikel_id?: string; name: string; pfad: string; artikel?: string | null; sichtbar?: Sichtbarkeit };
+/** `eigen`: eigener Anhang am Angebot (Tabelle `beleg_anhaenge`, z. B. PV-Planung) statt Datenblatt eines Artikels */
+export type Datenblatt = { id?: string; artikel_id?: string; name: string; pfad: string; artikel?: string | null; sichtbar?: Sichtbarkeit; eigen?: boolean };
+
+/** Eigene Anhänge am Angebot: höchstens so groß (die Mail nimmt zusammen 30 MB) */
+export const ANHANG_MAX = 15 * 1024 * 1024;
+export const ANHANG_TYPEN = "application/pdf,image/jpeg,image/png,image/webp,.pdf,.jpg,.jpeg,.png,.webp";
+
+/** Speicherpfad eines eigenen Anhangs: angebot/<beleg_id>/<zufall>-<name> (ohne Sonderzeichen) */
+export function anhangPfad(belegId: string, dateiname: string, zufall: string): string {
+  const sauber = dateiname.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9._-]+/g, "_").replace(/_+/g, "_").slice(-80) || "anhang";
+  return `angebot/${belegId}/${zufall}-${sauber}`;
+}
+
+/** Text für die Mail: „samt 3 Datenblättern und einem weiteren Anhang“ */
+export function anhangText(datenblaetter: number, eigene: number): string {
+  const teile: string[] = [];
+  if (datenblaetter) teile.push(datenblaetter === 1 ? "Datenblatt" : `${datenblaetter} Datenblättern`);
+  if (eigene) teile.push(teile.length ? (eigene === 1 ? "einem weiteren Anhang" : `${eigene} weiteren Anhängen`) : (eigene === 1 ? "Anhang" : `${eigene} Anhängen`));
+  return teile.length ? ` samt ${teile.join(" und ")}` : "";
+}
 
 /** Artikel des Angebots: Artikel-Positionen und das Material der Leistungen */
 export function artikelIdsVon(positionen: Pick<EditorPosition, "artikel_id" | "leistung_id">[], katalog: Pick<KatalogLeistung, "id" | "leistung_material">[]): string[] {

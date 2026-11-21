@@ -10,7 +10,8 @@
 //   · Angebot (offen, angenommen): das PDF, das die App wie beim Herunterladen
 //     erzeugt (base64 im Aufruf, ≤ 8 MB, muss mit %PDF beginnen).
 //   · Datenblätter (nur Angebot): nur Pfade, die `angebot_datenblaetter` für
-//     dieses Angebot freigibt (nie „intern“, „nach Auftrag“ erst bei Annahme).
+//     dieses Angebot freigibt (nie „intern“, „nach Auftrag“ erst bei Annahme)
+//     — dazu die eigenen Anhänge am Angebot (`beleg_anhaenge`, z. B. PV-Planung, 21.11.2026).
 // Absender RESEND_FROM (Standard noreply@handwerkapp.at, die bei Resend
 // bestätigte Domain) mit dem Firmennamen, Antwort an = Firmen-Mail
 // (firma.email). Vermerk: angebot_verlauf art 'gesendet' (name = Empfänger,
@@ -144,7 +145,7 @@ Deno.serve(async (req) => {
         const vergeben = new Set(anhaenge.map((a) => a.filename.toLowerCase()));
         for (const p of gewuenscht) {
           const { data: d } = await dienst.storage.from("projekt-dateien").download(p);
-          if (!d) return antwort({ error: `Datenblatt nicht gefunden: ${erlaubt.get(p) ?? p}` }, 404);
+          if (!d) return antwort({ error: `Anhang nicht gefunden: ${erlaubt.get(p) ?? p}` }, 404);
           // Name wie am Artikel, Endung notfalls aus dem Pfad (Bilder als Datenblatt gibt es auch)
           const endungPfad = p.match(/\.[a-z0-9]{2,4}$/i)?.[0] ?? ".pdf";
           let name = (erlaubt.get(p) || p.split("/").pop() || "Datenblatt").replace(/[\\/:*?"<>|\r\n]+/g, "-").trim().slice(0, 120) || "Datenblatt";
@@ -159,7 +160,7 @@ Deno.serve(async (req) => {
       }
     }
     const gesamt = anhaenge.reduce((s, a) => s + a.content.length, 0);
-    if (gesamt > MAX_GESAMT) return antwort({ error: "Die Anhänge sind zusammen größer als 30 MB — weniger Datenblätter wählen." }, 400);
+    if (gesamt > MAX_GESAMT) return antwort({ error: "Die Anhänge sind zusammen größer als 30 MB — weniger Anhänge wählen." }, 400);
 
     const { data: f } = await dienst.from("firma").select("name, email").limit(1).maybeSingle();
     const firmenName = (f?.name ?? Deno.env.get("FIRMA_NAME") ?? "").replace(/[<>"\r\n]/g, "").trim();
@@ -202,7 +203,7 @@ Deno.serve(async (req) => {
     let id: string | null = null;
     if (postfach) {
       // Gmail nimmt höchstens 25 MB Anhang (base64 macht daraus ~34 MB)
-      if (gesamt > 24 * 1024 * 1024) return antwort({ error: "Über das Postfach gehen höchstens 24 MB Anhänge — weniger Datenblätter wählen." }, 400);
+      if (gesamt > 24 * 1024 * 1024) return antwort({ error: "Über das Postfach gehen höchstens 24 MB Anhänge — weniger Anhänge wählen." }, 400);
       try {
         const g = await Gmail.oeffnen(dienstkontoLesen(Deno.env.get("GOOGLE_MAIL_DIENSTKONTO")), postfach);
         id = await g.senden(mailBauen({

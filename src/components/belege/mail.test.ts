@@ -45,3 +45,21 @@ describe("Mail an den Kunden", () => {
     expect(bezahlt.text).not.toContain("überweisen");
   });
 });
+
+describe("Eigene Anhänge am Angebot (PV-Planung, 21.11.2026)", () => {
+  it("Mailtext nennt Datenblätter und eigene Anhänge", async () => {
+    const { anhangText } = await import("./datenblattLogik");
+    expect(anhangText(0, 0)).toBe("");
+    expect(anhangText(3, 0)).toBe(" samt 3 Datenblättern");
+    expect(anhangText(0, 1)).toBe(" samt Anhang");
+    expect(anhangText(3, 1)).toBe(" samt 3 Datenblättern und einem weiteren Anhang");
+    expect(anhangText(1, 2)).toBe(" samt Datenblatt und 2 weiteren Anhängen");
+    const v = mailVorgabe({ art: "Angebot", nummer: "AN-1", betreff: null, an: null, firma: "F", datenblaetter: 2, anhaenge: 1 });
+    expect(v.text).toContain("als PDF samt 2 Datenblättern und einem weiteren Anhang.");
+  });
+  it("Speicherpfad unter angebot/<id>/ ohne Sonderzeichen", async () => {
+    const { anhangPfad } = await import("./datenblattLogik");
+    expect(anhangPfad("b1", "PV-Planung Fritz (SolarEdge) Ü.pdf", "ab12")).toBe("angebot/b1/ab12-PV-Planung_Fritz_SolarEdge_U.pdf");
+    expect(anhangPfad("b1", "../../x.pdf", "z").split("/")).toHaveLength(3); // kein Ausbrechen aus dem Ordner
+  });
+});

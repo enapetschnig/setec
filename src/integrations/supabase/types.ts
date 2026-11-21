@@ -784,6 +784,44 @@ export type Database = {
           },
         ]
       }
+      beleg_anhaenge: {
+        Row: {
+          beleg_id: string
+          created_at: string
+          erstellt_von: string | null
+          groesse: number | null
+          id: string
+          name: string
+          pfad: string
+        }
+        Insert: {
+          beleg_id: string
+          created_at?: string
+          erstellt_von?: string | null
+          groesse?: number | null
+          id?: string
+          name: string
+          pfad: string
+        }
+        Update: {
+          beleg_id?: string
+          created_at?: string
+          erstellt_von?: string | null
+          groesse?: number | null
+          id?: string
+          name?: string
+          pfad?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "beleg_anhaenge_beleg_id_fkey"
+            columns: ["beleg_id"]
+            isOneToOne: false
+            referencedRelation: "belege"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       beleg_positionen: {
         Row: {
           art: string

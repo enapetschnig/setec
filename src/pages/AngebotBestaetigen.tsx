@@ -103,7 +103,7 @@ function Angebot({ daten, token, neuLaden }: { daten: Daten; token: string; neuL
   };
   const datenblatt = async (pfad: string, name: string) => {
     const { data, error } = await supabase.storage.from(DATEIEN_BUCKET).download(pfad);
-    if (error || !data) { toast.error("Datenblatt gerade nicht verfügbar."); return; }
+    if (error || !data) { toast.error("Datei gerade nicht verfügbar."); return; }
     await pdfTeilenOderLaden(data, name);
   };
 
@@ -204,8 +204,9 @@ function Angebot({ daten, token, neuLaden }: { daten: Daten; token: string; neuL
           <p className="px-1 text-xs text-muted-foreground">{kvHinweis(!!b.kv_verbindlich)}</p>
 
           {(daten.datenblaetter ?? []).length > 0 && (
-            <section className="rounded-lg border bg-card p-4" aria-label="Datenblätter">
-              <h2 className="font-semibold">Datenblätter</h2>
+            <section className="rounded-lg border bg-card p-4" aria-label="Unterlagen">
+              {/* eigene Anhänge (PV-Planung …) haben keinen Artikel */}
+              <h2 className="font-semibold">{daten.datenblaetter!.some((d) => !d.artikel) ? "Unterlagen" : "Datenblätter"}</h2>
               <ul className="mt-1 divide-y">
                 {daten.datenblaetter!.map((d) => (
                   <li key={d.pfad}>
