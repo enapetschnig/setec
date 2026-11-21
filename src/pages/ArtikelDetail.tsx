@@ -435,7 +435,7 @@ function PreisZahl({ titel, wert, unter, gross }: { titel: string; wert: string;
 // ── Lieferanten ───────────────────────────────────────────────────────
 
 function Lieferanten({ artikel: a, weitere }: { artikel: Artikel; weitere: ArtikelLieferant[] }) {
-  const [dialog, setDialog] = useState<{ eintrag: ArtikelLieferant | null } | null>(null);
+  const [dialog, setDialog] = useState<{ eintrag: ArtikelLieferant | null; haupt?: boolean } | null>(null);
   const best = besterLieferant(a, weitere);
   const zeilen: { schluessel: string; lieferant: string; nr: string | null; ek: number | null; liste: number | null; zeit: number | null; haupt: boolean; eintrag: ArtikelLieferant | null }[] = [
     { schluessel: "haupt", lieferant: a.lieferant, nr: a.artikelnummer, ek: a.ek_preis, liste: a.listenpreis, zeit: null, haupt: true, eintrag: null },
@@ -472,20 +472,18 @@ function Lieferanten({ artikel: a, weitere }: { artikel: Artikel; weitere: Artik
           );
           return (
             <li key={z.schluessel}>
-              {z.eintrag ? (
-                <button type="button" onClick={() => setDialog({ eintrag: z.eintrag })}
+              {z.eintrag || z.haupt ? (
+                <button type="button" onClick={() => setDialog({ eintrag: z.eintrag, haupt: z.haupt })}
                   className="flex min-h-14 w-full items-center gap-3 px-4 py-2 text-left transition-colors hover:bg-muted/40 lg:px-5">
                   {inhalt}
                 </button>
-              ) : (
-                <div className="flex min-h-14 items-center gap-3 px-4 py-2 lg:px-5">{inhalt}</div>
-              )}
+              ) : null}
             </li>
           );
         })}
       </ul>
       <p className="px-4 py-2.5 text-xs text-muted-foreground lg:px-5">
-        Angebote rechnen mit dem EK am Artikel. Bestellungen gehen an den bevorzugten Lieferanten, sonst an den günstigsten.
+        Angebote rechnen mit dem EK am Artikel. Bestellungen gehen an den bevorzugten Lieferanten, sonst an den günstigsten — Lieferant antippen, um ihn zu bevorzugen.
       </p>
       <ArtikelLieferantDialog
         open={!!dialog}
@@ -495,6 +493,7 @@ function Lieferanten({ artikel: a, weitere }: { artikel: Artikel; weitere: Artik
         einheit={a.einheit}
         eintrag={dialog?.eintrag ?? null}
         vergeben={weitere.map((w) => w.lieferant)}
+        haupt={dialog?.haupt ? { artikelnummer: a.artikelnummer, listenpreis: a.listenpreis, ek_preis: a.ek_preis, bevorzugt: a.lieferant_bevorzugt } : null}
       />
     </Karte>
   );

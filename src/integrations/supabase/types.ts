@@ -427,6 +427,7 @@ export type Database = {
           lagerartikel: boolean
           langtext: string | null
           lieferant: string
+          lieferant_bevorzugt: boolean
           listenpreis: number | null
           mindestbestand: number | null
           quelle: string
@@ -454,6 +455,7 @@ export type Database = {
           lagerartikel?: boolean
           langtext?: string | null
           lieferant?: string
+          lieferant_bevorzugt?: boolean
           listenpreis?: number | null
           mindestbestand?: number | null
           quelle?: string
@@ -481,6 +483,7 @@ export type Database = {
           lagerartikel?: boolean
           langtext?: string | null
           lieferant?: string
+          lieferant_bevorzugt?: boolean
           listenpreis?: number | null
           mindestbestand?: number | null
           quelle?: string

@@ -1,0 +1,3 @@
+# Artikel und ihre Lieferanten
+
+- 2026-11-21 · Stefan: „GBC ist unser bevorzugter Lieferant, kann ich aber nicht anwählen, weil er der Lieferant ‚am Artikel‘ ist.“ Die Zeile „am Artikel“ in der Karte Lieferanten (`ArtikelDetail`) öffnet jetzt denselben `ArtikelLieferantDialog` (Modus `haupt`: Nummer/Preis nur lesbar, die ändert „Bearbeiten“; nur „Bevorzugt bestellen“) → `artikel.lieferant_bevorzugt` (Migration `20261121120000`). `besterLieferant` nimmt ihn vor allen weiteren. Höchstens einer bevorzugt: Trigger `artikel_bevorzugt_einer` nimmt das Häkchen auf der jeweils anderen Seite zurück. Abfragen für Bestellvorschläge (`ARTIKEL_LAGER`, `bestellDaten`) müssen `lieferant_bevorzugt` mitholen. Test `tests/roboter/2026-11-21-lieferant-am-artikel-bevorzugt.spec.ts`.

@@ -45,6 +45,12 @@ describe("Lieferanten", () => {
     expect(besterLieferant(haupt, [w("Rexel", 11)])).toMatchObject({ lieferant: "Sonepar", quelle: "haupt" });
     expect(besterLieferant(haupt, [w("Rexel", 9), w("Schäcke", 12, { bevorzugt: true })])).toMatchObject({ lieferant: "Schäcke", grund: "bevorzugt" });
   });
+  it("Lieferant am Artikel bevorzugt (Stefan 21.11.2026): geht vor den günstigeren weiteren", () => {
+    const haupt = { lieferant: "GBC", ek_preis: 111.3, artikelnummer: "B-1", lieferant_bevorzugt: true };
+    expect(besterLieferant(haupt, [w("Elektromaterial", 111)])).toMatchObject({ lieferant: "GBC", quelle: "haupt", grund: "bevorzugt" });
+    const r = mitBestemLieferant([{ id: "a", ...haupt }], new Map([["a", [w("Elektromaterial", 111)]]]));
+    expect(r[0]).toMatchObject({ lieferant: "GBC", ek_preis: 111.3 });
+  });
   it("Gleichstand und fehlende Preise: Hauptlieferant bleibt", () => {
     expect(besterLieferant({ lieferant: "Sonepar", ek_preis: 10 }, [w("Rexel", 10)]).lieferant).toBe("Sonepar");
     expect(besterLieferant({ lieferant: "Sonepar", ek_preis: 10 }, [w("Rexel", null)]).lieferant).toBe("Sonepar");

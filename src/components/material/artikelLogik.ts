@@ -41,18 +41,20 @@ export function ekVon(w: Pick<WeitererLieferant, "ek_preis" | "listenpreis" | "r
 }
 
 /**
- * Bei wem bestellen? Ein bevorzugter weiterer Lieferant geht vor, sonst der
+ * Bei wem bestellen? Der bevorzugte Lieferant geht vor (am Artikel per
+ * `lieferant_bevorzugt` oder ein weiterer), sonst der
  * günstigste EK (Hauptlieferant am Artikel eingeschlossen). Ohne Preis zählt
  * ein Lieferant nicht als günstiger; bei Gleichstand bleibt der Hauptlieferant.
  */
 export function besterLieferant(
-  haupt: { lieferant: string | null; ek_preis: number | string | null; artikelnummer?: string | null },
+  haupt: { lieferant: string | null; ek_preis: number | string | null; artikelnummer?: string | null; lieferant_bevorzugt?: boolean | null },
   weitere: WeitererLieferant[],
 ): LieferantWahl {
   const h: LieferantWahl = {
     lieferant: haupt.lieferant?.trim() || "Eigen", ek_preis: haupt.ek_preis == null ? null : Number(haupt.ek_preis),
     nummer: haupt.artikelnummer ?? null, quelle: "haupt", grund: weitere.length ? "guenstigst" : "einziger",
   };
+  if (haupt.lieferant_bevorzugt) return { ...h, grund: "bevorzugt" };
   const bevorzugt = weitere.find((w) => w.bevorzugt);
   if (bevorzugt) return { lieferant: bevorzugt.lieferant, ek_preis: ekVon(bevorzugt), nummer: bevorzugt.lieferanten_nr, quelle: "weitere", grund: "bevorzugt" };
   let best = h;
@@ -67,7 +69,7 @@ export function besterLieferant(
 }
 
 /** Artikel für den Bestellvorschlag mit dem besten Lieferanten und dessen EK. */
-export function mitBestemLieferant<A extends { id: string; lieferant: string | null; ek_preis: number | string | null }>(
+export function mitBestemLieferant<A extends { id: string; lieferant: string | null; ek_preis: number | string | null; lieferant_bevorzugt?: boolean | null }>(
   artikel: A[],
   weitere: Map<string, WeitererLieferant[]>,
 ): A[] {

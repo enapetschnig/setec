@@ -27,13 +27,18 @@ const formAus = (l: ArtikelLieferant | null): Form => ({
   notiz: l?.notiz ?? "",
 });
 
+/** Der Lieferant am Artikel selbst (Nummer und Preis stehen am Artikel). */
+export type HauptLieferant = { artikelnummer: string | null; listenpreis: number | null; ek_preis: number | null; bevorzugt: boolean };
+
 /**
  * Weiterer Lieferant eines Artikels mit eigener Nummer und eigenem Preis.
  * EK leer = Listenpreis − Rabatt. „Bevorzugt“ nimmt die Bestellung zuerst,
- * sonst den günstigsten.
+ * sonst den günstigsten. Mit `haupt` derselbe Dialog für den Lieferanten am
+ * Artikel: nur „Bevorzugt bestellen“ änderbar (Stefan 21.11.2026), Nummer und
+ * Preis über „Bearbeiten“ am Artikel.
  */
 export function ArtikelLieferantDialog({
-  open, onOpenChange, artikelId, hauptLieferant, einheit, eintrag, vergeben,
+  open, onOpenChange, artikelId, hauptLieferant, einheit, eintrag, vergeben, haupt,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
@@ -44,18 +49,35 @@ export function ArtikelLieferantDialog({
   eintrag: ArtikelLieferant | null;
   /** schon eingetragene Lieferanten (doppelt geht nicht) */
   vergeben: string[];
+  /** gesetzt = Dialog für den Lieferanten am Artikel */
+  haupt?: HauptLieferant | null;
 }) {
   const neuLaden = useNeuLaden();
   const [f, setF] = useState<Form>(formAus(null));
   const [speichert, setSpeichert] = useState(false);
-  useBeimOeffnen(open ? eintrag?.id ?? "neu" : null, () => setF(formAus(eintrag)));
+  useBeimOeffnen(open ? (haupt ? "haupt" : eintrag?.id ?? "neu") : null, () => setF(haupt ? {
+    ...formAus(null), lieferant: hauptLieferant, lieferanten_nr: haupt.artikelnummer ?? "",
+    listenpreis: zahlFeld(haupt.listenpreis), ek_preis: zahlFeld(haupt.ek_preis), bevorzugt: haupt.bevorzugt,
+  } : formAus(eintrag)));
   const setze = <K extends keyof Form>(k: K, v: Form[K]) => setF((a) => ({ ...a, [k]: v }));
 
   const liste = dezimalLesen(f.listenpreis);
   const rabatt = dezimalLesen(f.rabatt);
   const ekBerechnet = ekAusListe(liste, rabatt);
 
+  const hauptSpeichern = async () => {
+    setSpeichert(true);
+    // Trigger artikel_bevorzugt_einer nimmt „bevorzugt“ bei den weiteren zurück
+    const { error } = await supabase.from("artikel").update({ lieferant_bevorzugt: f.bevorzugt }).eq("id", artikelId);
+    setSpeichert(false);
+    if (error) return toast.error("Nicht gespeichert", { description: fehlerText(error) });
+    await neuLaden("artikel", "bestellungen");
+    toast.success("Lieferant gespeichert");
+    onOpenChange(false);
+  };
+
   const speichern = async () => {
+    if (haupt) return hauptSpeichern();
     const lieferant = f.lieferant.trim();
     if (!lieferant) return toast.error("Bitte den Lieferanten wählen.");
     if (lieferant.toLowerCase() === hauptLieferant.trim().toLowerCase()) {
@@ -118,12 +140,14 @@ export function ArtikelLieferantDialog({
     <FormularDialog
       open={open}
       onOpenChange={onOpenChange}
-      titel={eintrag ? `Lieferant ${eintrag.lieferant}` : "Weiterer Lieferant"}
-      beschreibung={`Preise je ${einheit}. Der Lieferant am Artikel (${hauptLieferant}) bleibt der EK für Angebote.`}
+      titel={haupt ? `Lieferant ${hauptLieferant}` : eintrag ? `Lieferant ${eintrag.lieferant}` : "Weiterer Lieferant"}
+      beschreibung={haupt
+        ? `Lieferant am Artikel — sein EK gilt für Angebote. Nummer und Preis änderst du am Artikel über „Bearbeiten“.`
+        : `Preise je ${einheit}. Der Lieferant am Artikel (${hauptLieferant}) bleibt der EK für Angebote.`}
       gesperrt={speichert}
       fuss={
         <>
-          {eintrag && (
+          {eintrag && !haupt && (
             <Button variant="ghost" className="h-11 text-destructive sm:mr-auto" onClick={() => void entfernen()} disabled={speichert}>
               <Trash2 className="h-4 w-4" /> Entfernen
             </Button>
@@ -136,6 +160,22 @@ export function ArtikelLieferantDialog({
       }
     >
       <div className="mx-auto max-w-2xl space-y-4">
+        {haupt ? (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Feld id="al-lief" label="Lieferant">
+              <Input id="al-lief" className="h-11" value={f.lieferant} disabled />
+            </Feld>
+            <Feld id="al-nr" label="Artikelnummer">
+              <Input id="al-nr" className="h-11" value={f.lieferanten_nr} disabled />
+            </Feld>
+            <Feld id="al-liste" label="Listenpreis">
+              <Input id="al-liste" className="zahl h-11" value={f.listenpreis} disabled />
+            </Feld>
+            <Feld id="al-ek" label="EK">
+              <Input id="al-ek" className="zahl h-11" value={f.ek_preis} disabled />
+            </Feld>
+          </div>
+        ) : (
         <div className="grid gap-4 sm:grid-cols-2">
           <Feld id="al-lief" label="Lieferant">
             <LieferantWahl id="al-lief" wert={f.lieferant} onChange={(v) => setze("lieferant", v)}
@@ -158,6 +198,7 @@ export function ArtikelLieferantDialog({
             <Input id="al-zeit" className="zahl h-11" inputMode="numeric" value={f.lieferzeit_tage} onChange={(e) => setze("lieferzeit_tage", e.target.value)} />
           </Feld>
         </div>
+        )}
         <label className="flex min-h-11 items-center justify-between gap-4 rounded-lg border bg-card px-3 py-2">
           <span>
             <span className="block text-sm font-medium">Bevorzugt bestellen</span>
@@ -165,9 +206,9 @@ export function ArtikelLieferantDialog({
           </span>
           <Switch checked={f.bevorzugt} onCheckedChange={(v) => setze("bevorzugt", v)} />
         </label>
-        <Feld id="al-notiz" label={<>Notiz<Zusatz>(optional)</Zusatz></>}>
+        {!haupt && <Feld id="al-notiz" label={<>Notiz<Zusatz>(optional)</Zusatz></>}>
           <Input id="al-notiz" className="h-11" value={f.notiz} onChange={(e) => setze("notiz", e.target.value)} placeholder="z. B. nur in 10er-Packungen" />
-        </Feld>
+        </Feld>}
       </div>
     </FormularDialog>
   );
