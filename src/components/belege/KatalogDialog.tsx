@@ -36,10 +36,10 @@ const KATEGORIEN: { name: string; icon: LucideIcon }[] = [
 ];
 const iconVon = (k: string) => KATEGORIEN.find((x) => x.name === k)?.icon ?? Package;
 const SEITE = 60;
-const FELDER = "id, artikelnummer, hersteller, bezeichnung, einheit, vk_preis, aufschlag, ek_preis, listenpreis, kategorie, unterkategorie";
+const FELDER = "id, artikelnummer, hersteller, bezeichnung, langtext, einheit, vk_preis, aufschlag, ek_preis, listenpreis, kategorie, unterkategorie";
 
 type Knoten = { kategorie: string; unterkategorie: string | null; hersteller: string | null; anzahl: number };
-type KatArtikel = Pick<Artikel, "id" | "artikelnummer" | "hersteller" | "bezeichnung" | "einheit" | "vk_preis" | "aufschlag" | "ek_preis" | "listenpreis"> & { kategorie: string | null; unterkategorie: string | null };
+type KatArtikel = Pick<Artikel, "id" | "artikelnummer" | "hersteller" | "bezeichnung" | "langtext" | "einheit" | "vk_preis" | "aufschlag" | "ek_preis" | "listenpreis"> & { kategorie: string | null; unterkategorie: string | null };
 export type KatalogWahl = { artikel: KatArtikel; menge: number };
 
 /**

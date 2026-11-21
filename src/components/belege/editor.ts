@@ -306,11 +306,13 @@ export function staffelNachziehen(
 }
 
 export function artikelPosition(
-  a: Pick<Artikel, "id" | "bezeichnung" | "einheit" | "vk_preis" | "ek_preis" | "listenpreis"> & { aufschlag?: number | null },
+  a: Pick<Artikel, "id" | "bezeichnung" | "einheit" | "vk_preis" | "ek_preis" | "listenpreis"> & { aufschlag?: number | null; langtext?: string | null },
   firma: Pick<Firma, "material_aufschlag"> | null | undefined,
 ): EditorPosition {
   return leerePosition("artikel", {
     bezeichnung: a.bezeichnung,
+    // Langtext des Artikels kommt mit (Stefan 21.11.2026), im Beleg frei änderbar
+    langtext: a.langtext?.trim() ?? "",
     einheit: a.einheit || "Stk",
     einzelpreis: preisText(artikelVk(a, firma)),
     ek_preis: a.ek_preis == null ? null : Number(a.ek_preis),

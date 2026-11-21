@@ -27,10 +27,17 @@ import {
   VARIANTE_TEXT, varianteMoeglich, type Variante,
   positionsNummern, preisVon, preisText, titelPosition, verschieben, zahlText, ziehen, zwischensummen, type EditorPosition,
 } from "./editor";
+import { supabase } from "@/integrations/supabase/client";
 import { ZahlFeld } from "./Eingabezeile";
 import { PositionDialog } from "./PositionDialog";
 
 type Setzen = (f: (alt: EditorPosition[]) => EditorPosition[]) => void;
+
+/** Langtext eines Artikels (leer, wenn er keinen hat oder nicht lesbar ist) */
+async function artikelLangtext(id: string): Promise<string> {
+  const { data } = await supabase.from("artikel").select("langtext").eq("id", id).maybeSingle();
+  return data?.langtext?.trim() ?? "";
+}
 
 /** Langtext-Feld am PC so hoch wie der Text (grob: ~90 Zeichen je Zeile), 2–6 Zeilen */
 const langtextZeilen = (t: string) =>
@@ -137,7 +144,13 @@ export function PositionenEditor({
       setPositionen(() => liste);
       if (p.art === "titel") setAktiverTitel(neueId);
     } else if (was === "loeschen") loeschen(p);
-    else if (was === "langtext") setLangOffen((s) => new Set(s).add(p.id));
+    else if (was === "langtext") {
+      setLangOffen((s) => new Set(s).add(p.id));
+      // Zeile aus einem Artikel: dessen Langtext gleich vorschlagen (ältere Zeilen hatten ihn nicht übernommen)
+      if (p.artikel_id && !p.langtext) void artikelLangtext(p.artikel_id).then((t) => {
+        if (t) setPositionen((alt) => alt.map((x) => (x.id === p.id && !x.langtext ? { ...x, langtext: t } : x)));
+      });
+    }
     else if (was === "hier") setAktiverTitel(p.id);
     else if (was === "titelDavor") {
       const t = titelPosition("");

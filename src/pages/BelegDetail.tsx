@@ -85,7 +85,7 @@ function NeuerBeleg({ params }: { params: URLSearchParams }) {
     enabled: !!ls,
     queryFn: async () => {
       if (!artikelIds.length) return [];
-      const { data, error } = await supabase.from("artikel").select("id, bezeichnung, einheit, vk_preis, ek_preis, listenpreis, aufschlag").in("id", artikelIds);
+      const { data, error } = await supabase.from("artikel").select("id, bezeichnung, langtext, einheit, vk_preis, ek_preis, listenpreis, aufschlag").in("id", artikelIds);
       if (error) throw error;
       return data ?? [];
     },
