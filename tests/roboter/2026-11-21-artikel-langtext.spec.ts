@@ -56,3 +56,33 @@ test("Chef: Artikel mit Langtext ins Angebot — Langtext steht in der Zeile und
   expect(w.abstuerze).toEqual([]);
   expect(w.abgelehnt).toEqual([]);
 });
+
+test("Chef: Projekt-Material mit Artikel → Rechnung („Aus dem Projekt übernehmen“) — Langtext kommt mit", async ({ page }) => {
+  const chef = await konto("chef");
+  const p = await testProjekt("Langtext Rechnung");
+  const lang = `${LAUF} SOLAX G4 X3-HYB-15.0-Pro`;
+  const { data: art, error: eA } = await admin.from("artikel").insert({
+    lieferant: `${LAUF} Lief`, artikelnummer: `${LAUF}-R`, bezeichnung: `${LAUF} Wechselrichter-Set`, langtext: lang, einheit: "Stk", ek_preis: 100, vk_preis: 150,
+  }).select("id").single();
+  if (eA) throw eA;
+  const { error: eM } = await admin.from("material_buchungen").insert({
+    projekt_id: p.projektId, artikel_id: art.id, art: "direkt", menge: 1, ek_preis: 100, einheit: "Stk", bezeichnung: `${LAUF} Wechselrichter-Set`, user_id: chef.id,
+  });
+  if (eM) throw eM;
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const w = wache(page);
+  await anmelden(page, chef);
+  await page.goto(`/belege/neu?typ=rechnung&projekt=${p.projektId}&import=1`);
+  const uebernehmen = page.getByRole("button", { name: /übernehmen · €/ });
+  await expect(uebernehmen).toBeVisible({ timeout: 60_000 });
+  await uebernehmen.click();
+  await page.locator("header").getByRole("button", { name: "Speichern", exact: true }).click();
+  await page.waitForURL(/\/belege\/[0-9a-f-]{36}$/);
+  const belegId = page.url().match(/belege\/([0-9a-f-]{36})/)![1];
+  const { data: pos } = await admin.from("beleg_positionen").select("langtext, artikel_id").eq("beleg_id", belegId);
+  expect(pos).toEqual([{ langtext: lang, artikel_id: art.id }]);
+
+  expect(w.abstuerze).toEqual([]);
+  expect(w.abgelehnt).toEqual([]);
+});

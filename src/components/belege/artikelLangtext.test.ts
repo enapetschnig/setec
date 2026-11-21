@@ -1,5 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+// importieren.ts lädt den Supabase-Client — im Test nicht nötig
+vi.mock("@/integrations/supabase/client", () => ({ supabase: {} }));
+
 import { artikelPosition, positionZuDb } from "./editor";
+import { materialGruppen, materialPositionen, type ImportMaterial } from "./importieren";
 
 // Stefan 21.11.2026: Artikel im Angebot ohne Langtext, obwohl der Artikel einen hat
 describe("Artikel → Position: Langtext kommt mit", () => {
@@ -12,5 +17,18 @@ describe("Artikel → Position: Langtext kommt mit", () => {
   it("ohne Langtext bleibt er leer", () => {
     expect(artikelPosition(a, null).langtext).toBe("");
     expect(artikelPosition({ ...a, langtext: null }, null).langtext).toBe("");
+  });
+});
+
+describe("Projekt-Material → Rechnung: Langtext des Artikels kommt mit", () => {
+  const b = (id: string, artikel: ImportMaterial["artikel"], artikel_id: string | null, bez: string): ImportMaterial =>
+    ({ id, art: "direkt", menge: 2, ek_preis: 10, bezeichnung: bez, einheit: "Stk", artikel_id, artikel, regiebericht_id: null, datum: "2026-11-21" });
+  const gruppen = materialGruppen([
+    b("m1", { vk_preis: 20, ek_preis: 10, listenpreis: null, langtext: "Hybrid 15 kW\n" }, "a1", "Wechselrichter"),
+    b("m2", null, null, "Kleinmaterial"),
+  ], null);
+  const opt = { materialPauschale: false } as Parameters<typeof materialPositionen>[1];
+  it("einzeln: Artikelzeile mit Langtext, freie ohne", () => {
+    expect(materialPositionen(gruppen, opt).map((p) => [p.bezeichnung, p.langtext])).toEqual([["Kleinmaterial", ""], ["Wechselrichter", "Hybrid 15 kW"]]);
   });
 });

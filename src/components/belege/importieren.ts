@@ -45,7 +45,7 @@ export type ImportMaterial = {
   bezeichnung: string;
   einheit: string;
   artikel_id: string | null;
-  artikel: (Pick<Artikel, "vk_preis" | "ek_preis" | "listenpreis"> & { aufschlag?: number | null }) | null;
+  artikel: (Pick<Artikel, "vk_preis" | "ek_preis" | "listenpreis"> & { aufschlag?: number | null; langtext?: string | null }) | null;
   regiebericht_id: string | null;
   datum: string;
 };
@@ -137,7 +137,7 @@ type ZeitZeile = {
 type MaterialZeile = {
   id: string; art: string; menge: number; ek_preis: number | null; einheit: string | null; bezeichnung: string | null;
   artikel_id: string | null; regiebericht_id: string | null; created_at: string;
-  artikel: { bezeichnung: string; einheit: string; vk_preis: number | null; aufschlag: number | null; ek_preis: number | null; listenpreis: number | null } | null;
+  artikel: { bezeichnung: string; langtext?: string | null; einheit: string; vk_preis: number | null; aufschlag: number | null; ek_preis: number | null; listenpreis: number | null } | null;
 };
 
 /**
@@ -157,7 +157,7 @@ export async function importDatenLaden(projektId: string, belegId: string | null
       .select("id, datum, stunden, taetigkeit, user_id, regiebericht_id, art, profiles(vorname, nachname, lohnart)")
       .eq("projekt_id", projektId).or(frei).order("datum").order("created_at").order("id").range(a, b)),
     seiten((a, b) => supabase.from("material_buchungen")
-      .select("id, art, menge, ek_preis, einheit, bezeichnung, artikel_id, regiebericht_id, created_at, artikel(bezeichnung, einheit, vk_preis, aufschlag, ek_preis, listenpreis)")
+      .select("id, art, menge, ek_preis, einheit, bezeichnung, artikel_id, regiebericht_id, created_at, artikel(bezeichnung, langtext, einheit, vk_preis, aufschlag, ek_preis, listenpreis)")
       .eq("projekt_id", projektId).in("art", ["ausfassung", "rueckgabe", "direkt"]).or(frei).order("created_at").order("id").range(a, b)),
     supabase.from("belege").select("id, nummer, betreff, status, netto").eq("projekt_id", projektId).eq("typ", "angebot")
       .in("status", ["offen", "angenommen"]).order("datum"),
@@ -275,7 +275,7 @@ export async function regieImportLaden(
       .select("id, datum, stunden, taetigkeit, user_id, regiebericht_id, art, profiles(vorname, nachname, lohnart)")
       .in("regiebericht_id", ids).or(frei).order("datum").order("created_at").order("id").range(a, b)),
     seiten((a, b) => supabase.from("material_buchungen")
-      .select("id, art, menge, ek_preis, einheit, bezeichnung, artikel_id, regiebericht_id, created_at, artikel(bezeichnung, einheit, vk_preis, aufschlag, ek_preis, listenpreis)")
+      .select("id, art, menge, ek_preis, einheit, bezeichnung, artikel_id, regiebericht_id, created_at, artikel(bezeichnung, langtext, einheit, vk_preis, aufschlag, ek_preis, listenpreis)")
       .in("regiebericht_id", ids).in("art", ["ausfassung", "rueckgabe", "direkt"]).or(frei).order("created_at").order("id").range(a, b)),
     supabase.from("mitarbeiter_saetze").select("user_id, gueltig_ab, lohnkosten, verrechnungssatz").not("verrechnungssatz", "is", null),
   ]);
@@ -331,6 +331,8 @@ export type MaterialGruppe = {
   bezeichnung: string;
   einheit: string;
   artikel_id: string | null;
+  /** Langtext des Artikels (Stefan 21.11.2026: kommt mit in die Rechnung) */
+  langtext?: string;
   /** ausgefasst + direkt − zurück */
   menge: number;
   /** EK je Einheit (gewichtet aus den Buchungen) */
@@ -354,7 +356,7 @@ export function materialGruppen(buchungen: ImportMaterial[], firma: Pick<Firma, 
     let s = map.get(schluessel);
     if (!s) {
       s = {
-        g: { schluessel, bezeichnung: b.bezeichnung, einheit: b.einheit, artikel_id: b.artikel_id, menge: 0, ek: null, vk: 0, ids: [] },
+        g: { schluessel, bezeichnung: b.bezeichnung, einheit: b.einheit, artikel_id: b.artikel_id, langtext: b.artikel?.langtext?.trim() ?? "", menge: 0, ek: null, vk: 0, ids: [] },
         ekSumme: 0,
         ekMenge: 0,
         artikel: b.artikel,
@@ -436,6 +438,7 @@ export function materialPositionen(gruppen: MaterialGruppe[], opt: ImportOptione
   }
   return gruppen.map((g) => leerePosition("material", {
     bezeichnung: g.bezeichnung,
+    langtext: g.langtext ?? "",
     menge: zahlText(g.menge),
     einheit: g.einheit,
     einzelpreis: preisText(g.vk),
