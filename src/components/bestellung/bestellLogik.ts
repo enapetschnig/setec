@@ -75,7 +75,7 @@ export function vorschlagAusLager(
     .filter((z) => z.menge > 0));
 }
 
-export type AngebotsPosition = { art: string; menge: number | string; artikel_id: string | null; leistung_id: string | null };
+export type AngebotsPosition = { art: string; menge: number | string; artikel_id: string | null; leistung_id: string | null; variante?: string | null };
 
 /**
  * Material laut Angebot: Artikel-Positionen direkt, Leistungen über ihr
@@ -89,7 +89,7 @@ export function bedarfAusAngebot(
   const dazu = (id: string, m: number) => bedarf.set(id, runden3((bedarf.get(id) ?? 0) + m));
   for (const p of positionen) {
     const menge = Number(p.menge) || 0;
-    if (menge <= 0 || p.art === "titel" || p.art === "text" || p.art === "abzug") continue;
+    if (menge <= 0 || p.art === "titel" || p.art === "text" || p.art === "abzug" || p.variante) continue; // optional/alternativ nicht bestellt
     if (p.artikel_id) dazu(p.artikel_id, menge);
     else if (p.leistung_id) for (const lm of leistungMaterial.get(p.leistung_id) ?? []) dazu(lm.artikel_id, menge * lm.menge);
   }

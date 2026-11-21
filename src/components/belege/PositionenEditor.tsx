@@ -5,7 +5,7 @@ import {
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
-  ArrowDown, ArrowUp, Clock, Copy, CornerDownRight, FileText, GripVertical, Link2, Minus, MoreVertical, Pencil, Plus, Rows3, Trash2,
+  ArrowDown, ArrowUp, CircleDashed, Clock, Copy, CornerDownRight, FileText, GripVertical, Link2, Minus, MoreVertical, Pencil, Plus, Replace, Rows3, Sigma, Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,7 +23,8 @@ import { RAUM_VORSCHLAEGE } from "@/lib/sprachParser";
 import { EINHEITEN } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import {
-  aufschlagVon, duplizieren, entfernen, gruppenGroesse, istNachlass, kannVerschieben, mengeVon, mitAufschlag, mitEinkauf, ohneBetrag, positionGesamt,
+  aufschlagVon, duplizieren, entfernen, gruppenGroesse, istNachlass, kannVerschieben, mengeVon, mitAufschlag, mitEinkauf, ohneBetrag, positionBetrag, positionGesamt,
+  VARIANTE_TEXT, varianteMoeglich, type Variante,
   positionsNummern, preisVon, preisText, titelPosition, verschieben, zahlText, ziehen, zwischensummen, type EditorPosition,
 } from "./editor";
 import { ZahlFeld } from "./Eingabezeile";
@@ -64,6 +65,7 @@ function Sortierbar({ id, an, children }: {
  */
 export function PositionenEditor({
   positionen: allePositionen, setPositionen: setAlle, bearbeitbar, pc, aktiverTitel, setAktiverTitel, stundensatz, kalk = true, materialAufschlag = 0, lohnarten = [],
+  varianten = false,
 }: {
   positionen: EditorPosition[];
   setPositionen: Setzen;
@@ -79,6 +81,8 @@ export function PositionenEditor({
   materialAufschlag?: number;
   /** Stundensätze zum Tauschen an einer Arbeitszeit-Position */
   lohnarten?: Lohnart[];
+  /** Angebot: Positionen als optional/alternativ markieren (Preis steht da, zählt nicht) */
+  varianten?: boolean;
 }) {
   // Der Nachlass bleibt unsichtbar am Ende — alles hier arbeitet mit dem Rest
   const positionen = useMemo(() => allePositionen.filter((p) => !istNachlass(p)), [allePositionen]);
@@ -123,6 +127,8 @@ export function PositionenEditor({
   };
   const aktion = (p: EditorPosition, was: Aktion | Lohnart) => {
     if (typeof was === "object") { aendern(p.id, { bezeichnung: arbeitszeitText(was), einzelpreis: preisText(was.satz) }); return; }
+    if (was === "optional" || was === "alternativ") { aendern(p.id, { variante: p.variante === was ? null : was }); return; }
+    if (was === "zaehlt") { aendern(p.id, { variante: null }); return; }
     if (was === "bearbeiten") setBearbeiten(p);
     else if (was === "hoch") setPositionen((alt) => verschieben(alt, p.id, -1));
     else if (was === "runter") setPositionen((alt) => verschieben(alt, p.id, 1));
@@ -284,6 +290,7 @@ export function PositionenEditor({
                           </button>
                         ) : <p className="whitespace-pre-line text-xs text-muted-foreground">{p.langtext}</p>)}
                         {p.quelle && <Herkunft />}
+                        {p.variante && <VarianteHinweis v={p.variante} />}
                       </td>
                       <td className="py-1.5 pr-2">
                         {bearbeitbar
@@ -329,12 +336,12 @@ export function PositionenEditor({
                     </>
                   )}
                   <td className={cn("zahl py-2.5 pr-3 text-right", titel ? "pt-3.5 font-semibold" : "font-medium")}>
-                    {titel ? (titelAnzahl > 1 ? euro(zs[i] ?? 0) : "") : text ? "" : euro(positionGesamt(p))}
+                    {titel ? (titelAnzahl > 1 ? euro(zs[i] ?? 0) : "") : text ? "" : p.variante ? <VarianteBetrag p={p} /> : euro(positionGesamt(p))}
                   </td>
                   {bearbeitbar && (
                     <td className="py-1.5 pr-2" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-0.5">
-                        <ZeilenMenue p={p} positionen={positionen} lohnarten={lohnarten} onAktion={(a) => aktion(p, a)} pc />
+                        <ZeilenMenue p={p} positionen={positionen} lohnarten={lohnarten} varianten={varianten} onAktion={(a) => aktion(p, a)} pc />
                       </div>
                     </td>
                   )}
@@ -386,7 +393,7 @@ export function PositionenEditor({
                   />
                 ) : <span className="min-w-0 flex-1 truncate font-semibold">{p.bezeichnung || "Ohne Namen"}</span>}
                 {titelAnzahl > 1 && <span className="zahl shrink-0 text-sm font-semibold">{euro(zs[i] ?? 0)}</span>}
-                {bearbeitbar && <ZeilenMenue p={p} positionen={positionen} lohnarten={lohnarten} onAktion={(a) => aktion(p, a)} />}
+                {bearbeitbar && <ZeilenMenue p={p} positionen={positionen} lohnarten={lohnarten} varianten={varianten} onAktion={(a) => aktion(p, a)} />}
               </div>
               {vorschlaege.length > 0 && (
                 <div className="mt-1.5 flex flex-wrap gap-1.5 pb-1">
@@ -408,7 +415,7 @@ export function PositionenEditor({
               <button type="button" className="min-w-0 flex-1 text-left text-sm italic text-muted-foreground [overflow-wrap:anywhere]" onClick={() => bearbeitbar && setBearbeiten(p)} disabled={!bearbeitbar}>
                 {p.bezeichnung || "Hinweistext"}
               </button>
-              {bearbeitbar && <ZeilenMenue p={p} positionen={positionen} lohnarten={lohnarten} onAktion={(a) => aktion(p, a)} />}
+              {bearbeitbar && <ZeilenMenue p={p} positionen={positionen} lohnarten={lohnarten} varianten={varianten} onAktion={(a) => aktion(p, a)} />}
             </div>
           );
         }
@@ -421,8 +428,9 @@ export function PositionenEditor({
                 <span className="block text-sm font-medium leading-snug [overflow-wrap:anywhere]">{p.bezeichnung || <span className="text-muted-foreground">Ohne Bezeichnung</span>}</span>
                 {p.langtext && <span className="mt-0.5 line-clamp-2 block text-xs text-muted-foreground [overflow-wrap:anywhere]">{p.langtext}</span>}
                 {p.quelle && <Herkunft />}
+                {p.variante && <VarianteHinweis v={p.variante} />}
               </button>
-              {bearbeitbar && <ZeilenMenue p={p} positionen={positionen} lohnarten={lohnarten} onAktion={(a) => aktion(p, a)} />}
+              {bearbeitbar && <ZeilenMenue p={p} positionen={positionen} lohnarten={lohnarten} varianten={varianten} onAktion={(a) => aktion(p, a)} />}
             </div>
             <div className={cn("mt-2 flex items-center gap-2", griff && "pl-2")}>
               {bearbeitbar ? (
@@ -449,7 +457,7 @@ export function PositionenEditor({
                 disabled={!bearbeitbar}
                 aria-label="Preis bearbeiten"
               >
-                <span className="zahl block font-semibold">{euro(positionGesamt(p))}</span>
+                <span className="zahl block font-semibold">{p.variante ? <VarianteBetrag p={p} /> : euro(positionGesamt(p))}</span>
                 <span className="zahl block text-xs text-muted-foreground">à {euro(preisVon(p))}</span>
                 {kalkText(p)}
               </button>
@@ -473,12 +481,28 @@ function Herkunft() {
   );
 }
 
-type Aktion = "bearbeiten" | "hoch" | "runter" | "kopieren" | "loeschen" | "langtext" | "hier" | "titelDavor";
+/** „Optional · nicht in der Summe“ unter der Bezeichnung */
+function VarianteHinweis({ v }: { v: Variante }) {
+  return (
+    <span className="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground" data-variante={v}>
+      <span className="rounded-full border border-primary/40 bg-primary-soft px-2 py-0.5 font-semibold text-primary">{VARIANTE_TEXT[v]}</span>
+      nicht in der Summe
+    </span>
+  );
+}
 
-function ZeilenMenue({ p, positionen, lohnarten = [], onAktion, pc }: {
+/** Betrag einer optionalen/alternativen Position — in Klammern, zählt nicht */
+function VarianteBetrag({ p }: { p: EditorPosition }) {
+  return <span className="font-normal text-muted-foreground" title="Zählt nicht in die Summe">({euro(positionBetrag(p))})</span>;
+}
+
+type Aktion = "bearbeiten" | "hoch" | "runter" | "kopieren" | "loeschen" | "langtext" | "hier" | "titelDavor" | Variante | "zaehlt";
+
+function ZeilenMenue({ p, positionen, lohnarten = [], varianten = false, onAktion, pc }: {
   p: EditorPosition;
   positionen: EditorPosition[];
   lohnarten?: Lohnart[];
+  varianten?: boolean;
   onAktion: (a: Aktion | Lohnart) => void;
   pc?: boolean;
 }) {
@@ -498,6 +522,24 @@ function ZeilenMenue({ p, positionen, lohnarten = [], onAktion, pc }: {
           <DropdownMenuItem className="h-11 gap-2" onClick={() => onAktion("langtext")}><FileText className="h-4 w-4" /> Langtext hinzufügen</DropdownMenuItem>
         )}
         {!titel && <DropdownMenuItem className="h-11 gap-2" onClick={() => onAktion("titelDavor")}><Rows3 className="h-4 w-4" /> Titel darüber einfügen</DropdownMenuItem>}
+        {varianten && varianteMoeglich(p) && (
+          <>
+            <DropdownMenuSeparator />
+            {p.variante ? (
+              <DropdownMenuItem className="h-11 gap-2" onClick={() => onAktion("zaehlt")}><Sigma className="h-4 w-4" /> Wieder in die Summe</DropdownMenuItem>
+            ) : (
+              <>
+                <DropdownMenuItem className="h-11 gap-2" onClick={() => onAktion("optional")}><CircleDashed className="h-4 w-4" /> Als optional (nicht in Summe)</DropdownMenuItem>
+                <DropdownMenuItem className="h-11 gap-2" onClick={() => onAktion("alternativ")}><Replace className="h-4 w-4" /> Als Alternative (nicht in Summe)</DropdownMenuItem>
+              </>
+            )}
+            {p.variante && (
+              <DropdownMenuItem className="h-11 gap-2" onClick={() => onAktion(p.variante === "optional" ? "alternativ" : "optional")}>
+                {p.variante === "optional" ? <Replace className="h-4 w-4" /> : <CircleDashed className="h-4 w-4" />} Stattdessen {p.variante === "optional" ? "Alternative" : "optional"}
+              </DropdownMenuItem>
+            )}
+          </>
+        )}
         {andereSaetze.length > 0 && (
           <>
             <DropdownMenuSeparator />

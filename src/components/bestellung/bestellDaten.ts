@@ -212,7 +212,7 @@ export async function projektBedarfLaden(projektId: string): Promise<{ angebot: 
   if (!angebot) return { angebot: null, vorschlaege: [] };
 
   const { data: pos, error: e1 } = await supabase.from("beleg_positionen")
-    .select("art, menge, artikel_id, leistung_id").eq("beleg_id", angebot.id);
+    .select("art, menge, artikel_id, leistung_id, variante").eq("beleg_id", angebot.id);
   if (e1) throw e1;
   const leistungIds = [...new Set((pos ?? []).map((p) => p.leistung_id).filter((x): x is string => !!x))];
   const lm = new Map<string, { artikel_id: string; menge: number }[]>();

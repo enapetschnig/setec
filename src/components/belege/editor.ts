@@ -47,12 +47,22 @@ export type EditorPosition = {
   quelle: Quelle | null;
   /** nur Nachlass: Prozent der Summe davor (null = fester Betrag) */
   prozent: number | null;
+  /** nur Angebot: optional/alternativ — Preis steht da, zählt aber nicht in Summe und Kalkulation */
+  variante?: Variante | null;
 };
+
+export type Variante = "optional" | "alternativ";
+export const VARIANTE_TEXT: Record<Variante, string> = { optional: "Optional", alternativ: "Alternativ" };
+export const varianteLesen = (v: unknown): Variante | null => (v === "optional" || v === "alternativ" ? v : null);
+/** Darf diese Position optional/alternativ sein? (nie Titel, Text, Abzug, Nachlass) */
+export const varianteMoeglich = (p: { art: string }) => !["titel", "text", "abzug", "nachlass"].includes(p.art);
 
 /** Leistung aus dem Katalog samt Material — für Preis und Einsatz-EK */
 export type KatalogLeistung = Leistung & { leistung_material: LeistungsMaterial[] };
 
 export const ohneBetrag = (p: { art: string }) => p.art === "titel" || p.art === "text";
+/** Zählt die Position in Summe, Zwischensumme, Nachlass und Kalkulation? Nicht: Titel, Text, optional/alternativ. */
+export const zaehlt = (p: { art: string; variante?: string | null }) => !ohneBetrag(p) && !p.variante;
 
 export function neueId(): string {
   const c = globalThis.crypto as Crypto | undefined;
@@ -81,13 +91,19 @@ export function preisText(n: number | null | undefined): string {
 export const mengeVon = (p: Pick<EditorPosition, "menge">) => zahlLesen(p.menge);
 export const preisVon = (p: Pick<EditorPosition, "einzelpreis">) => zahlLesen(p.einzelpreis);
 
+/** Was in die Summe eingeht — optional/alternativ: 0 (wie `gesamt` in der Datenbank) */
 export function positionGesamt(p: EditorPosition): number {
+  return zaehlt(p) ? runden2(mengeVon(p) * preisVon(p)) : 0;
+}
+
+/** Was in der Gesamt-Spalte steht — auch bei optional/alternativ der Betrag (in Klammern angezeigt) */
+export function positionBetrag(p: EditorPosition): number {
   return ohneBetrag(p) ? 0 : runden2(mengeVon(p) * preisVon(p));
 }
 
 export function summen(positionen: EditorPosition[], ustSatz: number, ohneUst: boolean) {
   return belegSummen(
-    positionen.map((p) => ({ art: p.art, menge: mengeVon(p), einzelpreis: preisVon(p) })),
+    positionen.map((p) => ({ art: p.art, menge: mengeVon(p), einzelpreis: preisVon(p), variante: p.variante ?? null })),
     ustSatz,
     ohneUst,
   );
@@ -161,6 +177,7 @@ export function positionAusDb(p: Position): EditorPosition {
     leistung_id: p.leistung_id,
     quelle: quelleLesen(p.quelle),
     prozent: p.prozent == null ? null : Number(p.prozent),
+    variante: varianteLesen((p as { variante?: unknown }).variante),
   };
 }
 
@@ -183,6 +200,7 @@ export function positionZuDb(p: EditorPosition, belegId: string, pos: number) {
     leistung_id: p.leistung_id,
     quelle: quelleJson(p.quelle),
     prozent: p.art === "nachlass" ? p.prozent ?? null : null,
+    variante: varianteMoeglich(p) ? p.variante ?? null : null,
   };
 }
 
@@ -225,6 +243,7 @@ export function leerePosition(art: PositionsArt, werte: Partial<EditorPosition> 
     leistung_id: null,
     quelle: null,
     prozent: null,
+    variante: null,
     ...werte,
   };
 }

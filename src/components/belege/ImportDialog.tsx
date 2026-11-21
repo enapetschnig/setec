@@ -165,7 +165,7 @@ export function ImportDialog({
               </div>
               <p className="text-sm text-muted-foreground">
                 {a.betreff ? `${a.betreff} · ` : ""}
-                {((n) => `${n} ${n === 1 ? "Position" : "Positionen"}`)(a.positionen.filter((p) => p.art !== "titel" && p.art !== "text").length)} ·{" "}
+                {((n) => `${n} ${n === 1 ? "Position" : "Positionen"}`)(a.positionen.filter((p) => p.art !== "titel" && p.art !== "text" && !p.variante).length)} ·{" "}
                 <span className="zahl">{euro(a.netto)}</span> netto
               </p>
             </Zeile>

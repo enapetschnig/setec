@@ -95,6 +95,8 @@ export async function belegSpeichern({
   // Seit 17.11.2026 legt ein Angebot kein Projekt mehr an — das entsteht bei
   // der Annahme (projekt_aus_angebot). Alte Angebote mit Projekt bleiben so.
 
+  // optional/alternativ gibt es nur im Angebot (z. B. aus einer Vorlage in eine Rechnung): dort zählt alles
+  if (k.typ !== "angebot" && positionen.some((p) => p.variante)) positionen = positionen.map((p) => ({ ...p, variante: null }));
   const s = summen(positionen, k.ust_satz, ohneUstFuer(k, firma));
   const zeile = { ...kopfZuDb(k), netto: s.netto, ust: s.ust, brutto: s.brutto };
   // Neu: Upsert statt Insert — scheitert ein erster Versuch nach dem Kopf,
@@ -285,6 +287,8 @@ export async function belegKopieren({
   heute: string;
   mitHerkunft?: boolean;
 }): Promise<{ id: string; konflikte: number; schonDa?: boolean }> {
+  // optional/alternativ gibt es nur im Angebot — in eine Rechnung kommt nur, was zählt
+  if (typ === "rechnung") positionen = positionen.filter((p) => !p.variante);
   const korrektur = mitHerkunft && quelle.typ === "rechnung";
   const vorhandeneKorrektur = async () => {
     const { data } = await supabase.from("belege").select("id").eq("korrektur_von", quelle.id).maybeSingle();
@@ -297,7 +301,7 @@ export async function belegKopieren({
   const id = neueId();
   const gleicherTyp = quelle.typ === typ;
   const ohneUst = !!quelle.reverse_charge || !!firma?.kleinunternehmer;
-  const s = belegSummen(positionen.map((p) => ({ art: p.art, menge: Number(p.menge), einzelpreis: Number(p.einzelpreis) })), Number(quelle.ust_satz), ohneUst);
+  const s = belegSummen(positionen.map((p) => ({ art: p.art, menge: Number(p.menge), einzelpreis: Number(p.einzelpreis), variante: p.variante })), Number(quelle.ust_satz), ohneUst);
   const { error } = await supabase.from("belege").insert({
     id,
     typ,
@@ -354,6 +358,7 @@ export async function belegKopieren({
       leistung_id: p.leistung_id,
       quelle: mitHerkunft ? p.quelle : null,
       prozent: p.prozent,
+      variante: typ === "angebot" ? p.variante ?? null : null,
     }));
     // gelöschter Artikel/Leistung in der Quelle: Verweis weg statt Abbruch (vor dem Aufräumen unten)
     const { error: e2 } = await mitGueltigenVerweisen(zeilen, (liste) => supabase.from("beleg_positionen").insert(liste));
@@ -363,12 +368,27 @@ export async function belegKopieren({
     }
   }
 
+  // Angebot kopiert (neue Fassung): eigene Anhänge wie die PV-Planung gehen mit — Datei wird kopiert
+  if (typ === "angebot" && quelle.typ === "angebot") await anhaengeKopieren(quelle.id, id);
+
   let konflikte = 0;
   if (mitHerkunft && typ === "rechnung") {
     const q = quellenIds(positionen.map((p) => ({ quelle: quelleAusJson(p.quelle) })));
     konflikte = await quellenBinden(id, q);
   }
   return { id, konflikte };
+}
+
+/** Eigene Anhänge (beleg_anhaenge) von einem Angebot aufs andere — fehlt eine Datei, bleibt sie eben weg */
+async function anhaengeKopieren(vonId: string, zuId: string): Promise<void> {
+  const { data } = await supabase.from("beleg_anhaenge").select("name, pfad, groesse").eq("beleg_id", vonId).order("created_at");
+  for (const a of data ?? []) {
+    const pfad = `angebot/${zuId}/${a.pfad.split("/").pop()}`;
+    const { error } = await supabase.storage.from("projekt-dateien").copy(a.pfad, pfad);
+    if (error) continue;
+    const { error: e2 } = await supabase.from("beleg_anhaenge").insert({ beleg_id: zuId, name: a.name, pfad, groesse: a.groesse });
+    if (e2) await supabase.storage.from("projekt-dateien").remove([pfad]).catch(() => undefined);
+  }
 }
 
 function quelleAusJson(j: Position["quelle"]): Quelle | null {
@@ -385,6 +405,7 @@ function quelleAusJson(j: Position["quelle"]): Quelle | null {
  * Abzugsposition am Ende.
  */
 export async function inRechnungUmwandeln(angebot: Beleg, positionen: Position[], firma: Firma | null, heute: string): Promise<string> {
+  positionen = positionen.filter((p) => !p.variante); // optional/alternativ nicht bestellt
   // Zuerst annehmen — so hat die Rechnung schon das (ggf. neue) Projekt
   if (angebot.status !== "abgelehnt") angebot = { ...angebot, projekt_id: (await angebotAnnehmen(angebot)).projektId };
   const { id } = await belegKopieren({ quelle: angebot, positionen, typ: "rechnung", firma, heute });

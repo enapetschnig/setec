@@ -224,7 +224,7 @@ describe("Rechnung aus dem Projekt", () => {
     const angebot = {
       id: "an1", nummer: "AN-2026-001", betreff: "Bad", status: "angenommen", netto: 100,
       positionen: [
-        { id: "p1", beleg_id: "an1", pos: 1, art: "leistung", bezeichnung: "Steckdose UP komplett", langtext: null, menge: 2, einheit: "Stk", einzelpreis: 39.07, gesamt: 78.14, ek_preis: 4.59, minuten: 25, artikel_id: null, leistung_id: "l1", quelle: null, prozent: null },
+        { id: "p1", beleg_id: "an1", pos: 1, art: "leistung", bezeichnung: "Steckdose UP komplett", langtext: null, menge: 2, einheit: "Stk", einzelpreis: 39.07, gesamt: 78.14, ek_preis: 4.59, minuten: 25, artikel_id: null, leistung_id: "l1", quelle: null, prozent: null, variante: null },
       ],
     };
     const r = importPositionen({ ...daten, angebote: [angebot] }, { ...alles, angebote: ["an1"], regie: [] },
@@ -244,7 +244,7 @@ describe("Rechnung aus dem Projekt", () => {
   const angebot = {
     id: "an1", nummer: "AN-2026-001", betreff: "Bad", status: "angenommen", netto: 100,
     positionen: [
-      { id: "p1", beleg_id: "an1", pos: 1, art: "leistung", bezeichnung: "Steckdose UP komplett", langtext: null, menge: 2, einheit: "Stk", einzelpreis: 39.07, gesamt: 78.14, ek_preis: 4.59, minuten: 25, artikel_id: null, leistung_id: "l1", quelle: null, prozent: null },
+      { id: "p1", beleg_id: "an1", pos: 1, art: "leistung", bezeichnung: "Steckdose UP komplett", langtext: null, menge: 2, einheit: "Stk", einzelpreis: 39.07, gesamt: 78.14, ek_preis: 4.59, minuten: 25, artikel_id: null, leistung_id: "l1", quelle: null, prozent: null, variante: null },
     ],
   };
   const nurAngebot = { angebote: ["an1"], regie: [], zeiten: [], material: [] };

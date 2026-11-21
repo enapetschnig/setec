@@ -480,7 +480,7 @@ function Nachkalkulation() {
     enabled: angebotIds.length > 0,
     // viele Angebote → IDs in Häppchen (URL-Länge), je Häppchen alle Seiten
     queryFn: () => inHaeppchen(angebotIds, (teil) => alleZeilen((a, b) => supabase.from("beleg_positionen")
-      .select("id, beleg_id, art, menge, einheit, minuten").in("beleg_id", teil).order("id").range(a, b))
+      .select("id, beleg_id, art, menge, einheit, minuten, variante").in("beleg_id", teil).order("id").range(a, b))
       .then((data) => ({ data, error: null }))),
   });
   const saetze = saetzeFuer(0);

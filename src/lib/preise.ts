@@ -129,13 +129,14 @@ export function leistungMaterialEk(material: LeistungsMaterial[]): number {
 
 /** Netto, USt und Brutto eines Belegs (Titel- und Textzeilen zählen nicht). */
 export function belegSummen(
-  positionen: { art: string; menge: number; einzelpreis: number }[],
+  positionen: { art: string; menge: number; einzelpreis: number; variante?: string | null }[],
   ustSatz: number,
   ohneUst: boolean,
 ) {
+  // optional/alternativ (nur Angebot): Preis steht da, zählt nicht
   const netto = runden2(
     positionen
-      .filter((p) => p.art !== "titel" && p.art !== "text")
+      .filter((p) => p.art !== "titel" && p.art !== "text" && !p.variante)
       .reduce((s, p) => s + runden2(Number(p.menge) * Number(p.einzelpreis)), 0),
   );
   const ust = ohneUst ? 0 : runden2((netto * Number(ustSatz)) / 100);

@@ -500,7 +500,8 @@ export function importPositionen(
   let titelDavor = vorhandeneTitel;
 
   angebote.forEach((a) => {
-    const kopien = a.positionen.map((p) => kopieVon(positionAusDb(p)));
+    // optional/alternativ hat der Kunde nicht bestellt — kommt nicht in die Rechnung
+    const kopien = a.positionen.filter((p) => !p.variante).map((p) => kopieVon(positionAusDb(p)));
     const brauchtTitel = kopien[0]?.art !== "titel" && (titelDavor || bloeckeGesamt > 1);
     if (brauchtTitel) aus.push(titelPosition(`Laut Angebot ${a.nummer ?? ""}`.trim()));
     aus.push(...kopien);

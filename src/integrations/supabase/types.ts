@@ -840,6 +840,7 @@ export type Database = {
           pos: number
           prozent: number | null
           quelle: Json | null
+          variante: string | null
         }
         Insert: {
           art?: string
@@ -858,6 +859,7 @@ export type Database = {
           pos?: number
           prozent?: number | null
           quelle?: Json | null
+          variante?: string | null
         }
         Update: {
           art?: string
@@ -876,6 +878,7 @@ export type Database = {
           pos?: number
           prozent?: number | null
           quelle?: Json | null
+          variante?: string | null
         }
         Relationships: [
           {

@@ -25,9 +25,9 @@ export function useProjektAngebot(projektId: string, aktiv: boolean) {
       const { data: belege, error } = await supabase.from("belege").select("id, typ, status, netto").eq("projekt_id", projektId);
       if (error) throw error;
       const { angebote, angenommen } = kalkulationsAngebote(belege ?? []);
-      let positionen: { art: string; menge: number; einheit: string | null; minuten: number | null }[] = [];
+      let positionen: { art: string; menge: number; einheit: string | null; minuten: number | null; variante: string | null }[] = [];
       if (angebote.length) {
-        const { data, error: e2 } = await supabase.from("beleg_positionen").select("art, menge, einheit, minuten").in("beleg_id", angebote.map((a) => a.id));
+        const { data, error: e2 } = await supabase.from("beleg_positionen").select("art, menge, einheit, minuten, variante").in("beleg_id", angebote.map((a) => a.id));
         if (e2) throw e2;
         positionen = data ?? [];
       }

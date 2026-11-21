@@ -11,7 +11,7 @@ import { useSitzung } from "@/hooks/useSitzung";
 import { aufschlagAus, kalkPreis, lohnarten } from "@/lib/kalkulation";
 import { EINHEITEN } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { ART_NAME, positionGesamt, preisText, type EditorPosition, type PositionsArt } from "./editor";
+import { ART_NAME, positionBetrag, preisText, type EditorPosition, type PositionsArt } from "./editor";
 
 const ARTEN_WAEHLBAR: PositionsArt[] = ["leistung", "artikel", "arbeit", "material", "pauschale", "text"];
 
@@ -132,7 +132,7 @@ export function PositionDialog({
             </div>
             <div className="space-y-1.5">
               <Label>Gesamt</Label>
-              <div className="feld-berechnet flex h-12 items-center justify-end rounded-md border px-3 font-semibold zahl">{euro(positionGesamt(p))}</div>
+              <div className="feld-berechnet flex h-12 items-center justify-end rounded-md border px-3 font-semibold zahl">{euro(positionBetrag(p))}</div>
             </div>
           </div>
           <div className="space-y-1.5">

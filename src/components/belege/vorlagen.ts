@@ -2,8 +2,8 @@ import type { Json } from "@/integrations/supabase/types";
 import { artikelVk, hatStaffel, leistungMaterialEk, leistungPreis, runden2, staffelMinuten } from "@/lib/preise";
 import type { Artikel, Firma } from "@/lib/types";
 import {
-  gruppenEnde, leerePosition, mengeVon, ohneBetrag, preisText, preisVon, summen, zahlText,
-  type EditorPosition, type KatalogLeistung, type PositionsArt,
+  gruppenEnde, leerePosition, mengeVon, ohneBetrag, preisText, preisVon, summen, varianteLesen, zahlText,
+  type EditorPosition, type KatalogLeistung, type PositionsArt, type Variante,
 } from "./editor";
 
 /**
@@ -25,6 +25,8 @@ export type VorlagePosition = {
   minuten: number | null;
   artikel_id: string | null;
   leistung_id: string | null;
+  /** optional/alternativ (zählt nicht) — fehlt bei älteren Vorlagen */
+  variante?: Variante | null;
 };
 
 export type Vorlage = {
@@ -64,13 +66,14 @@ export function vorlageAusEditor(positionen: EditorPosition[]): VorlagePosition[
         minuten: p.minuten,
         artikel_id: p.artikel_id,
         leistung_id: p.leistung_id,
+        ...(p.variante ? { variante: p.variante } : {}),
       };
     });
 }
 
 /** Netto der Vorlage (zur Anzeige in der Auswahl) */
 export function vorlageNetto(positionen: VorlagePosition[]): number {
-  return positionen.reduce((s, p) => (ohneBetrag(p) ? s : runden2(s + runden2(p.menge * p.einzelpreis))), 0);
+  return positionen.reduce((s, p) => (ohneBetrag(p) || p.variante ? s : runden2(s + runden2(p.menge * p.einzelpreis))), 0);
 }
 
 /** jsonb aus der Datenbank lesen — Kaputtes fällt weg statt abzustürzen */
@@ -94,6 +97,7 @@ export function vorlagePositionenLesen(j: Json | null | undefined): VorlagePosit
       minuten: zahlOder(o.minuten, null),
       artikel_id: text(o.artikel_id) || null,
       leistung_id: text(o.leistung_id) || null,
+      ...(varianteLesen(o.variante) ? { variante: varianteLesen(o.variante) } : {}),
     }];
   });
 }
@@ -166,6 +170,7 @@ export function ausVorlage(
       minuten,
       artikel_id: artikelGibtEs ? v.artikel_id : null,
       leistung_id: leistungGibtEs ? v.leistung_id : null,
+      variante: varianteLesen(v.variante),
     });
   });
   return { positionen, abweichungen, fehlt };

@@ -31,7 +31,12 @@ export type PdfPosition = {
   einzelpreis: number;
   /** nur Nachlass: Prozent der Summe davor */
   prozent?: number | null;
+  /** nur Angebot: optional/alternativ — Betrag in Klammern, zählt nicht */
+  variante?: string | null;
 };
+
+/** „Optional: Speicher …“ — Kennzeichnung im Dokument */
+const varianteVor = (p: PdfPosition) => (p.variante === "optional" ? "Optional: " : p.variante === "alternativ" ? "Alternativ: " : "");
 
 export type BelegPdfDaten = {
   beleg: Pick<
@@ -136,7 +141,8 @@ export async function belegPdfErstellen({ beleg, positionen: allePositionen, fir
 
   // ── Positionen ──
   const nummern = positionsNummern(positionen.map((p) => p.art));
-  const gesamt = positionen.map((p) => (ohneBetrag(p) ? 0 : runden2(Number(p.menge) * Number(p.einzelpreis))));
+  // optional/alternativ: zählt nicht (0 in Zwischensumme und Zusammenstellung), Betrag steht in Klammern
+  const gesamt = positionen.map((p) => (ohneBetrag(p) || p.variante ? 0 : runden2(Number(p.menge) * Number(p.einzelpreis))));
   const zs = zwischensummen(positionen.map((p, i) => ({ art: p.art, gesamt: gesamt[i] })));
   const titelAnzahl = positionen.filter((p) => p.art === "titel").length;
   const zeilen: Zeile[] = [];
@@ -152,13 +158,15 @@ export async function belegPdfErstellen({ beleg, positionen: allePositionen, fir
       ],
     });
   };
+  const zusatz = (p: PdfPosition) => (p.variante ? "Nicht in der Gesamtsumme enthalten." : "");
   const langtextVon = (p: PdfPosition) => {
-    const lang = p.langtext?.trim();
-    return lang ? { kurz: p.bezeichnung, lang } : undefined;
+    const lang = [p.langtext?.trim(), zusatz(p)].filter(Boolean).join("\n");
+    return lang ? { kurz: varianteVor(p) + p.bezeichnung, lang } : undefined;
   };
   const mitLangtext = (p: PdfPosition) => {
-    const lang = p.langtext?.trim();
-    return pdfText(lang ? `${p.bezeichnung}\n${lang}` : p.bezeichnung);
+    const lang = [p.langtext?.trim(), zusatz(p)].filter(Boolean).join("\n");
+    const kurz = varianteVor(p) + p.bezeichnung;
+    return pdfText(lang ? `${kurz}\n${lang}` : kurz);
   };
 
   positionen.forEach((p, i) => {
@@ -187,7 +195,8 @@ export async function belegPdfErstellen({ beleg, positionen: allePositionen, fir
     if (offen) offen.anzahl += 1;
     zeilen.push({
       lang: langtextVon(p),
-      zeile: [nummern[i], mitLangtext(p), fmtMenge(Number(p.menge)), p.einheit, fmt(Number(p.einzelpreis)), fmt(gesamt[i])],
+      zeile: [nummern[i], mitLangtext(p), fmtMenge(Number(p.menge)), p.einheit, fmt(Number(p.einzelpreis)),
+        p.variante ? `(${fmt(runden2(Number(p.menge) * Number(p.einzelpreis)))})` : fmt(gesamt[i])],
     });
   });
   zwischensumme();

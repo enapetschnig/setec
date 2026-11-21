@@ -55,7 +55,7 @@ export function stundenSaetze(s: Saetze, userId: string, datum: string): { verre
 }
 
 /** Angebotsposition, soweit sie für die Stunden zählt */
-export type AngebotsPosition = { art: string; menge: number; einheit: string | null; minuten: number | null };
+export type AngebotsPosition = { art: string; menge: number; einheit: string | null; minuten: number | null; variante?: string | null };
 
 const STUNDEN_EINHEIT = /^(h|std\.?|stunden?)$/i;
 
@@ -65,7 +65,7 @@ const STUNDEN_EINHEIT = /^(h|std\.?|stunden?)$/i;
  */
 export function angeboteneStunden(positionen: AngebotsPosition[]): number {
   return runden2(positionen.reduce((s, p) => {
-    if (p.art === "titel" || p.art === "text" || p.art === "abzug") return s;
+    if (p.art === "titel" || p.art === "text" || p.art === "abzug" || p.variante) return s; // optional/alternativ nicht angeboten
     const menge = Number(p.menge) || 0;
     if (p.art === "arbeit" && STUNDEN_EINHEIT.test((p.einheit ?? "").trim())) return s + menge;
     const min = Number(p.minuten) || 0;

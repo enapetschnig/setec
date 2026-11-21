@@ -41,7 +41,7 @@ import { belegLaden, useBelegKurz, useFolgeRechnungen, useLeistungsKatalog, useN
 import {
   artikelPosition, fertigHinweise, freierTitelName, hinzufuegen, istNachlass, kopfAusBeleg, leerePosition, leistungPosition, leistungWeniger, mengeVon,
   nachlassRechnen, nachlassSetzen, nachlassText, ohneBetrag, ohneUstFuer, positionAusDb, positionGesamt, preisVon, quelleLesen, quellenIds, summen,
-  staffelNachziehen, summeVorNachlass, titelMitNamen, titelPosition, titelUebersicht, zahlText,
+  staffelNachziehen, summeVorNachlass, titelMitNamen, titelPosition, titelUebersicht, zahlText, zaehlt,
   type EditorPosition, type KatalogLeistung, type Kopf,
 } from "./editor";
 import { ImportDialog, type ImportErgebnis } from "./ImportDialog";
@@ -541,6 +541,8 @@ export function BelegEditor({
     if (teilFolge.some((f) => f.status === "entwurf")) {
       toast.warning("Eine Teilrechnung ist noch Entwurf und deshalb nicht abgezogen — erst fertigstellen, dann hier „Aus dem Projekt übernehmen“.", { duration: 10_000 });
     } else toast.success(`${teilFolge.length ? "Schlussrechnung" : "Rechnung"} aus dem Angebot angelegt — prüfen, Leistungszeitraum eintragen, fertigstellen.`);
+    const ohne = d.positionen.filter((p) => p.variante).length;
+    if (ohne) toast.info(`${ohne} ${ohne === 1 ? "optionale/alternative Position ist" : "optionale/alternative Positionen sind"} nicht übernommen — hat der Kunde sie bestellt, in der Rechnung ergänzen.`, { duration: 10_000 });
     navigate(`/belege/${neueId}`);
   });
   const teilAnlegen = (betrag: number, prozent: number | null) => ausfuehren("kopieren", async () => {
@@ -625,7 +627,7 @@ export function BelegEditor({
     const { blob } = await belegPdfErstellen({
       beleg: d.beleg,
       positionen: d.positionen.map((p) => ({
-        art: p.art, bezeichnung: p.bezeichnung, langtext: p.langtext, menge: Number(p.menge), einheit: p.einheit, einzelpreis: Number(p.einzelpreis), prozent: p.prozent,
+        art: p.art, bezeichnung: p.bezeichnung, langtext: p.langtext, menge: Number(p.menge), einheit: p.einheit, einzelpreis: Number(p.einzelpreis), prozent: p.prozent, variante: p.variante,
       })),
       firma,
       projekt: await projektFuerPdf(),
@@ -664,7 +666,7 @@ export function BelegEditor({
       foerderung_betrag: kopf.foerderung_betrag ?? null,
     },
     positionen: positionen.map((p) => ({
-      art: p.art, bezeichnung: p.bezeichnung, langtext: p.langtext, menge: mengeVon(p), einheit: p.einheit, einzelpreis: preisVon(p), prozent: p.prozent,
+      art: p.art, bezeichnung: p.bezeichnung, langtext: p.langtext, menge: mengeVon(p), einheit: p.einheit, einzelpreis: preisVon(p), prozent: p.prozent, variante: p.variante ?? null,
     })),
     firma: f,
     projekt: await projektFuerPdf(),
@@ -1156,7 +1158,7 @@ export function BelegEditor({
     let minuten = 0;
     let ek = 0;
     positionen.forEach((p) => {
-      if (ohneBetrag(p)) return;
+      if (!zaehlt(p)) return; // optional/alternativ zählt nicht in die Kalkulation
       const m = mengeVon(p);
       if (p.minuten != null) minuten += Number(p.minuten) * m;
       else if (p.art === "arbeit" && p.einheit === "h") minuten += m * 60;
@@ -1298,6 +1300,7 @@ export function BelegEditor({
           pc={pc}
           aktiverTitel={aktiverTitel}
           setAktiverTitel={setAktiverTitel}
+          varianten={kopf.typ === "angebot"}
           stundensatz={stundensatz}
           kalk={kalkSpalten}
           materialAufschlag={Number(firma?.material_aufschlag ?? 0)}

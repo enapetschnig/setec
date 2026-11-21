@@ -23,7 +23,7 @@ import { logoAdresse } from "@/lib/upload";
 import type { Beleg, Firma } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-type Pos = { art: string; bezeichnung: string; langtext: string | null; menge: number; einheit: string; einzelpreis: number; prozent?: number | null };
+type Pos = { art: string; bezeichnung: string; langtext: string | null; menge: number; einheit: string; einzelpreis: number; prozent?: number | null; variante?: string | null };
 type Daten = {
   zustand: OeffentlichZustand;
   stand?: string;
@@ -107,7 +107,8 @@ function Angebot({ daten, token, neuLaden }: { daten: Daten; token: string; neuL
     await pdfTeilenOderLaden(data, name);
   };
 
-  const gesamt = positionen.map((p) => (ohneBetrag(p) ? 0 : runden2(Number(p.menge) * Number(p.einzelpreis))));
+  // optional/alternativ: Betrag in Klammern, zählt nicht in Zwischensumme und Gesamt
+  const gesamt = positionen.map((p) => (ohneBetrag(p) || p.variante ? 0 : runden2(Number(p.menge) * Number(p.einzelpreis))));
   const nummern = positionsNummern(positionen.map((p) => p.art));
   const zs = zwischensummen(positionen.map((p, i) => ({ art: p.art, gesamt: gesamt[i] })));
   const uebersicht = titelUebersicht(positionen.map((p, i) => ({ art: p.art, bezeichnung: p.bezeichnung, gesamt: gesamt[i] })));
@@ -166,8 +167,16 @@ function Angebot({ daten, token, neuLaden }: { daten: Daten; token: string; neuL
                   <div className="flex items-baseline gap-3">
                     <span className="zahl w-9 shrink-0 text-xs text-muted-foreground">{nummern[i]}</span>
                     <span className="min-w-0 flex-1 text-[15px] leading-snug">{p.bezeichnung}</span>
-                    <span className="zahl shrink-0 font-medium">{euro(gesamt[i])}</span>
+                    <span className={cn("zahl shrink-0 font-medium", p.variante && "font-normal text-muted-foreground")}>
+                      {p.variante ? `(${euro(runden2(Number(p.menge) * Number(p.einzelpreis)))})` : euro(gesamt[i])}
+                    </span>
                   </div>
+                  {p.variante && (
+                    <p className="ml-12 mt-0.5 text-xs" data-variante={p.variante}>
+                      <span className="rounded-full border border-primary/40 bg-primary-soft px-2 py-0.5 font-semibold text-primary">{p.variante === "optional" ? "Optional" : "Alternativ"}</span>
+                      <span className="text-muted-foreground"> nicht im Gesamtbetrag enthalten</span>
+                    </p>
+                  )}
                   <p className="zahl ml-12 text-xs text-muted-foreground">{zahl(Number(p.menge))} {p.einheit} × {euro(Number(p.einzelpreis))}</p>
                   {p.langtext && <p className="ml-12 mt-0.5 line-clamp-3 whitespace-pre-wrap text-xs text-muted-foreground">{p.langtext}</p>}
                 </li>
