@@ -289,7 +289,10 @@ Migration `20261103110000_teilrechnungen.sql`:
   Position `art = 'abzug'` (negativ, `quelle.teil`). Verrechnet an der Quelle:
   `belege.abgezogen_in` an der Teilrechnung; Trigger `teil_abzug_pruefen`
   (nur fertige, nur einmal), Position gelöscht oder Schlussrechnung storniert
-  → wieder frei. Entwürfe von Teilrechnungen werden nicht abgezogen.
+  → wieder frei. Entwürfe von Teilrechnungen werden nicht abgezogen. Eine
+  abgezogene Teilrechnung (auch im Entwurf der Schlussrechnung) lässt sich nicht
+  stornieren — sonst doppelte Gutschrift; `beleg_stornieren` sperrt, die App führt
+  zur Schlussrechnung (seit 23.11.).
 - **PDF**: Abzüge nicht in der Tabelle, sondern im Summenblock —
   Gesamtleistung netto/USt/brutto, je Teilrechnung brutto mit netto + USt
   darunter, Restbetrag netto, USt, „Zu zahlen“ (§ 11 Abs. 1 Z 4 UStG).
@@ -748,7 +751,9 @@ Bewusst einfach, kein eigenes Kalkulationsblatt:
   Stand (`updated_at`) unverändert, Haken, Unterschrift-PNG liegt unter
   `angebot-bestaetigung/<token>/` (Upload nur mit gültigem Link, PNG ≤ 512 KB, ≤ 5 je
   Link). Dann wie von Hand: Angebot `angenommen`, Projekt per `projekt_aus_angebot_intern`
-  (angelegt, falls das Angebot noch keines hat; sonst `angebot` → `aktiv`). Gespeichert
+  (angelegt, falls das Angebot noch keines hat; sonst `angebot` → `aktiv`). Die Annahme
+  läuft immer als anonym — `angebot_annehmen` leert die Anmeldung der Anfrage, denn der
+  Kunde unterschreibt oft am Handy des angemeldeten Monteurs (seit 23.11.). Gespeichert
   werden Name, Zeit, Betrag, Unterschrift — keine IP. Alles landet in `angebot_verlauf`;
   Annahmen und Rückfragen sind ungelesen → Startseite „Zu erledigen“, bis der Chef das
   Angebot öffnet.
@@ -807,7 +812,10 @@ Seiten `/erstaufnahmen`, `/erstaufnahmen/neu`, `/erstaufnahmen/:id`, Bausteine
   `auftrag`), Termin und alle Fotos (als `dateien`, Feld `erstaufnahme_foto_id`) dran.
   Aufgerufen vom Chef („Angenommen“, auch vor Rechnung/Teilrechnung) und online von
   `angebot_annehmen` über die interne `projekt_aus_angebot_intern` (anon hat keinen
-  direkten Zugriff). „Gleich Projekt“ (`projekt_aus_erstaufnahme`) überspringt das
+  direkten Zugriff). Wird die Erstaufnahme dabei **zum ersten Mal** Auftrag, gehen die
+  anderen offenen Angebote derselben Erstaufnahme auf „abgelehnt“ (Varianten); spätere
+  Aufrufe (Teilrechnung, „In Rechnung umwandeln“, erneut „Angenommen“) lassen einen
+  verschickten Nachtrag offen (seit 23.11.). „Gleich Projekt“ (`projekt_aus_erstaufnahme`) überspringt das
   Angebot; „Kein Auftrag“ schließt ab. Das Projekt zeigt seine Erstaufnahmen.
 
 ### Kalender, Teams und Fuhrpark (Seiten `/kalender`, `/fuhrpark`)
@@ -1253,7 +1261,9 @@ Projekt-, Regie- und Erstaufnahmenummer vergibt ein Trigger beim Anlegen, Belegn
 Material an Kunden ohne Projekt (Theke, Sonderbestellung) samt Retour:
 `/kunden-lieferscheine`, aus dem Kontakt „Lieferschein“. Entwurf → Abschließen
 (RPC `kunden_lieferschein_abschliessen`: Nummer LS-, Lagerbuchung) → Kunde
-unterschreibt → PDF/Druck/Mail (`beleg-mail`) → „Rechnung schreiben“. Details
+unterschreibt → PDF/Druck/Mail (`beleg-mail`) → „Rechnung schreiben“. Speichern in
+einem Schritt (RPC `kunden_lieferschein_speichern`, sperrt den Lieferschein), Zeilen
+je Lieferschein eindeutig nummeriert (seit 23.11.). Details
 `.claude/rules/kunden-lieferscheine.md`.
 
 ## E-Mail-Postfach (Google Workspace) (17.11.2026)

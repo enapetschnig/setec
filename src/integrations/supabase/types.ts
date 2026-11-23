@@ -4250,6 +4250,10 @@ export type Database = {
         Args: { p_id: string }
         Returns: string
       }
+      kunden_lieferschein_speichern: {
+        Args: { p_id: string; p_neu: boolean; p_kopf: Json; p_zeilen: Json }
+        Returns: undefined
+      }
       kontakt_belege: {
         Args: { p_kontakt: string }
         Returns: {

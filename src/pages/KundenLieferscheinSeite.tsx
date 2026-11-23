@@ -1,5 +1,5 @@
 import { AdresseFeld } from "@/components/AdresseFeld";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import {
@@ -143,6 +143,8 @@ function Editor({ start, kunden, vorlageKunde, retourVon, lager }: {
       if (!z.bezeichnung.trim()) { toast.error("Jede Zeile braucht eine Bezeichnung — oder die Zeile entfernen."); return null; }
       const m = dezimalLesen(z.menge);
       if (m == null || m <= 0) { toast.error(`„${z.bezeichnung}“: Menge größer als 0 eintragen.`); return null; }
+      // gespeichert wird auf 3 Nachkommastellen — 0,0004 würde 0
+      if (m < 0.001) { toast.error(`„${z.bezeichnung}“: Menge zu klein — mindestens 0,001.`); return null; }
       liste.push({ artikel_id: z.artikel_id, artikelnummer: z.artikelnummer, bezeichnung: z.bezeichnung, menge: m, einheit: z.einheit, retour: z.retour });
     }
     return {
@@ -155,7 +157,21 @@ function Editor({ start, kunden, vorlageKunde, retourVon, lager }: {
     };
   };
 
-  const speichern = async (leise = false): Promise<boolean> => {
+  // Nur eins zugleich: Speichern, Abschließen, Löschen. Die Sperre greift sofort (State käme erst mit dem nächsten
+  // Rendern) — ein Doppel-Tipp im Rückfrage-Fenster rief „Abschließen“ sonst zweimal (Prüfung 22.11., H5).
+  const besetzt = useRef(false);
+  const einzeln = async <T,>(f: () => Promise<T>, sonst: T): Promise<T> => {
+    if (besetzt.current) return sonst;
+    besetzt.current = true;
+    try {
+      return await f();
+    } finally {
+      besetzt.current = false;
+    }
+  };
+
+  const speichern = (leise = false) => einzeln(() => speichernJetzt(leise), false);
+  const speichernJetzt = async (leise: boolean): Promise<boolean> => {
     const d = pruefen();
     if (!d) return false;
     setLaeuft("speichern");
@@ -175,12 +191,13 @@ function Editor({ start, kunden, vorlageKunde, retourVon, lager }: {
     }
   };
 
-  const abschliessen = async () => {
+  const abschliessen = () => einzeln(abschliessenJetzt, undefined);
+  const abschliessenJetzt = async () => {
     setFrage(null);
     if (!kopf.empf_name.trim()) { toast.error("Bitte den Kunden eintragen."); return; }
     if (!zeilen.length) { toast.error("Noch keine Zeile auf dem Lieferschein."); return; }
     if (zeilen.some((z) => z.artikel_id) && !kopf.lagerort_id) { toast.error("Bitte das Lager wählen."); return; }
-    if ((geaendert || !gespeichert) && !(await speichern(true))) return;
+    if ((geaendert || !gespeichert) && !(await speichernJetzt(true))) return;
     setLaeuft("abschliessen");
     try {
       const nr = await klsAbschliessen(id);
@@ -194,7 +211,8 @@ function Editor({ start, kunden, vorlageKunde, retourVon, lager }: {
     }
   };
 
-  const loeschen = async () => {
+  const loeschen = () => einzeln(loeschenJetzt, undefined);
+  const loeschenJetzt = async () => {
     setFrage(null);
     setLaeuft("loeschen");
     try {

@@ -1,0 +1,3 @@
+# Rechnungen (Teil-/Schlussrechnung, Storno)
+
+- 2026-11-23 · Prüfung 22.11. (H4): Eine Teilrechnung ließ sich stornieren, obwohl die Schlussrechnung sie schon abzog (`abgezogen_in`) — die Stornorechnung schrieb den Betrag ein zweites Mal gut. `rechnung_aendern` sperrte das schon, `beleg_stornieren` nicht. Jetzt sperrt `beleg_stornieren` jede Teilrechnung mit `abgezogen_in` — auch wenn die Schlussrechnung erst Entwurf ist (dort die Abzugszeile entfernen, `position_freigeben` gibt frei), sonst erst die Schlussrechnung stornieren (`teil_freigeben_bei_storno`). App: Storno-Fenster erklärt es und bietet „Schlussrechnung öffnen“ statt „Stornieren“ (`abzugIn` in `BelegEditor`). Migration `20261123100000`. Test `tests/roboter/2026-11-23-teilrechnung-storno-gesperrt.spec.ts`.

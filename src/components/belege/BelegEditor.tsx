@@ -218,6 +218,8 @@ export function BelegEditor({
   const { data: angebot } = useBelegKurz(istAngebot ? null : kopf.angebot_id);
   // Storno: die Stornorechnung zeigt auf die Rechnung, die sie aufhebt
   const stornoQuelle = useBelegKurz(beleg?.storno_von ?? null);
+  // Teilrechnung, die eine Schlussrechnung schon abzieht: Storno schriebe den Betrag doppelt gut (die Datenbank sperrt es)
+  const abzugIn = useBelegKurz(beleg?.abgezogen_in ?? null);
   const { data: nachfolger } = useNachfolger(id, !neu && status === "storniert");
   const stornoBeleg = nachfolger?.storno ?? null;
   const korrekturBeleg = nachfolger?.korrektur ?? null;
@@ -1497,17 +1499,33 @@ export function BelegEditor({
       <AlertDialog open={frage === "storno"} onOpenChange={(o) => { if (!o) setFrage(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Rechnung {beleg?.nummer} stornieren?</AlertDialogTitle>
+            <AlertDialogTitle>
+              {beleg?.abgezogen_in ? `Teilrechnung ${beleg.nummer ?? ""} jetzt nicht stornierbar` : `Rechnung ${beleg?.nummer ?? ""} stornieren?`}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              Es entsteht eine Stornorechnung mit eigener Nummer, die diese Rechnung in voller Höhe aufhebt — die
-              schickst du dem Kunden{status === "bezahlt" ? "; der bezahlte Betrag steht darauf als Gutschrift" : ""}. Die Rechnung selbst bleibt
-              unverändert erhalten. Stunden, Material und Regieberichte sind danach wieder frei — für die neue
-              Rechnung „Korrektur anlegen“.
+              {beleg?.abgezogen_in ? (
+                abzugIn.data?.status === "entwurf"
+                  ? "Diese Teilrechnung ist im Entwurf der Schlussrechnung abgezogen. Dort zuerst die Zeile „abzüglich … Teilrechnung“ entfernen, dann stornieren — sonst bekäme der Kunde den Betrag doppelt gutgeschrieben."
+                  : `Diese Teilrechnung ist in der Schlussrechnung ${abzugIn.data?.nummer ?? ""} abgezogen. Zuerst die Schlussrechnung stornieren — dann ist die Teilrechnung wieder frei. Sonst bekäme der Kunde den Betrag doppelt gutgeschrieben.`
+              ) : (
+                <>
+                  Es entsteht eine Stornorechnung mit eigener Nummer, die diese Rechnung in voller Höhe aufhebt — die
+                  schickst du dem Kunden{status === "bezahlt" ? "; der bezahlte Betrag steht darauf als Gutschrift" : ""}. Die Rechnung selbst bleibt
+                  unverändert erhalten. Stunden, Material und Regieberichte sind danach wieder frei — für die neue
+                  Rechnung „Korrektur anlegen“.
+                </>
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="gap-2">
-            <AlertDialogCancel className="h-11">Abbrechen</AlertDialogCancel>
-            <Button variant="destructive" className="h-11" onClick={stornoAusfuehren}>Stornieren</Button>
+            <AlertDialogCancel className="h-11">{beleg?.abgezogen_in ? "Schließen" : "Abbrechen"}</AlertDialogCancel>
+            {beleg?.abgezogen_in ? (
+              <Button className="h-11" onClick={() => { const ziel = beleg.abgezogen_in; setFrage(null); navigate(`/belege/${ziel}`); }}>
+                Schlussrechnung öffnen
+              </Button>
+            ) : (
+              <Button variant="destructive" className="h-11" onClick={stornoAusfuehren}>Stornieren</Button>
+            )}
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

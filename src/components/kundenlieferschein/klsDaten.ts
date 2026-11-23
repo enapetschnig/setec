@@ -58,26 +58,20 @@ export type KlsKopf = Pick<KundenLieferschein,
   "kunde_id" | "empf_name" | "empf_strasse" | "empf_plz" | "empf_ort" | "empf_email" | "datum" | "lagerort_id" | "notiz">;
 export type KlsZeile = { artikel_id: string | null; artikelnummer: string | null; bezeichnung: string; menge: number; einheit: string; retour: boolean };
 
-/** Entwurf speichern: Kopf, dann die Zeilen ganz ersetzen */
+/**
+ * Entwurf speichern: Kopf und Zeilen in einem Schritt (RPC `kunden_lieferschein_speichern`). Die Datenbank sperrt
+ * den Lieferschein dabei — ein zweites Speichern oder Abschließen wartet; scheitert etwas, bleibt der alte Stand.
+ * Früher zwei Anfragen (Zeilen löschen, dann einfügen): liefen zwei davon ineinander, war jede Zeile doppelt.
+ */
 export async function klsSpeichern(id: string, neu: boolean, kopf: KlsKopf, zeilen: KlsZeile[]) {
-  if (neu) {
-    const { error } = await supabase.from("kunden_lieferscheine").insert({ id, ...kopf });
-    if (error) throw error;
-  } else {
-    const { data, error } = await supabase.from("kunden_lieferscheine").update(kopf).eq("id", id).eq("status", "entwurf").select("id");
-    if (error) throw error;
-    if (!data?.length) throw new Error("Der Lieferschein ist schon abgeschlossen oder gelöscht.");
-  }
-  const { error: weg } = await supabase.from("kunden_lieferschein_positionen").delete().eq("lieferschein_id", id);
-  if (weg) throw weg;
-  if (zeilen.length) {
-    // alle Felder in jeder Zeile — sonst setzt PostgREST fehlende auf NULL
-    const { error } = await supabase.from("kunden_lieferschein_positionen").insert(zeilen.map((z, i) => ({
-      lieferschein_id: id, pos: i + 1, artikel_id: z.artikel_id, artikelnummer: z.artikelnummer,
-      bezeichnung: z.bezeichnung.trim(), menge: z.menge, einheit: z.einheit || "Stk", retour: z.retour,
-    })));
-    if (error) throw error;
-  }
+  const { error } = await supabase.rpc("kunden_lieferschein_speichern", {
+    p_id: id, p_neu: neu, p_kopf: kopf,
+    p_zeilen: zeilen.map((z) => ({
+      artikel_id: z.artikel_id, artikelnummer: z.artikelnummer, bezeichnung: z.bezeichnung.trim(),
+      menge: z.menge, einheit: z.einheit || "Stk", retour: z.retour,
+    })),
+  });
+  if (error) throw error;
 }
 
 /** Nummer vergeben und das Lager buchen (Ausgabe = Abgang, Retour = Zugang) */
