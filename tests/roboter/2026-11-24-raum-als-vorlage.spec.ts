@@ -72,3 +72,35 @@ test("PC: Raum als Vorlage speichern und in ein anderes Angebot einfügen", asyn
     await admin.from("angebot_vorlagen").delete().eq("name", RAUM);
   }
 });
+
+// Gegenprobe: eine ganze Angebots-Vorlage mit nur einem Titel und eigenem Betreff setzt den Betreff weiter
+// (nur die ohne Betreff gespeicherte Raum-Vorlage lässt ihn leer).
+test("Vorlage mit einem Titel und eigenem Betreff setzt den Betreff weiter, Raum-Vorlage nicht", async ({ page }) => {
+  const chef = await konto("chef");
+  const pos = (titel: string) => [
+    { art: "titel", bezeichnung: titel, langtext: null, menge: 1, einheit: "Stk", einzelpreis: 0, ek_preis: null, minuten: null, artikel_id: null, leistung_id: null },
+    { art: "pauschale", bezeichnung: "Montage", langtext: null, menge: 1, einheit: "Psch", einzelpreis: 100, ek_preis: null, minuten: null, artikel_id: null, leistung_id: null },
+  ];
+  const GANZ = `${LAUF} Ganzes Angebot`;
+  const RAUM = `${LAUF} Nur Raum`;
+  const { data, error } = await admin.from("angebot_vorlagen").insert([
+    { name: GANZ, betreff: `${LAUF} Betreff aus Vorlage`, einleitung: null, schlusstext: null, kategorie: null, positionen: pos("Dach"), netto: 100 },
+    { name: RAUM, betreff: null, einleitung: null, schlusstext: null, kategorie: null, positionen: pos("Verteiler"), netto: 100 },
+  ]).select("id, name");
+  if (error) throw error;
+  const id = (n: string) => data!.find((v) => v.name === n)!.id;
+  await page.setViewportSize({ width: 1440, height: 900 });
+  wache(page);
+  await anmelden(page, chef);
+  try {
+    await page.goto(`/belege/neu?typ=angebot&vorlage=${id(GANZ)}`);
+    await expect(page.getByLabel("Titel 1", { exact: true })).toHaveValue("Dach", { timeout: 60_000 });
+    await expect(page.getByLabel("Betreff")).toHaveValue(`${LAUF} Betreff aus Vorlage`);
+
+    await page.goto(`/belege/neu?typ=angebot&vorlage=${id(RAUM)}`);
+    await expect(page.getByLabel("Titel 1", { exact: true })).toHaveValue("Verteiler", { timeout: 60_000 });
+    await expect(page.getByLabel("Betreff")).toHaveValue("");
+  } finally {
+    await admin.from("angebot_vorlagen").delete().in("name", [GANZ, RAUM]);
+  }
+});

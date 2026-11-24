@@ -792,8 +792,11 @@ export function BelegEditor({
     if (letzterTitel) setAktiverTitel(letzterTitel);
     setKopf((k) => ({
       ...k,
-      // Ein einzelner Raum gibt dem Angebot keinen Betreff (sein Name ist der Titel)
-      betreff: k.betreff.trim() || istRaumVorlage(vorlage.positionen) ? k.betreff : (vorlage.betreff ?? vorlage.name),
+      // Eigener Betreff der Vorlage gilt immer; eine Raum-Vorlage (ohne Betreff gespeichert) gibt keinen —
+      // ihr Name ist der Titel
+      betreff: k.betreff.trim()
+        ? k.betreff
+        : vorlage.betreff?.trim() || (istRaumVorlage(vorlage.positionen) ? k.betreff : vorlage.name),
       ...(leer && vorlage.einleitung ? { einleitung: vorlage.einleitung } : {}),
       ...(leer && vorlage.schlusstext ? { schlusstext: vorlage.schlusstext } : {}),
     }));
