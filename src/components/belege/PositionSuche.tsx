@@ -119,11 +119,15 @@ export function BezeichnungSuche({
   const [suchen, setSuchen] = useState(false);
   const [markiert, setMarkiert] = useState(-1);
   const anker = useRef<HTMLDivElement>(null);
+  // Text vor dem ersten Tastendruck — Escape holt ihn zurück (Suche abgebrochen)
+  const vorher = useRef<string | null>(null);
   const { treffer, laeuft } = useTauschSuche(p.bezeichnung, katalog, suchen);
   const zeigen = suchen && p.bezeichnung.trim().length >= 2;
   const listeId = `tausch-${p.id}`;
 
-  const schliessen = () => { setSuchen(false); setMarkiert(-1); };
+  const schliessen = () => { setSuchen(false); setMarkiert(-1); vorher.current = null; };
+  /** Escape: Suche abbrechen, der Text von vorher kommt zurück */
+  const abbrechen = () => { if (vorher.current != null) onText(vorher.current); schliessen(); };
   const waehlen = (t: SuchTreffer) => { onTausch(mitTreffer(p, t, firma, stundensatz)); schliessen(); };
   const taste = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (!zeigen) return;
@@ -135,7 +139,7 @@ export function BezeichnungSuche({
       if (markiert >= 0 && treffer[markiert]) waehlen(treffer[markiert]);
       else schliessen();
     }
-    else if (e.key === "Escape") { e.preventDefault(); schliessen(); }
+    else if (e.key === "Escape") { e.preventDefault(); abbrechen(); }
   };
 
   return (
@@ -144,7 +148,7 @@ export function BezeichnungSuche({
         <div ref={anker}>
           <Input
             value={p.bezeichnung}
-            onChange={(e) => { onText(e.target.value); setSuchen(true); setMarkiert(-1); }}
+            onChange={(e) => { if (vorher.current == null) vorher.current = p.bezeichnung; onText(e.target.value); setSuchen(true); setMarkiert(-1); }}
             onBlur={() => window.setTimeout(schliessen, 150)}
             onKeyDown={taste}
             className="h-9"
@@ -162,6 +166,8 @@ export function BezeichnungSuche({
           sideOffset={4}
           onOpenAutoFocus={(e) => e.preventDefault()}
           onCloseAutoFocus={(e) => e.preventDefault()}
+          // Radix fängt Escape vor dem Feld ab — dort abbrechen, sonst wäre der alte Text schon vergessen
+          onEscapeKeyDown={(e) => { e.preventDefault(); abbrechen(); }}
           onInteractOutside={(e) => { if (anker.current?.contains(e.target as Node)) e.preventDefault(); }}
           className="z-50 max-h-[26rem] w-[var(--radix-popover-trigger-width)] min-w-[26rem] overflow-y-auto rounded-lg border bg-popover p-1 text-popover-foreground shadow-md"
         >

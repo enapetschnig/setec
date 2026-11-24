@@ -54,6 +54,13 @@ test("PC: Artikel in der Zeile suchen und ersetzen — bleibt an ihrem Platz, Me
   const zeile2 = page.getByRole("row").filter({ has: feld });
   await expect(zeile2).toContainText("Kurzschiene");
 
+  // Zeile 1: suchen und mit Escape abbrechen — der alte Text kommt zurück
+  const feld1 = page.getByLabel("Bezeichnung 1", { exact: true });
+  await feld1.fill(`${LAUF} Trapez`);
+  await expect(page.getByRole("listbox", { name: "Position ersetzen durch" })).toBeVisible();
+  await feld1.press("Escape");
+  await expect(feld1).toHaveValue(`${LAUF} Modul Glas`);
+
   // Zeile 3: nur den Text ausbessern (Tab) — Artikel und Preis bleiben
   const feld3 = page.getByLabel("Bezeichnung 3", { exact: true });
   await feld3.fill(`${LAUF} Wechselrichter Hybrid`);
