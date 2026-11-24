@@ -63,7 +63,7 @@ import { Eingabezeile } from "./Eingabezeile";
 import { AngebotVersand } from "./AngebotVersand";
 import { BelegMailDialog } from "./BelegMailDialog";
 import { mailArt, mailVorgabe, versendbar } from "./mail";
-import { vorlageEinfuegen } from "./vorlagen";
+import { istRaumVorlage, raumAusEditor, vorlageEinfuegen } from "./vorlagen";
 import { useVorlagen, vorlageBerechnen } from "./vorlagenDaten";
 import { VorlagenDialog, type VorlageWahl } from "./VorlagenDialog";
 import { VorlageSpeichernDialog } from "./VorlageSpeichernDialog";
@@ -779,6 +779,12 @@ export function BelegEditor({
   };
 
   /** Vorlage unter den aktiven Titel; ein leeres Angebot bekommt auch Betreff und Texte der Vorlage */
+  // „Raum als Vorlage speichern“ am Titel: nur dieser Titel samt seinen Positionen
+  const [raumVorlage, setRaumVorlage] = useState<string | null>(null);
+  const raumPositionen = useMemo(() => {
+    const r = raumVorlage ? raumAusEditor(positionen, raumVorlage) : [];
+    return r.length ? r : null;
+  }, [raumVorlage, positionen]);
   const vorlageUebernehmen = ({ vorlage, positionen: neue, abweichungen, nachgezogen }: VorlageWahl) => {
     const leer = !positionen.length;
     const { liste, letzterTitel } = vorlageEinfuegen(positionen, neue, aktiverTitel);
@@ -786,7 +792,8 @@ export function BelegEditor({
     if (letzterTitel) setAktiverTitel(letzterTitel);
     setKopf((k) => ({
       ...k,
-      betreff: k.betreff.trim() ? k.betreff : (vorlage.betreff ?? vorlage.name),
+      // Ein einzelner Raum gibt dem Angebot keinen Betreff (sein Name ist der Titel)
+      betreff: k.betreff.trim() || istRaumVorlage(vorlage.positionen) ? k.betreff : (vorlage.betreff ?? vorlage.name),
       ...(leer && vorlage.einleitung ? { einleitung: vorlage.einleitung } : {}),
       ...(leer && vorlage.schlusstext ? { schlusstext: vorlage.schlusstext } : {}),
     }));
@@ -1308,6 +1315,7 @@ export function BelegEditor({
           materialAufschlag={Number(firma?.material_aufschlag ?? 0)}
           lohnarten={lohnartenFuer(firma, stundensatz)}
           katalog={katalog}
+          onRaumVorlage={istAngebot ? (id) => { setRaumVorlage(id); setDialog("vorlageSpeichern"); } : undefined}
         />
         {bearbeitbar && pc && (
           <Eingabezeile katalog={katalog} stundensatz={stundensatz} ziel={titelName}
@@ -1416,7 +1424,8 @@ export function BelegEditor({
       {istAngebot && (
         <>
           <VorlagenDialog open={dialog === "vorlage"} onOpenChange={(o) => setDialog(o ? "vorlage" : null)} ziel={titelName} stundensatz={stundensatz} onWahl={vorlageUebernehmen} />
-          <VorlageSpeichernDialog open={dialog === "vorlageSpeichern"} onOpenChange={(o) => setDialog(o ? "vorlageSpeichern" : null)} kopf={kopf} positionen={positionen} />
+          <VorlageSpeichernDialog open={dialog === "vorlageSpeichern"} onOpenChange={(o) => { setDialog(o ? "vorlageSpeichern" : null); if (!o) setRaumVorlage(null); }}
+            kopf={kopf} positionen={raumPositionen ?? positionen} raum={raumPositionen ? raumPositionen[0].bezeichnung : null} />
         </>
       )}
       <KiMaterialDialog open={dialog === "ki"} onOpenChange={(o) => setDialog(o ? "ki" : null)} onUebernehmen={kiUebernehmen} />

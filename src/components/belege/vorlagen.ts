@@ -71,6 +71,21 @@ export function vorlageAusEditor(positionen: EditorPosition[]): VorlagePosition[
     });
 }
 
+/**
+ * Ein Titel (Raum) samt seinen Positionen bis zum nächsten Titel — für „Raum als Vorlage speichern“
+ * (Stefan 24.11.2026: „den ganzen Raum als Vorlage ergänzen, nur mehr Kleinigkeiten anpassen“).
+ */
+export function raumAusEditor(positionen: EditorPosition[], titelId: string): EditorPosition[] {
+  const i = positionen.findIndex((p) => p.id === titelId && p.art === "titel");
+  if (i < 0) return [];
+  return positionen.slice(i, gruppenEnde(positionen, titelId));
+}
+
+/** Vorlage aus genau einem Raum (beginnt mit dem einzigen Titel) — gibt dem Angebot keinen Betreff */
+export function istRaumVorlage(positionen: Pick<VorlagePosition, "art">[]): boolean {
+  return positionen[0]?.art === "titel" && positionen.filter((p) => p.art === "titel").length === 1;
+}
+
 /** Netto der Vorlage (zur Anzeige in der Auswahl) */
 export function vorlageNetto(positionen: VorlagePosition[]): number {
   return positionen.reduce((s, p) => (ohneBetrag(p) || p.variante ? s : runden2(s + runden2(p.menge * p.einzelpreis))), 0);

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { leerePosition, positionZuDb, titelPosition, verweiseBereinigen, type EditorPosition, type KatalogLeistung } from "./editor";
 import {
-  ausVorlage, kategorienAus, vorlageAusEditor, vorlageEinfuegen, vorlageNetto, vorlagenFiltern, vorlagePositionenLesen, vorlageUmfang,
+  ausVorlage, istRaumVorlage, kategorienAus, raumAusEditor, vorlageAusEditor, vorlageEinfuegen, vorlageNetto, vorlagenFiltern, vorlagePositionenLesen, vorlageUmfang,
   type PreisArtikel, type VorlagePosition,
 } from "./vorlagen";
 import { inAppBrowser, linkAdresse, mailAdresse, teilenText, telefonFuerWhatsapp, tokenGueltig, unterschriftPfad, whatsappAdresse } from "./bestaetigung";
@@ -240,5 +240,29 @@ describe("inAppBrowser", () => {
     expect(inAppBrowser("Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Mobile/15E148 Safari/604.1")).toBe(false);
     expect(inAppBrowser("Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Mobile Safari/537.36")).toBe(false);
     expect(inAppBrowser("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36")).toBe(false);
+  });
+});
+
+describe("Raum als Vorlage (Stefan 24.11.2026)", () => {
+  it("nimmt genau den Titel und seine Positionen bis zum nächsten Titel", () => {
+    const vorher = leerePosition("artikel", { bezeichnung: "ohne Raum" });
+    const pv = titelPosition("PV");
+    const modul = leerePosition("artikel", { bezeichnung: "Modul" });
+    const vt = titelPosition("Verteiler");
+    const hinweis = leerePosition("text", { bezeichnung: "Zähler erneuern", menge: "0" });
+    const fi = leerePosition("artikel", { bezeichnung: "FI", menge: "2", einzelpreis: "74,12" });
+    const speicher = titelPosition("Speicher");
+    const liste = [vorher, pv, modul, vt, hinweis, fi, speicher, leerePosition("artikel", { bezeichnung: "Akku" })];
+    expect(raumAusEditor(liste, vt.id).map((p) => p.bezeichnung)).toEqual(["Verteiler", "Zähler erneuern", "FI"]);
+    expect(raumAusEditor(liste, speicher.id).map((p) => p.bezeichnung)).toEqual(["Speicher", "Akku"]);
+    expect(raumAusEditor(liste, modul.id)).toEqual([]);
+    const daten = vorlageAusEditor(raumAusEditor(liste, vt.id));
+    expect(istRaumVorlage(daten)).toBe(true);
+    expect(vorlageNetto(daten)).toBe(148.24);
+  });
+  it("ein ganzes Angebot ist keine Raum-Vorlage", () => {
+    expect(istRaumVorlage([vp({ art: "titel" }), vp({}), vp({ art: "titel" })])).toBe(false);
+    expect(istRaumVorlage([vp({}), vp({ art: "titel" })])).toBe(false);
+    expect(istRaumVorlage([])).toBe(false);
   });
 });

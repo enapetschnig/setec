@@ -5,7 +5,7 @@ import {
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
-  ArrowDown, ArrowUp, CircleDashed, Clock, Copy, CornerDownRight, FileText, GripVertical, Link2, Minus, MoreVertical, Pencil, Plus, Replace, Rows3, Sigma, Trash2,
+  ArrowDown, ArrowUp, CircleDashed, Clock, Copy, CornerDownRight, FileText, GripVertical, LayoutTemplate, Link2, Minus, MoreVertical, Pencil, Plus, Replace, Rows3, Sigma, Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -69,7 +69,7 @@ function Sortierbar({ id, an, children }: {
  */
 export function PositionenEditor({
   positionen: allePositionen, setPositionen: setAlle, bearbeitbar, pc, aktiverTitel, setAktiverTitel, stundensatz, kalk = true, materialAufschlag = 0, lohnarten = [],
-  varianten = false, katalog = [],
+  varianten = false, katalog = [], onRaumVorlage,
 }: {
   positionen: EditorPosition[];
   setPositionen: Setzen;
@@ -89,6 +89,8 @@ export function PositionenEditor({
   varianten?: boolean;
   /** Leistungskatalog — Bezeichnung tippen sucht darin und im Artikelstamm, ein Treffer ersetzt die Zeile */
   katalog?: KatalogLeistung[];
+  /** Angebot: „Als Vorlage speichern“ am Titel — der Raum samt seinen Positionen wird eine Vorlage */
+  onRaumVorlage?: (titelId: string) => void;
 }) {
   // Der Nachlass bleibt unsichtbar am Ende — alles hier arbeitet mit dem Rest
   const positionen = useMemo(() => allePositionen.filter((p) => !istNachlass(p)), [allePositionen]);
@@ -156,6 +158,7 @@ export function PositionenEditor({
       });
     }
     else if (was === "hier") setAktiverTitel(p.id);
+    else if (was === "vorlage") onRaumVorlage?.(p.id);
     else if (was === "titelDavor") {
       const t = titelPosition("");
       setPositionen((alt) => {
@@ -374,7 +377,7 @@ export function PositionenEditor({
                   {bearbeitbar && (
                     <td className="py-1.5 pr-2" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-0.5">
-                        <ZeilenMenue p={p} positionen={positionen} lohnarten={lohnarten} varianten={varianten} onAktion={(a) => aktion(p, a)} pc />
+                        <ZeilenMenue p={p} positionen={positionen} lohnarten={lohnarten} varianten={varianten} raumVorlage={!!onRaumVorlage} onAktion={(a) => aktion(p, a)} pc />
                       </div>
                     </td>
                   )}
@@ -426,7 +429,7 @@ export function PositionenEditor({
                   />
                 ) : <span className="min-w-0 flex-1 truncate font-semibold">{p.bezeichnung || "Ohne Namen"}</span>}
                 {titelAnzahl > 1 && <span className="zahl shrink-0 text-sm font-semibold">{euro(zs[i] ?? 0)}</span>}
-                {bearbeitbar && <ZeilenMenue p={p} positionen={positionen} lohnarten={lohnarten} varianten={varianten} onAktion={(a) => aktion(p, a)} />}
+                {bearbeitbar && <ZeilenMenue p={p} positionen={positionen} lohnarten={lohnarten} varianten={varianten} raumVorlage={!!onRaumVorlage} onAktion={(a) => aktion(p, a)} />}
               </div>
               {vorschlaege.length > 0 && (
                 <div className="mt-1.5 flex flex-wrap gap-1.5 pb-1">
@@ -448,7 +451,7 @@ export function PositionenEditor({
               <button type="button" className="min-w-0 flex-1 text-left text-sm italic text-muted-foreground [overflow-wrap:anywhere]" onClick={() => bearbeitbar && setBearbeiten(p)} disabled={!bearbeitbar}>
                 {p.bezeichnung || "Hinweistext"}
               </button>
-              {bearbeitbar && <ZeilenMenue p={p} positionen={positionen} lohnarten={lohnarten} varianten={varianten} onAktion={(a) => aktion(p, a)} />}
+              {bearbeitbar && <ZeilenMenue p={p} positionen={positionen} lohnarten={lohnarten} varianten={varianten} raumVorlage={!!onRaumVorlage} onAktion={(a) => aktion(p, a)} />}
             </div>
           );
         }
@@ -463,7 +466,7 @@ export function PositionenEditor({
                 {p.quelle && <Herkunft />}
                 {p.variante && <VarianteHinweis v={p.variante} />}
               </button>
-              {bearbeitbar && <ZeilenMenue p={p} positionen={positionen} lohnarten={lohnarten} varianten={varianten} onAktion={(a) => aktion(p, a)} />}
+              {bearbeitbar && <ZeilenMenue p={p} positionen={positionen} lohnarten={lohnarten} varianten={varianten} raumVorlage={!!onRaumVorlage} onAktion={(a) => aktion(p, a)} />}
             </div>
             <div className={cn("mt-2 flex items-center gap-2", griff && "pl-2")}>
               {bearbeitbar ? (
@@ -529,13 +532,14 @@ function VarianteBetrag({ p }: { p: EditorPosition }) {
   return <span className="font-normal text-muted-foreground" title="Zählt nicht in die Summe">({euro(positionBetrag(p))})</span>;
 }
 
-type Aktion = "bearbeiten" | "hoch" | "runter" | "kopieren" | "loeschen" | "langtext" | "hier" | "titelDavor" | Variante | "zaehlt";
+type Aktion = "bearbeiten" | "hoch" | "runter" | "kopieren" | "loeschen" | "langtext" | "hier" | "titelDavor" | "vorlage" | Variante | "zaehlt";
 
-function ZeilenMenue({ p, positionen, lohnarten = [], varianten = false, onAktion, pc }: {
+function ZeilenMenue({ p, positionen, lohnarten = [], varianten = false, raumVorlage = false, onAktion, pc }: {
   p: EditorPosition;
   positionen: EditorPosition[];
   lohnarten?: Lohnart[];
   varianten?: boolean;
+  raumVorlage?: boolean;
   onAktion: (a: Aktion | Lohnart) => void;
   pc?: boolean;
 }) {
@@ -588,6 +592,9 @@ function ZeilenMenue({ p, positionen, lohnarten = [], varianten = false, onAktio
         <DropdownMenuItem className="h-11 gap-2" disabled={!kannVerschieben(positionen, p.id, -1)} onClick={() => onAktion("hoch")}><ArrowUp className="h-4 w-4" /> Nach oben</DropdownMenuItem>
         <DropdownMenuItem className="h-11 gap-2" disabled={!kannVerschieben(positionen, p.id, 1)} onClick={() => onAktion("runter")}><ArrowDown className="h-4 w-4" /> Nach unten</DropdownMenuItem>
         <DropdownMenuItem className="h-11 gap-2" onClick={() => onAktion("kopieren")}><Copy className="h-4 w-4" /> {titel ? "Raum kopieren" : "Kopieren"}</DropdownMenuItem>
+        {titel && raumVorlage && (
+          <DropdownMenuItem className="h-11 gap-2" onClick={() => onAktion("vorlage")}><LayoutTemplate className="h-4 w-4" /> Raum als Vorlage speichern</DropdownMenuItem>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuItem className="h-11 gap-2 text-destructive focus:text-destructive" onClick={() => onAktion("loeschen")}><Trash2 className="h-4 w-4" /> Löschen</DropdownMenuItem>
       </DropdownMenuContent>
