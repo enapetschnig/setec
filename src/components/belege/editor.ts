@@ -4,6 +4,7 @@ import { aufschlagAus, kalkPreis } from "@/lib/kalkulation";
 import {
   artikelVk, belegSummen, hatStaffel, leistungMaterialEk, leistungPreis, runden2, staffelMinuten, type LeistungsMaterial,
 } from "@/lib/preise";
+import { normalisieren } from "@/lib/sprachParser";
 import type { Artikel, Beleg, Firma, Kunde, Leistung, Position } from "@/lib/types";
 
 /**
@@ -318,6 +319,29 @@ export function artikelPosition(
     ek_preis: a.ek_preis == null ? null : Number(a.ek_preis),
     artikel_id: a.id,
   });
+}
+
+/**
+ * Zeile gegen eine andere Leistung/einen anderen Artikel tauschen (Stefan 24.11.2026: „im Angebot in der Zeile
+ * suchen statt löschen und neu anlegen“). Die Zeile bleibt an ihrem Platz (gleiche ID), Menge und
+ * optional/alternativ bleiben; Bezeichnung, Langtext, Einheit, Preis, EK, Minuten und Verweis kommen vom neuen.
+ * `neu` mit der Menge der alten Zeile bauen (Staffel der Montagezeit rechnet nach der Menge).
+ */
+export function positionTauschen(alt: EditorPosition, neu: EditorPosition): EditorPosition {
+  return { ...neu, id: alt.id, menge: alt.menge, variante: varianteMoeglich(neu) ? alt.variante ?? null : null };
+}
+
+/** In der Zeile suchen und tauschen: nicht bei Titel/Text/Abzug/Nachlass/Arbeitszeit (hat „Stundensatz tauschen“) und nie bei Zeilen aus dem Projekt (Stunden/Material hängen daran) */
+export const tauschbar = (p: Pick<EditorPosition, "art" | "quelle">) =>
+  !p.quelle && ["leistung", "artikel", "material", "pauschale"].includes(p.art);
+
+/** Leistungen aus dem Katalog, in denen jedes getippte Wort vorkommt (Nummer, Kurztext, Suchwörter, Kategorie) */
+export function leistungenFinden(katalog: KatalogLeistung[], text: string, anzahl = 6): KatalogLeistung[] {
+  const woerter = normalisieren(text).split(/\s+/).filter(Boolean);
+  if (!woerter.length) return [];
+  return katalog
+    .filter((l) => woerter.every((w) => normalisieren(`${l.nummer ?? ""} ${l.kurztext} ${l.suchwoerter ?? ""} ${l.kategorie}`).includes(w)))
+    .slice(0, anzahl);
 }
 
 /** Kopie ohne Herkunft — sonst wären Stunden doppelt verrechnet */

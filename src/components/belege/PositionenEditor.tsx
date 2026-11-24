@@ -25,11 +25,12 @@ import { cn } from "@/lib/utils";
 import {
   aufschlagVon, duplizieren, entfernen, gruppenGroesse, istNachlass, kannVerschieben, mengeVon, mitAufschlag, mitEinkauf, ohneBetrag, positionBetrag, positionGesamt,
   VARIANTE_TEXT, varianteMoeglich, type Variante,
-  positionsNummern, preisVon, preisText, titelPosition, verschieben, zahlText, ziehen, zwischensummen, type EditorPosition,
+  positionsNummern, preisVon, preisText, tauschbar, titelPosition, verschieben, zahlText, ziehen, zwischensummen, type EditorPosition, type KatalogLeistung,
 } from "./editor";
 import { supabase } from "@/integrations/supabase/client";
 import { ZahlFeld } from "./Eingabezeile";
 import { PositionDialog } from "./PositionDialog";
+import { BezeichnungSuche } from "./PositionSuche";
 
 type Setzen = (f: (alt: EditorPosition[]) => EditorPosition[]) => void;
 
@@ -72,7 +73,7 @@ function Sortierbar({ id, an, children }: {
  */
 export function PositionenEditor({
   positionen: allePositionen, setPositionen: setAlle, bearbeitbar, pc, aktiverTitel, setAktiverTitel, stundensatz, kalk = true, materialAufschlag = 0, lohnarten = [],
-  varianten = false,
+  varianten = false, katalog = [],
 }: {
   positionen: EditorPosition[];
   setPositionen: Setzen;
@@ -90,6 +91,8 @@ export function PositionenEditor({
   lohnarten?: Lohnart[];
   /** Angebot: Positionen als optional/alternativ markieren (Preis steht da, zählt nicht) */
   varianten?: boolean;
+  /** Leistungskatalog — Bezeichnung tippen sucht darin und im Artikelstamm, ein Treffer ersetzt die Zeile */
+  katalog?: KatalogLeistung[];
 }) {
   // Der Nachlass bleibt unsichtbar am Ende — alles hier arbeitet mit dem Rest
   const positionen = useMemo(() => allePositionen.filter((p) => !istNachlass(p)), [allePositionen]);
@@ -126,6 +129,11 @@ export function PositionenEditor({
   };
   const aendern = (id: string, werte: Partial<EditorPosition>) =>
     setPositionen((alt) => alt.map((p) => (p.id === id ? { ...p, ...werte } : p)));
+  /** Zeile gegen den gewählten Treffer getauscht: der Langtext gehört zum neuen, also nicht offen lassen */
+  const getauscht = (neu: EditorPosition) => {
+    setPositionen((alt) => alt.map((p) => (p.id === neu.id ? neu : p)));
+    setLangOffen((s) => { const n = new Set(s); n.delete(neu.id); return n; });
+  };
   const mengePlus = (p: EditorPosition, d: number) => aendern(p.id, { menge: zahlText(Math.max(0, mengeVon(p) + d)) });
   const loeschen = (p: EditorPosition) => {
     if (p.art === "titel" && gruppenGroesse(positionen, p.id) > 0) { setTitelLoeschen(p); return; }
@@ -176,6 +184,7 @@ export function PositionenEditor({
       <PositionDialog
         position={bearbeiten}
         stundensatz={stundensatz}
+        katalog={katalog}
         onOpenChange={(o) => { if (!o) setBearbeiten(null); }}
         onUebernehmen={(p) => { aendern(p.id, p); setBearbeiten(null); }}
         onLoeschen={(id) => {
@@ -281,7 +290,12 @@ export function PositionenEditor({
                     <>
                       <td className="py-1.5 pr-2">
                         {bearbeitbar ? (
-                          <Input value={p.bezeichnung} onChange={(e) => aendern(p.id, { bezeichnung: e.target.value })} className="h-9" aria-label={`Bezeichnung ${nummern[i]}`} />
+                          tauschbar(p) ? (
+                            <BezeichnungSuche p={p} katalog={katalog} stundensatz={satz} ariaLabel={`Bezeichnung ${nummern[i]}`}
+                              onText={(t) => aendern(p.id, { bezeichnung: t })} onTausch={getauscht} />
+                          ) : (
+                            <Input value={p.bezeichnung} onChange={(e) => aendern(p.id, { bezeichnung: e.target.value })} className="h-9" aria-label={`Bezeichnung ${nummern[i]}`} />
+                          )
                         ) : (
                           <p className="py-1 font-medium">{p.bezeichnung}</p>
                         )}

@@ -1,15 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CornerDownLeft, ListChecks, Package, PenLine, Plus, Rows3, Search, Type } from "lucide-react";
+import { CornerDownLeft, PenLine, Plus, Rows3, Search, Type } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useArtikelSuche } from "@/components/material/ArtikelSuche";
-import { useSitzung } from "@/hooks/useSitzung";
-import { dezimalLesen, euro, zahl } from "@/lib/format";
-import { artikelVk, leistungPreis } from "@/lib/preise";
-import { normalisieren } from "@/lib/sprachParser";
+import { dezimalLesen, zahl } from "@/lib/format";
 import type { Artikel } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { schnellLesen, type KatalogLeistung } from "./editor";
+import { leistungenFinden, schnellLesen, type KatalogLeistung } from "./editor";
+import { TrefferInhalt } from "./PositionSuche";
 
 type Treffer =
   | { art: "leistung"; l: KatalogLeistung }
@@ -35,7 +33,6 @@ export function Eingabezeile({
   onTitel: (name: string) => void;
   onText: () => void;
 }) {
-  const { firma } = useSitzung();
   const [text, setText] = useState("");
   const [offen, setOffen] = useState(false);
   const [markiert, setMarkiert] = useState(0);
@@ -52,11 +49,7 @@ export function Eingabezeile({
   const treffer = useMemo<Treffer[]>(() => {
     if (!eingabe) return [];
     if ("titel" in eingabe) return [{ art: "titel", name: eingabe.titel }];
-    const woerter = normalisieren(eingabe.text).split(/\s+/).filter(Boolean);
-    const leistungen = katalog
-      .filter((l) => woerter.every((w) => normalisieren(`${l.nummer ?? ""} ${l.kurztext} ${l.suchwoerter ?? ""} ${l.kategorie}`).includes(w)))
-      .slice(0, 6)
-      .map((l): Treffer => ({ art: "leistung", l }));
+    const leistungen = leistungenFinden(katalog, eingabe.text).map((l): Treffer => ({ art: "leistung", l }));
     const art = eingabe.text.length >= 2 && !sucht ? artikel.slice(0, 6).map((a): Treffer => ({ art: "artikel", a })) : [];
     return [...leistungen, ...art, { art: "frei", text: eingabe.text }];
   }, [eingabe, katalog, artikel, sucht]);
@@ -130,23 +123,7 @@ export function Eingabezeile({
                   <button type="button" role="option" aria-selected={i === markiert}
                     onMouseDown={(e) => e.preventDefault()} onClick={() => waehlen(t)} onMouseEnter={() => setMarkiert(i)}
                     className={cn("flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left", i === markiert && "bg-primary-soft")}>
-                    {t.art === "leistung" && (
-                      <>
-                        <ListChecks className="h-4 w-4 shrink-0 text-primary" />
-                        <span className="min-w-0 flex-1 truncate">{t.l.kurztext}</span>
-                        <span className="zahl shrink-0 text-muted-foreground">{euro(leistungPreis(t.l, t.l.leistung_material ?? [], firma, stundensatz, menge))} / {t.l.einheit}</span>
-                      </>
-                    )}
-                    {t.art === "artikel" && (
-                      <>
-                        <Package className="h-4 w-4 shrink-0 text-muted-foreground" />
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate">{t.a.bezeichnung}</span>
-                          <span className="block truncate text-xs text-muted-foreground">{[t.a.hersteller, t.a.artikelnummer].filter(Boolean).join(" · ")}</span>
-                        </span>
-                        <span className="zahl shrink-0 text-muted-foreground">{euro(artikelVk(t.a, firma))} / {t.a.einheit || "Stk"}</span>
-                      </>
-                    )}
+                    {(t.art === "leistung" || t.art === "artikel") && <TrefferInhalt t={t} menge={menge} stundensatz={stundensatz} />}
                     {t.art === "frei" && (
                       <>
                         <PenLine className="h-4 w-4 shrink-0 text-muted-foreground" />

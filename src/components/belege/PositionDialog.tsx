@@ -11,13 +11,14 @@ import { useSitzung } from "@/hooks/useSitzung";
 import { aufschlagAus, kalkPreis, lohnarten } from "@/lib/kalkulation";
 import { EINHEITEN } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { ART_NAME, positionBetrag, preisText, type EditorPosition, type PositionsArt } from "./editor";
+import { ART_NAME, mengeVon, positionBetrag, preisText, tauschbar, type EditorPosition, type KatalogLeistung, type PositionsArt } from "./editor";
+import { mitTreffer, TauschListe, useTauschSuche, type SuchTreffer } from "./PositionSuche";
 
 const ARTEN_WAEHLBAR: PositionsArt[] = ["leistung", "artikel", "arbeit", "material", "pauschale", "text"];
 
 /** Eine Position ganz bearbeiten (oder frei anlegen): Texte, Menge, Einheit, Preis. */
 export function PositionDialog({
-  position, onOpenChange, onUebernehmen, onLoeschen, neu = false, stundensatz,
+  position, onOpenChange, onUebernehmen, onLoeschen, neu = false, stundensatz, katalog,
 }: {
   position: EditorPosition | null;
   onOpenChange: (o: boolean) => void;
@@ -27,6 +28,8 @@ export function PositionDialog({
   neu?: boolean;
   /** Standard-Stundensatz (Projekt oder Betrieb) für die Kalkulation */
   stundensatz?: number;
+  /** Leistungskatalog: Bezeichnung tippen sucht Leistungen und Artikel, Antippen ersetzt die Position */
+  katalog?: KatalogLeistung[];
 }) {
   const { firma } = useSitzung();
   const [p, setP] = useState<EditorPosition | null>(position);
@@ -37,18 +40,35 @@ export function PositionDialog({
   const [minuten, setMinuten] = useState("");
   const [satzName, setSatzName] = useState("Standard");
   const standardSatz = stundensatz ?? Number(firma?.stundensatz ?? 0);
-  useEffect(() => {
-    setP(position);
-    if (!position) return;
-    setKalkOffen(position.ek_preis != null || position.minuten != null);
-    setEk(position.ek_preis == null ? "" : zahl(position.ek_preis));
-    setMinuten(position.minuten == null ? "" : zahl(position.minuten));
+  // In der Bezeichnung suchen (erst nach dem Tippen) — Antippen eines Treffers ersetzt die Position
+  const [suchen, setSuchen] = useState(false);
+  const [markiert, setMarkiert] = useState(-1);
+  /** Kalkulationsfelder aus einer Position füllen (beim Öffnen und nach dem Tauschen gegen einen Treffer) */
+  const kalkLaden = (pos: EditorPosition) => {
+    setKalkOffen(pos.ek_preis != null || pos.minuten != null);
+    setEk(pos.ek_preis == null ? "" : zahl(pos.ek_preis));
+    setMinuten(pos.minuten == null ? "" : zahl(pos.minuten));
     // der Aufschlag, der im Preis steckt — sonst der des Betriebs
-    const drin = aufschlagAus({ preis: dezimalLesen(position.einzelpreis) ?? 0, ek: position.ek_preis, minuten: position.minuten, satz: standardSatz });
+    const drin = aufschlagAus({ preis: dezimalLesen(pos.einzelpreis) ?? 0, ek: pos.ek_preis, minuten: pos.minuten, satz: standardSatz });
     setAufschlag(zahl(drin ?? Number(firma?.material_aufschlag ?? 0)));
     setSatzName("Standard");
+  };
+  useEffect(() => {
+    setP(position);
+    setSuchen(false);
+    if (position) kalkLaden(position);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [position, firma?.material_aufschlag, standardSatz]);
+  const sucheMoeglich = !!katalog && !!p && !neu && tauschbar(p);
+  const { treffer, laeuft } = useTauschSuche(p?.bezeichnung ?? "", katalog ?? [], suchen && sucheMoeglich);
   if (!p) return null;
+  const tauschen = (t: SuchTreffer) => {
+    const neuP = mitTreffer(p, t, firma, standardSatz);
+    setP(neuP);
+    kalkLaden(neuP);
+    setSuchen(false);
+    setMarkiert(-1);
+  };
 
   const saetze = lohnarten(firma, standardSatz);
   const satz = saetze.find((l) => l.name === satzName) ?? saetze[0];
@@ -105,7 +125,11 @@ export function PositionDialog({
     >
       <div className="space-y-1.5">
         <Label htmlFor="pos-bez">{titel ? "Name" : "Bezeichnung"}</Label>
-        <Textarea id="pos-bez" rows={2} value={p.bezeichnung} onChange={(e) => set({ bezeichnung: e.target.value })} className="text-base" />
+        <Textarea id="pos-bez" rows={2} value={p.bezeichnung} onChange={(e) => { set({ bezeichnung: e.target.value }); setSuchen(true); setMarkiert(-1); }} className="text-base" />
+        {sucheMoeglich && suchen && p.bezeichnung.trim().length >= 2 && (
+          <TauschListe id="tausch-dialog" treffer={treffer} laeuft={laeuft} markiert={markiert} setMarkiert={setMarkiert} onWahl={tauschen}
+            menge={mengeVon(p)} stundensatz={standardSatz} className="max-h-72 overflow-y-auto rounded-lg border bg-popover p-1" />
+        )}
       </div>
       <div className="space-y-1.5">
         <Label htmlFor="pos-lang">{titel ? "Beschreibung (optional)" : "Langtext (optional, steht klein darunter)"}</Label>

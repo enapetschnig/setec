@@ -24,10 +24,11 @@ export function useVerzoegert<T>(wert: T, ms = 250): T {
  * Alle Wörter müssen vorkommen: „nym 3x1,5“ findet „NYM-J 3x1,5 mm²“.
  * Ein reiner Strichcode oder eine Artikelnummer trifft direkt.
  */
-export function useArtikelSuche(suchtext: string, anzahl = 40, hersteller: string | null = null) {
+export function useArtikelSuche(suchtext: string, anzahl = 40, hersteller: string | null = null, aktiv = true) {
   const q = useVerzoegert(suchtext.trim());
   const abfrage = useQuery({
     queryKey: ["artikel", "suche", q, anzahl, hersteller],
+    enabled: aktiv,
     queryFn: async () => {
       const { data, error } = await supabase.rpc("artikel_suchen", { p_q: q, p_anzahl: anzahl, p_hersteller: hersteller ?? undefined });
       if (error) throw error;

@@ -1307,6 +1307,7 @@ export function BelegEditor({
           kalk={kalkSpalten}
           materialAufschlag={Number(firma?.material_aufschlag ?? 0)}
           lohnarten={lohnartenFuer(firma, stundensatz)}
+          katalog={katalog}
         />
         {bearbeitbar && pc && (
           <Eingabezeile katalog={katalog} stundensatz={stundensatz} ziel={titelName}
