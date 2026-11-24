@@ -3,7 +3,7 @@ import { Calculator, ChevronDown, Minus, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { TextareaWachsend } from "@/components/ui/textarea-wachsend";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FormularDialog } from "@/components/FormularDialog";
 import { dezimalLesen, euro, zahl, zahlUngueltig } from "@/lib/format";
@@ -125,7 +125,7 @@ export function PositionDialog({
     >
       <div className="space-y-1.5">
         <Label htmlFor="pos-bez">{titel ? "Name" : "Bezeichnung"}</Label>
-        <Textarea id="pos-bez" rows={2} value={p.bezeichnung} onChange={(e) => { set({ bezeichnung: e.target.value }); setSuchen(true); setMarkiert(-1); }} className="text-base" />
+        <TextareaWachsend id="pos-bez" value={p.bezeichnung} onChange={(e) => { set({ bezeichnung: e.target.value }); setSuchen(true); setMarkiert(-1); }} className="min-h-[4.25rem] text-base" />
         {sucheMoeglich && suchen && p.bezeichnung.trim().length >= 2 && (
           <TauschListe id="tausch-dialog" treffer={treffer} laeuft={laeuft} markiert={markiert} setMarkiert={setMarkiert} onWahl={tauschen}
             menge={mengeVon(p)} stundensatz={standardSatz} className="max-h-72 overflow-y-auto rounded-lg border bg-popover p-1" />
@@ -133,7 +133,7 @@ export function PositionDialog({
       </div>
       <div className="space-y-1.5">
         <Label htmlFor="pos-lang">{titel ? "Beschreibung (optional)" : "Langtext (optional, steht klein darunter)"}</Label>
-        <Textarea id="pos-lang" rows={4} value={p.langtext} onChange={(e) => set({ langtext: e.target.value })} />
+        <TextareaWachsend id="pos-lang" value={p.langtext} onChange={(e) => set({ langtext: e.target.value })} className="min-h-[7rem]" />
       </div>
 
       {!titel && !text && (

@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { TextareaWachsend } from "@/components/ui/textarea-wachsend";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -39,10 +39,6 @@ async function artikelLangtext(id: string): Promise<string> {
   const { data } = await supabase.from("artikel").select("langtext").eq("id", id).maybeSingle();
   return data?.langtext?.trim() ?? "";
 }
-
-/** Langtext-Feld am PC so hoch wie der Text (grob: ~90 Zeichen je Zeile), 2–6 Zeilen */
-const langtextZeilen = (t: string) =>
-  Math.min(6, Math.max(2, t.split("\n").reduce((n, z) => n + Math.max(1, Math.ceil(z.length / 90)), 0)));
 
 /** Eine Zeile, die sich am Griff ziehen lässt (Handy: Finger auf den Griff, PC: Maus) */
 function Sortierbar({ id, an, children }: {
@@ -264,7 +260,17 @@ export function PositionenEditor({
                   {titel || text ? (
                     <>
                     <td colSpan={3} className="py-1.5 pr-2">
-                      {bearbeitbar ? (
+                      {bearbeitbar && text ? (
+                        // Hinweistext wächst mit — langer Text bleibt ganz lesbar (Stefan 24.11.)
+                        <TextareaWachsend
+                          value={p.bezeichnung}
+                          onChange={(e) => aendern(p.id, { bezeichnung: e.target.value })}
+                          className="py-[7px] italic"
+                          placeholder="Hinweistext"
+                          data-text-id={p.id}
+                          aria-label="Hinweistext"
+                        />
+                      ) : bearbeitbar ? (
                         <Input
                           value={p.bezeichnung}
                           onChange={(e) => aendern(p.id, { bezeichnung: e.target.value })}
@@ -277,7 +283,7 @@ export function PositionenEditor({
                           aria-label={titel ? `Titel ${nummern[i]}` : "Hinweistext"}
                         />
                       ) : (
-                        <p className={cn("py-1", titel && "font-semibold", text && "italic text-muted-foreground")}>{p.bezeichnung}</p>
+                        <p className={cn("py-1 whitespace-pre-line [overflow-wrap:anywhere]", titel && "font-semibold", text && "italic text-muted-foreground")}>{p.bezeichnung}</p>
                       )}
                       {titel && p.langtext && <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{p.langtext}</p>}
                       {aktiv && bearbeitbar && <p className="mt-1 flex items-center gap-1 text-xs font-medium text-primary"><CornerDownRight className="h-3 w-3" /> Neue Positionen landen hier</p>}
@@ -301,13 +307,12 @@ export function PositionenEditor({
                         )}
                         {/* Langtext klein und grau — erst ein Klick macht ihn zum Bearbeiten auf, sonst wird die Tabelle lang */}
                         {langtextSichtbar && (bearbeitbar && langOffen.has(p.id) ? (
-                          <Textarea
+                          <TextareaWachsend
                             value={p.langtext}
                             onChange={(e) => aendern(p.id, { langtext: e.target.value })}
                             onBlur={() => setLangOffen((s) => { const n = new Set(s); n.delete(p.id); return n; })}
-                            rows={langtextZeilen(p.langtext)}
                             placeholder="Langtext"
-                            className="mt-1 min-h-0 text-xs"
+                            className="mt-1 min-h-[3.25rem] text-xs md:[@media(pointer:fine)]:text-xs"
                             autoFocus
                           />
                         ) : bearbeitbar ? (
