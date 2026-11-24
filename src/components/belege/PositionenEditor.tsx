@@ -300,7 +300,8 @@ export function PositionenEditor({
                             <BezeichnungSuche p={p} katalog={katalog} stundensatz={satz} ariaLabel={`Bezeichnung ${nummern[i]}`}
                               onText={(t) => aendern(p.id, { bezeichnung: t })} onTausch={getauscht} />
                           ) : (
-                            <Input value={p.bezeichnung} onChange={(e) => aendern(p.id, { bezeichnung: e.target.value })} className="h-9" aria-label={`Bezeichnung ${nummern[i]}`} />
+                            <TextareaWachsend value={p.bezeichnung} onChange={(e) => aendern(p.id, { bezeichnung: e.target.value })}
+                              onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }} className="py-[7px]" aria-label={`Bezeichnung ${nummern[i]}`} />
                           )
                         ) : (
                           <p className="py-1 font-medium">{p.bezeichnung}</p>

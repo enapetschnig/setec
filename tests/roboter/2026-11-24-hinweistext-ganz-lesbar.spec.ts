@@ -13,7 +13,7 @@ const TEXT = "Erneuern des Zählerverteilers inklusive Stammarbeiten. Es wird au
 const ganzSichtbar = (feld: Locator) =>
   feld.evaluate((el) => ({ ok: el.scrollHeight <= el.clientHeight + 1, hoehe: el.clientHeight }));
 
-test("PC: langer Hinweistext im Angebot ist ganz lesbar, auch nach dem Speichern", async ({ page }) => {
+test("PC: langer Hinweistext, lange Bezeichnung und Einleitung sind ganz lesbar, auch nach dem Speichern", async ({ page }) => {
   const chef = await konto("chef");
   const p = await testProjekt("Hinweistext lang");
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -32,6 +32,26 @@ test("PC: langer Hinweistext im Angebot ist ganz lesbar, auch nach dem Speichern
   expect(voll.hoehe).toBeGreaterThan(leer.hoehe * 1.5); // mehrere Zeilen statt einer
   expect(leer.hoehe).toBeLessThan(50); // leer bleibt es eine Zeile
 
+  // Lange Bezeichnung einer Position: Feld bricht um statt abzuschneiden, Enter macht keinen Zeilenumbruch
+  const eingabe = page.getByPlaceholder(/Position eingeben/);
+  await eingabe.fill("1 Freitext Zeile");
+  await eingabe.press("Enter");
+  const bez = page.getByLabel("Bezeichnung 1", { exact: true });
+  const NAME = `${LAUF} SOLAX Triple Power S36 Speicher Set 11 kWh bestehend aus Controller, drei Batteriemodulen und Sockel samt Kabelsatz`;
+  await bez.fill(NAME);
+  await bez.press("Escape");
+  await bez.press("End");
+  await bez.press("Enter");
+  await expect(bez).toHaveValue(NAME);
+  const bezMass = await ganzSichtbar(bez);
+  expect(bezMass.ok).toBe(true);
+  expect(bezMass.hoehe).toBeGreaterThan(40);
+
+  // Einleitung: langer Text wächst mit
+  const einl = page.getByLabel("Einleitung (über den Positionen)");
+  await einl.fill(Array.from({ length: 8 }, (_, i) => `Absatz ${i + 1}: ${TEXT}`).join("\n"));
+  expect((await ganzSichtbar(einl)).ok).toBe(true);
+
   // Spalte schmäler (Fenster kleiner) → Feld wächst nach
   await page.setViewportSize({ width: 1100, height: 900 });
   await expect.poll(async () => (await ganzSichtbar(feld)).ok).toBe(true);
@@ -44,5 +64,8 @@ test("PC: langer Hinweistext im Angebot ist ganz lesbar, auch nach dem Speichern
   const geladen = page.getByLabel("Hinweistext", { exact: true });
   await expect(geladen).toHaveValue(`${LAUF} ${TEXT}`, { timeout: 60_000 });
   expect((await ganzSichtbar(geladen)).ok).toBe(true);
+  await expect(page.getByLabel("Bezeichnung 1", { exact: true })).toHaveValue(NAME);
+  expect((await ganzSichtbar(page.getByLabel("Bezeichnung 1", { exact: true }))).ok).toBe(true);
+  expect((await ganzSichtbar(page.getByLabel("Einleitung (über den Positionen)"))).ok).toBe(true);
   if (process.env.BILD) await page.screenshot({ path: "test-results/hinweistext-lang.png" });
 });

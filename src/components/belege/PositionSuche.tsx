@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import * as PopoverPrimitive from "@radix-ui/react-popover";
 import { CornerDownLeft, ListChecks, Package, Replace } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { TextareaWachsend } from "@/components/ui/textarea-wachsend";
 import { useArtikelSuche } from "@/components/material/ArtikelSuche";
 import { useSitzung } from "@/hooks/useSitzung";
 import { euro } from "@/lib/format";
@@ -129,7 +129,9 @@ export function BezeichnungSuche({
   /** Escape: Suche abbrechen, der Text von vorher kommt zurück */
   const abbrechen = () => { if (vorher.current != null) onText(vorher.current); schliessen(); };
   const waehlen = (t: SuchTreffer) => { onTausch(mitTreffer(p, t, firma, stundensatz)); schliessen(); };
-  const taste = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const taste = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Die Bezeichnung bricht um, bleibt aber eine Zeile Text — Enter macht nie einen Zeilenumbruch
+    if (e.key === "Enter" && !e.nativeEvent.isComposing) e.preventDefault();
     if (!zeigen) return;
     if (e.key === "ArrowDown" && treffer.length) { e.preventDefault(); setMarkiert((m) => Math.min(m + 1, treffer.length - 1)); }
     else if (e.key === "ArrowUp" && treffer.length) { e.preventDefault(); setMarkiert((m) => Math.max(m - 1, -1)); }
@@ -146,12 +148,12 @@ export function BezeichnungSuche({
     <PopoverPrimitive.Root open={zeigen} onOpenChange={(o) => { if (!o) schliessen(); }}>
       <PopoverPrimitive.Anchor asChild>
         <div ref={anker}>
-          <Input
+          <TextareaWachsend
             value={p.bezeichnung}
             onChange={(e) => { if (vorher.current == null) vorher.current = p.bezeichnung; onText(e.target.value); setSuchen(true); setMarkiert(-1); }}
             onBlur={() => window.setTimeout(schliessen, 150)}
             onKeyDown={taste}
-            className="h-9"
+            className="py-[7px]"
             aria-label={ariaLabel}
             role="combobox"
             aria-expanded={zeigen}

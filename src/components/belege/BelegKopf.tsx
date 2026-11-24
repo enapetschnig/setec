@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
+import { TextareaWachsend } from "@/components/ui/textarea-wachsend";
 import { AdresseFeld } from "@/components/AdresseFeld";
 import { FormularDialog } from "@/components/FormularDialog";
 import { KundeWahl } from "@/components/KundeWahl";
@@ -274,11 +274,11 @@ export function BelegTexte({ kopf, aendern, bearbeitbar, pc }: { kopf: Kopf; aen
             <>
               <div className="space-y-1.5">
                 <Label htmlFor="k-einl">Einleitung (über den Positionen)</Label>
-                <Textarea id="k-einl" rows={3} value={kopf.einleitung} onChange={(e) => aendern({ einleitung: e.target.value })} />
+                <TextareaWachsend id="k-einl" className="min-h-[80px]" value={kopf.einleitung} onChange={(e) => aendern({ einleitung: e.target.value })} />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="k-schluss">Schlusstext (unter den Summen)</Label>
-                <Textarea id="k-schluss" rows={3} value={kopf.schlusstext} onChange={(e) => aendern({ schlusstext: e.target.value })} />
+                <TextareaWachsend id="k-schluss" className="min-h-[80px]" value={kopf.schlusstext} onChange={(e) => aendern({ schlusstext: e.target.value })} />
               </div>
             </>
           ) : (
