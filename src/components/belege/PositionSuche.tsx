@@ -19,7 +19,7 @@ export function TrefferInhalt({ t, menge, stundensatz }: { t: SuchTreffer; menge
     return (
       <>
         <ListChecks className="h-4 w-4 shrink-0 text-primary" />
-        <span className="min-w-0 flex-1 truncate">{t.l.kurztext}</span>
+        <span className="min-w-0 flex-1 line-clamp-2 break-words leading-snug" title={t.l.kurztext}>{t.l.kurztext}</span>
         <span className="zahl shrink-0 text-muted-foreground">{euro(leistungPreis(t.l, t.l.leistung_material ?? [], firma, stundensatz, menge))} / {t.l.einheit}</span>
       </>
     );
@@ -28,7 +28,7 @@ export function TrefferInhalt({ t, menge, stundensatz }: { t: SuchTreffer; menge
     <>
       <Package className="h-4 w-4 shrink-0 text-muted-foreground" />
       <span className="min-w-0 flex-1">
-        <span className="block truncate">{t.a.bezeichnung}</span>
+        <span className="line-clamp-2 break-words leading-snug" title={t.a.bezeichnung}>{t.a.bezeichnung}</span>
         <span className="block truncate text-xs text-muted-foreground">{[t.a.hersteller, t.a.artikelnummer].filter(Boolean).join(" · ")}</span>
       </span>
       <span className="zahl shrink-0 text-muted-foreground">{euro(artikelVk(t.a, firma))} / {t.a.einheit || "Stk"}</span>
@@ -164,12 +164,13 @@ export function BezeichnungSuche({
         <PopoverPrimitive.Content
           align="start"
           sideOffset={4}
+          collisionPadding={16}
           onOpenAutoFocus={(e) => e.preventDefault()}
           onCloseAutoFocus={(e) => e.preventDefault()}
           // Radix fängt Escape vor dem Feld ab — dort abbrechen, sonst wäre der alte Text schon vergessen
           onEscapeKeyDown={(e) => { e.preventDefault(); abbrechen(); }}
           onInteractOutside={(e) => { if (anker.current?.contains(e.target as Node)) e.preventDefault(); }}
-          className="z-50 max-h-[26rem] w-[var(--radix-popover-trigger-width)] min-w-[26rem] overflow-y-auto rounded-lg border bg-popover p-1 text-popover-foreground shadow-md"
+          className="z-50 max-h-[26rem] w-[min(52rem,calc(100vw-2rem))] min-w-[var(--radix-popover-trigger-width)] overflow-y-auto rounded-lg border bg-popover p-1 text-popover-foreground shadow-md"
         >
           <TauschListe id={listeId} treffer={treffer} laeuft={laeuft} markiert={markiert} setMarkiert={setMarkiert} onWahl={waehlen}
             menge={mengeVon(p)} stundensatz={stundensatz} />
