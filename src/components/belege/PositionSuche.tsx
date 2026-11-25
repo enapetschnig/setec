@@ -164,6 +164,9 @@ export function BezeichnungSuche({
       </PopoverPrimitive.Anchor>
       <PopoverPrimitive.Portal>
         <PopoverPrimitive.Content
+          // Radix setzt role="dialog" — das ist hier nur eine Trefferliste (listbox darin). Sonst hält Strg+S im
+          // Beleg-Editor sie für einen offenen Dialog und speichert nicht, solange getippt wird.
+          role="presentation"
           align="start"
           sideOffset={4}
           collisionPadding={16}
